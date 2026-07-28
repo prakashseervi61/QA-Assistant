@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: str = ""
     ANTHROPIC_MODEL: str = "claude-sonnet-4-20250514"
     DEEPSEEK_API_KEY: str = ""
-    DEEPSEEK_MODEL: str = "deepseek-chat"
+    DEEPSEEK_MODEL: str = "deepseek-v4-flash"
 
     # Embedding Provider
     EMBEDDING_PROVIDER: Literal["gemini", "openai", "huggingface"] = "gemini"

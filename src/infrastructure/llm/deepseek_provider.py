@@ -9,7 +9,7 @@ from src.domain.interfaces.llm_provider import LLMProvider
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = "deepseek-chat"
+DEFAULT_MODEL = "deepseek-v4-flash"
 DEFAULT_BASE_URL = "https://api.deepseek.com/v1"
 
 
