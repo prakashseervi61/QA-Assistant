@@ -71,9 +71,7 @@ class ChromaStore(VectorStore):
         base.update(ChromaStore._serialize_metadata(chunk))
         return base
 
-    def _get_or_create_collection(
-        self, collection_name: str
-    ) -> chromadb.Collection:
+    def _get_or_create_collection(self, collection_name: str) -> chromadb.Collection:
         """Return an existing collection or create one with cosine distance."""
         return self._client.get_or_create_collection(
             name=collection_name,
@@ -84,9 +82,7 @@ class ChromaStore(VectorStore):
     # Public API
     # ------------------------------------------------------------------
 
-    async def add_documents(
-        self, chunks: list[Chunk], collection_name: str
-    ) -> None:
+    async def add_documents(self, chunks: list[Chunk], collection_name: str) -> None:
         """Store text chunks with their embeddings.
 
         Args:
@@ -138,9 +134,7 @@ class ChromaStore(VectorStore):
             raise
         except Exception as exc:
             logger.error("Failed to add documents to ChromaDB: %s", exc)
-            raise RuntimeError(
-                f"ChromaDB upsert failed: {exc}"
-            ) from exc
+            raise RuntimeError(f"ChromaDB upsert failed: {exc}") from exc
 
     async def similarity_search(
         self,
@@ -204,13 +198,17 @@ class ChromaStore(VectorStore):
                 from uuid import UUID
 
                 embedding_list = (
-                    list(embeddings[idx]) if embeddings and idx < len(embeddings) else None
+                    list(embeddings[idx])
+                    if embeddings and idx < len(embeddings)
+                    else None
                 )
 
                 chunk = Chunk(
                     id=UUID(ids[idx]),
                     document_id=UUID(document_id_str) if document_id_str else None,  # type: ignore[arg-type]
-                    content=documents[idx] if documents and idx < len(documents) else "",
+                    content=documents[idx]
+                    if documents and idx < len(documents)
+                    else "",
                     embedding=embedding_list,
                     metadata=metadata,
                     chunk_index=chunk_index,
@@ -228,13 +226,9 @@ class ChromaStore(VectorStore):
             return await asyncio.to_thread(_query)
         except Exception as exc:
             logger.error("ChromaDB similarity search failed: %s", exc)
-            raise RuntimeError(
-                f"ChromaDB similarity search failed: {exc}"
-            ) from exc
+            raise RuntimeError(f"ChromaDB similarity search failed: {exc}") from exc
 
-    async def delete_by_metadata(
-        self, filter_dict: dict, collection_name: str
-    ) -> None:
+    async def delete_by_metadata(self, filter_dict: dict, collection_name: str) -> None:
         """Delete chunks whose metadata matches all entries in *filter_dict*.
 
         Args:
@@ -271,9 +265,7 @@ class ChromaStore(VectorStore):
             await asyncio.to_thread(_delete)
         except Exception as exc:
             logger.error("ChromaDB delete_by_metadata failed: %s", exc)
-            raise RuntimeError(
-                f"ChromaDB delete failed: {exc}"
-            ) from exc
+            raise RuntimeError(f"ChromaDB delete failed: {exc}") from exc
 
     async def get_collection_count(self, collection_name: str) -> int:
         """Return the number of chunks in a collection.
@@ -300,6 +292,4 @@ class ChromaStore(VectorStore):
             return await asyncio.to_thread(_count)
         except Exception as exc:
             logger.error("ChromaDB get_collection_count failed: %s", exc)
-            raise RuntimeError(
-                f"ChromaDB count query failed: {exc}"
-            ) from exc
+            raise RuntimeError(f"ChromaDB count query failed: {exc}") from exc

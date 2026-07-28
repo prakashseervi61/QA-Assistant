@@ -54,7 +54,9 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
             )
             return response.data[0].embedding
         except Exception as exc:
-            logger.error("OpenAI embed failed for input of length %d: %s", len(text), exc)
+            logger.error(
+                "OpenAI embed failed for input of length %d: %s", len(text), exc
+            )
             raise RuntimeError(f"OpenAI embedding request failed: {exc}") from exc
 
     async def embed_batch(self, texts: list[str]) -> list[list[float]]:

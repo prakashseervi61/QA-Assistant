@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+
 from src.domain.value_objects.chunk import Chunk
 
 
@@ -11,7 +12,9 @@ class VectorStore(ABC):
         ...
 
     @abstractmethod
-    async def similarity_search(self, query_embedding: list[float], k: int, collection_name: str) -> list[Chunk]:
+    async def similarity_search(
+        self, query_embedding: list[float], k: int, collection_name: str
+    ) -> list[Chunk]:
         """Retrieve the k most similar chunks to the query embedding."""
         ...
 

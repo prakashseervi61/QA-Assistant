@@ -1,4 +1,3 @@
-from typing import List
 from uuid import UUID, uuid4
 
 from src.domain.value_objects.chunk import Chunk
@@ -13,11 +12,13 @@ class TextSplitter:
     ):
         settings = get_settings()
         self.chunk_size = chunk_size if chunk_size is not None else settings.CHUNK_SIZE
-        self.chunk_overlap = chunk_overlap if chunk_overlap is not None else settings.CHUNK_OVERLAP
+        self.chunk_overlap = (
+            chunk_overlap if chunk_overlap is not None else settings.CHUNK_OVERLAP
+        )
 
     def split_text(
         self, text: str, document_id: UUID, metadata: dict = None
-    ) -> List[Chunk]:
+    ) -> list[Chunk]:
         if metadata is None:
             metadata = {}
 

@@ -1,12 +1,11 @@
 """Unit tests for the RAGEngine service with mocked dependencies."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from uuid import uuid4
+
+import pytest
 
 from src.application.services.rag_engine import RAGEngine, RAGQueryError
 from src.domain.value_objects.chunk import Chunk
-
 
 # Fixtures
 
@@ -66,7 +65,9 @@ def sample_chunks():
 
 @pytest.fixture
 @patch("src.application.services.rag_engine.get_settings")
-def rag_engine(mock_get_settings, mock_llm_provider, mock_embedding_provider, mock_vector_store):
+def rag_engine(
+    mock_get_settings, mock_llm_provider, mock_embedding_provider, mock_vector_store
+):
     """Create a RAGEngine with mocked dependencies."""
     mock_settings = MagicMock()
     mock_settings.CHROMA_COLLECTION_NAME = "documents"
@@ -100,11 +101,15 @@ class TestRAGEngineQuery:
         assert "confidence" in result
         assert isinstance(result["confidence"], float)
 
-    async def test_query_calls_embed_with_question(self, rag_engine, mock_embedding_provider):
+    async def test_query_calls_embed_with_question(
+        self, rag_engine, mock_embedding_provider
+    ):
         await rag_engine.query("What is AI?")
         mock_embedding_provider.embed.assert_awaited_once_with("What is AI?")
 
-    async def test_query_calls_vector_store_with_embedding(self, rag_engine, mock_vector_store):
+    async def test_query_calls_vector_store_with_embedding(
+        self, rag_engine, mock_vector_store
+    ):
         await rag_engine.query("What is AI?")
         mock_vector_store.similarity_search.assert_awaited_once()
 
@@ -122,12 +127,16 @@ class TestRAGEngineQuery:
         call_kwargs = mock_vector_store.similarity_search.call_args
         assert call_kwargs.kwargs["k"] == 5
 
-    async def test_query_uses_correct_collection_name(self, rag_engine, mock_vector_store):
+    async def test_query_uses_correct_collection_name(
+        self, rag_engine, mock_vector_store
+    ):
         await rag_engine.query("test")
         call_kwargs = mock_vector_store.similarity_search.call_args
         assert call_kwargs.kwargs["collection_name"] == "documents"
 
-    async def test_query_with_retrieved_chunks(self, rag_engine, mock_vector_store, sample_chunks, mock_llm_provider):
+    async def test_query_with_retrieved_chunks(
+        self, rag_engine, mock_vector_store, sample_chunks, mock_llm_provider
+    ):
         mock_vector_store.similarity_search.return_value = sample_chunks
         await rag_engine.query("What is AI?")
         call_args = mock_llm_provider.generate.call_args
@@ -135,33 +144,45 @@ class TestRAGEngineQuery:
         assert "ai_guide.pdf" in prompt
         assert "Machine learning" in prompt
 
-    async def test_query_sources_match_chunks(self, rag_engine, mock_vector_store, sample_chunks):
+    async def test_query_sources_match_chunks(
+        self, rag_engine, mock_vector_store, sample_chunks
+    ):
         mock_vector_store.similarity_search.return_value = sample_chunks
         result = await rag_engine.query("What is AI?")
         assert len(result["sources"]) == 3
 
-    async def test_query_confidence_with_scores(self, rag_engine, mock_vector_store, sample_chunks):
+    async def test_query_confidence_with_scores(
+        self, rag_engine, mock_vector_store, sample_chunks
+    ):
         mock_vector_store.similarity_search.return_value = sample_chunks
         result = await rag_engine.query("What is AI?")
         expected_confidence = (0.9 + 0.8 + 0.7) / 3
         assert abs(result["confidence"] - expected_confidence) < 0.001
 
-    async def test_query_empty_chunks_returns_zero_confidence(self, rag_engine, mock_vector_store):
+    async def test_query_empty_chunks_returns_zero_confidence(
+        self, rag_engine, mock_vector_store
+    ):
         mock_vector_store.similarity_search.return_value = []
         result = await rag_engine.query("test")
         assert result["confidence"] == 0.0
 
-    async def test_query_empty_chunks_returns_empty_sources(self, rag_engine, mock_vector_store):
+    async def test_query_empty_chunks_returns_empty_sources(
+        self, rag_engine, mock_vector_store
+    ):
         mock_vector_store.similarity_search.return_value = []
         result = await rag_engine.query("test")
         assert result["sources"] == []
 
-    async def test_query_wraps_exceptions_in_rag_query_error(self, rag_engine, mock_llm_provider):
+    async def test_query_wraps_exceptions_in_rag_query_error(
+        self, rag_engine, mock_llm_provider
+    ):
         mock_llm_provider.generate.side_effect = RuntimeError("LLM exploded")
         with pytest.raises(RAGQueryError, match="Failed to process query"):
             await rag_engine.query("test")
 
-    async def test_query_embedding_error_wrapped(self, rag_engine, mock_embedding_provider):
+    async def test_query_embedding_error_wrapped(
+        self, rag_engine, mock_embedding_provider
+    ):
         mock_embedding_provider.embed.side_effect = ConnectionError("Network down")
         with pytest.raises(RAGQueryError, match="Failed to process query"):
             await rag_engine.query("test")
@@ -179,7 +200,9 @@ class TestRAGEngineQuery:
 class TestRAGEngineQueryStream:
     """Tests for the RAGEngine.query_stream method."""
 
-    async def test_stream_yields_chunks(self, rag_engine, mock_llm_provider, mock_vector_store, sample_chunks):
+    async def test_stream_yields_chunks(
+        self, rag_engine, mock_llm_provider, mock_vector_store, sample_chunks
+    ):
         mock_vector_store.similarity_search.return_value = sample_chunks
 
         async def fake_stream(prompt):
@@ -219,7 +242,9 @@ class TestRAGEngineQueryStream:
             async for _ in rag_engine.query_stream("test"):
                 pass
 
-    async def test_stream_embedding_error_wrapped(self, rag_engine, mock_embedding_provider):
+    async def test_stream_embedding_error_wrapped(
+        self, rag_engine, mock_embedding_provider
+    ):
         mock_embedding_provider.embed.side_effect = ValueError("bad input")
         with pytest.raises(RAGQueryError, match="Failed to stream query"):
             async for _ in rag_engine.query_stream("test"):
@@ -253,7 +278,11 @@ class TestRAGEngineBuildPrompt:
 
     def test_prompt_respects_max_context_chunks(self, rag_engine):
         many_chunks = [
-            Chunk(content="chunk %d" % i, metadata={"filename": "file%d.pdf" % i}, chunk_index=i)
+            Chunk(
+                content=f"chunk {i}",
+                metadata={"filename": f"file{i}.pdf"},
+                chunk_index=i,
+            )
             for i in range(15)
         ]
         prompt = rag_engine._build_prompt("test", many_chunks)
@@ -342,7 +371,8 @@ class TestRAGEngineComputeConfidence:
             Chunk(content="c", metadata={"score": 0.8}),
         ]
         result = rag_engine._compute_confidence(chunks)
-        # metadata.get('score', 0.0) returns 0.0 for chunk b, so scores = [0.6, 0.0, 0.8]
+        # metadata.get('score', 0.0) returns 0.0 for chunk b,
+        # so scores = [0.6, 0.0, 0.8]
         expected = (0.6 + 0.0 + 0.8) / 3
         assert abs(result - expected) < 0.001
 

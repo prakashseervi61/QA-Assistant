@@ -8,14 +8,17 @@ def create_parser(file_extension: str) -> DocumentParser:
 
     if ext == ".pdf":
         from src.infrastructure.document_processing.pdf_parser import PDFParser
+
         return PDFParser()
 
     elif ext == ".docx":
         from src.infrastructure.document_processing.docx_parser import DOCXParser
+
         return DOCXParser()
 
     elif ext == ".txt":
         from src.infrastructure.document_processing.txt_parser import TXTParser
+
         return TXTParser()
 
     else:

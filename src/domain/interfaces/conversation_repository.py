@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from typing import List
 from uuid import UUID
 
 from src.domain.entities.conversation import Conversation
@@ -24,7 +23,7 @@ class ConversationRepository(ABC):
         pass
 
     @abstractmethod
-    async def list_conversations(self, limit: int = 10) -> List[Conversation]:
+    async def list_conversations(self, limit: int = 10) -> list[Conversation]:
         """List recent conversations, ordered by most recently updated.
 
         Args:
@@ -45,7 +44,7 @@ class ConversationRepository(ABC):
         pass
 
     @abstractmethod
-    async def get_messages(self, conversation_id: UUID) -> List[Message]:
+    async def get_messages(self, conversation_id: UUID) -> list[Message]:
         """Get all messages in a conversation, ordered by creation time.
 
         Raises:

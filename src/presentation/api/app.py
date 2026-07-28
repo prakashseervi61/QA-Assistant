@@ -4,15 +4,15 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.infrastructure.config.settings import Settings, get_settings
-from src.presentation.api.routes import health, documents, chat
+from src.presentation.api.routes import chat, documents, health
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     """Create and configure the FastAPI application.
-    
+
     Args:
         settings: Optional settings instance. Uses get_settings() if not provided.
-        
+
     Returns:
         Configured FastAPI application.
     """

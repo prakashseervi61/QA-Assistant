@@ -16,6 +16,7 @@ class GeminiProvider(LLMProvider):
         self._model = model
         try:
             import google.generativeai as genai
+
             genai.configure(api_key=api_key)
             self._client = genai.GenerativeModel(model)
             logger.info("Gemini provider initialised (model=%s)", model)
@@ -28,17 +29,21 @@ class GeminiProvider(LLMProvider):
             if system_prompt:
                 kwargs["system_instruction"] = system_prompt
             return self._client.generate_content(prompt, **kwargs).text or ""
+
         try:
             return await asyncio.to_thread(_gen)
         except Exception as exc:
             raise RuntimeError(f"Gemini API error: {exc}") from exc
 
-    async def generate_stream(self, prompt: str, system_prompt: str | None = None) -> AsyncIterator[str]:
+    async def generate_stream(
+        self, prompt: str, system_prompt: str | None = None
+    ) -> AsyncIterator[str]:
         def _stream():
             kwargs = {}
             if system_prompt:
                 kwargs["system_instruction"] = system_prompt
             return self._client.generate_content(prompt, stream=True, **kwargs)
+
         try:
             response = await asyncio.to_thread(_stream)
             for chunk in response:

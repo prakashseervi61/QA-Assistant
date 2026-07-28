@@ -1,12 +1,13 @@
 """Unit tests for the Chunk value object."""
 
-import pytest
 from uuid import UUID, uuid4
+
+import pytest
 
 from src.domain.value_objects.chunk import Chunk
 
-
 # Fixtures
+
 
 @pytest.fixture
 def sample_content():
@@ -19,6 +20,7 @@ def sample_metadata():
 
 
 # Creation Tests
+
 
 class TestChunkCreation:
     """Tests for Chunk construction and default values."""
@@ -58,6 +60,7 @@ class TestChunkCreation:
 
 
 # Explicit Arguments Tests
+
 
 class TestChunkWithExplicitArgs:
     """Tests for Chunk construction with explicit arguments."""
@@ -108,6 +111,7 @@ class TestChunkWithExplicitArgs:
 
 # Immutability Tests
 
+
 class TestChunkImmutability:
     """Chunk is a frozen dataclass - verify it is immutable."""
 
@@ -122,13 +126,14 @@ class TestChunkImmutability:
             chunk.id = uuid4()
 
     def test_chunk_metadata_cannot_be_reassigned(self):
-        """Frozen dataclass prevents attribute reassignment, but the dict itself is mutable."""
+        """Frozen dataclass prevents reassignment, but dict is mutable."""
         chunk = Chunk(content="x", metadata={"a": 1})
         with pytest.raises(AttributeError):
             chunk.metadata = {"b": 2}  # type: ignore[misc]
 
 
 # to_dict Tests
+
 
 class TestChunkToDict:
     """Tests for the to_dict serialization method."""
@@ -190,6 +195,7 @@ class TestChunkToDict:
 
 
 # Edge Cases
+
 
 class TestChunkEdgeCases:
     """Edge-case tests for Chunk."""

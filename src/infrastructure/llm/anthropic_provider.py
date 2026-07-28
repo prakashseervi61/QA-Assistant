@@ -15,6 +15,7 @@ class AnthropicProvider(LLMProvider):
         self._model = model
         try:
             import anthropic
+
             self._client = anthropic.AsyncAnthropic(api_key=api_key)
             logger.info("Anthropic provider initialised (model=%s)", model)
         except ImportError:
@@ -22,7 +23,11 @@ class AnthropicProvider(LLMProvider):
 
     async def generate(self, prompt: str, system_prompt: str | None = None) -> str:
         try:
-            kwargs = {"model": self._model, "max_tokens": 4096, "messages": [{"role": "user", "content": prompt}]}
+            kwargs = {
+                "model": self._model,
+                "max_tokens": 4096,
+                "messages": [{"role": "user", "content": prompt}],
+            }
             if system_prompt:
                 kwargs["system"] = system_prompt
             response = await self._client.messages.create(**kwargs)
@@ -30,9 +35,15 @@ class AnthropicProvider(LLMProvider):
         except Exception as exc:
             raise RuntimeError(f"Anthropic API error: {exc}") from exc
 
-    async def generate_stream(self, prompt: str, system_prompt: str | None = None) -> AsyncIterator[str]:
+    async def generate_stream(
+        self, prompt: str, system_prompt: str | None = None
+    ) -> AsyncIterator[str]:
         try:
-            kwargs = {"model": self._model, "max_tokens": 4096, "messages": [{"role": "user", "content": prompt}]}
+            kwargs = {
+                "model": self._model,
+                "max_tokens": 4096,
+                "messages": [{"role": "user", "content": prompt}],
+            }
             if system_prompt:
                 kwargs["system"] = system_prompt
             async with self._client.messages.stream(**kwargs) as stream:

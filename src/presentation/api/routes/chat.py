@@ -2,7 +2,7 @@
 
 import json
 import logging
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
@@ -75,7 +75,9 @@ async def query_documents(
                 content=s.get("content", ""),
                 metadata=s.get("metadata", {}),
                 score=s.get("score", s.get("metadata", {}).get("score", 0.0)),
-                chunk_index=s.get("chunk_index", s.get("metadata", {}).get("chunk_index", 0)),
+                chunk_index=s.get(
+                    "chunk_index", s.get("metadata", {}).get("chunk_index", 0)
+                ),
             )
             for s in result.get("sources", [])
         ]

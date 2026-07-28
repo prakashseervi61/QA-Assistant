@@ -55,7 +55,9 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
             )
             return result["embedding"]
         except Exception as exc:
-            logger.error("Gemini embed failed for input of length %d: %s", len(text), exc)
+            logger.error(
+                "Gemini embed failed for input of length %d: %s", len(text), exc
+            )
             raise RuntimeError(f"Gemini embedding request failed: {exc}") from exc
 
     async def embed_batch(self, texts: list[str]) -> list[list[float]]:

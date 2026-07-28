@@ -3,7 +3,7 @@ from src.infrastructure.config.settings import Settings
 
 
 class EmbeddingProviderFactory:
-    """Factory that creates the appropriate embedding provider based on configuration."""
+    """Create the appropriate embedding provider from config."""
 
     @staticmethod
     def create(settings: Settings) -> EmbeddingProvider:
@@ -22,14 +22,18 @@ class EmbeddingProviderFactory:
         provider = settings.EMBEDDING_PROVIDER.lower()
 
         if provider == "gemini":
-            from src.infrastructure.embeddings.gemini_embeddings import GeminiEmbeddingProvider
+            from src.infrastructure.embeddings.gemini_embeddings import (
+                GeminiEmbeddingProvider,
+            )
 
             return GeminiEmbeddingProvider(
                 api_key=settings.GEMINI_API_KEY,
                 model=settings.GEMINI_EMBEDDING_MODEL,
             )
         elif provider == "openai":
-            from src.infrastructure.embeddings.openai_embeddings import OpenAIEmbeddingProvider
+            from src.infrastructure.embeddings.openai_embeddings import (
+                OpenAIEmbeddingProvider,
+            )
 
             return OpenAIEmbeddingProvider(
                 api_key=settings.OPENAI_API_KEY,

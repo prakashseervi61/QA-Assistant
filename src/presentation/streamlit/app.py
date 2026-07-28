@@ -4,12 +4,17 @@ Main entry point for the Document Q&A Assistant UI.
 Provides document upload, chat interface, and conversation history.
 """
 
-import streamlit as st
-import requests
 import json
-from typing import Generator
 
-from src.presentation.streamlit.api_client import api_get, api_post, api_delete, API_BASE_URL
+import requests
+import streamlit as st
+
+from src.presentation.streamlit.api_client import (
+    API_BASE_URL,
+    api_delete,
+    api_get,
+    api_post,
+)
 from src.presentation.streamlit.components import render_sources
 
 # ---------------------------------------------------------------------------
@@ -59,8 +64,7 @@ def load_conversation(conversation_id: str) -> None:
     if resp and resp.status_code == 200:
         raw_messages = resp.json()
         st.session_state.messages = [
-            {"role": msg["role"], "content": msg["content"]}
-            for msg in raw_messages
+            {"role": msg["role"], "content": msg["content"]} for msg in raw_messages
         ]
     else:
         st.session_state.messages = []
@@ -93,7 +97,8 @@ def render_sidebar() -> None:
         st.markdown(
             "<div style='text-align:center; padding:0.5rem 0 0.25rem;'>"
             "<h2 style='margin:0; font-size:1.3rem;'>📚 QA Assistant</h2>"
-            "<p style='margin:0; font-size:0.85rem; color:#6c757d;'>Document Q&A powered by RAG</p>"
+            "<p style='margin:0; font-size:0.85rem; "
+            "color:#6c757d;'>Document Q&A powered by RAG</p>"
             "</div>",
             unsafe_allow_html=True,
         )
@@ -123,8 +128,6 @@ def render_sidebar() -> None:
         # Settings (collapsible)
         with st.expander("⚙️ Settings", expanded=False):
             _render_settings()
-
-
 
 
 def _render_settings() -> None:
@@ -158,7 +161,10 @@ def render_document_upload() -> None:
     uploaded_file = st.file_uploader(
         "Choose a file",
         type=UPLOAD_TYPES,
-        help=f"Supported formats: {', '.join(f.upper() for f in UPLOAD_TYPES)}. Max size: {MAX_UPLOAD_SIZE_MB} MB",
+        help=(
+            f"Supported formats: {', '.join(f.upper() for f in UPLOAD_TYPES)}. "
+            f"Max size: {MAX_UPLOAD_SIZE_MB} MB"
+        ),
     )
 
     if uploaded_file is None:
@@ -168,7 +174,8 @@ def render_document_upload() -> None:
     file_size_mb = uploaded_file.size / (1024 * 1024)
     if file_size_mb > MAX_UPLOAD_SIZE_MB:
         st.error(
-            f"File too large ({file_size_mb:.1f} MB). Maximum allowed size is {MAX_UPLOAD_SIZE_MB} MB."
+            f"File too large ({file_size_mb:.1f} MB). "
+            f"Maximum allowed size is {MAX_UPLOAD_SIZE_MB} MB."
         )
         return
 

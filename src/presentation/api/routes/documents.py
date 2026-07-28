@@ -2,12 +2,11 @@
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from src.application.dto.responses import (
-    IngestResponse,
     DocumentListResponse,
-    DocumentInfo,
+    IngestResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -31,6 +30,7 @@ async def upload_document(file: UploadFile = File(...)) -> IngestResponse:
 
     allowed = {".pdf", ".docx", ".txt"}
     import os
+
     ext = os.path.splitext(file.filename)[1].lower()
     if ext not in allowed:
         raise HTTPException(
@@ -44,12 +44,12 @@ async def upload_document(file: UploadFile = File(...)) -> IngestResponse:
             raise HTTPException(status_code=400, detail="Empty file.")
 
         # Lazy import — use case depends on infra that may not be wired yet
+        from src.application.use_cases.ingest_document import IngestDocumentUseCase
         from src.infrastructure.config.settings import get_settings
+        from src.infrastructure.document_processing.parser_factory import create_parser
         from src.infrastructure.document_processing.text_splitter import TextSplitter
         from src.infrastructure.embeddings.factory import EmbeddingProviderFactory
         from src.infrastructure.vector_store.chroma_store import ChromaStore
-        from src.application.use_cases.ingest_document import IngestDocumentUseCase
-        from src.infrastructure.document_processing.parser_factory import create_parser
 
         settings = get_settings()
         parser = create_parser(ext)

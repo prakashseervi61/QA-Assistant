@@ -1,5 +1,4 @@
 from dataclasses import dataclass, field
-from typing import List, Optional
 from uuid import UUID, uuid4
 
 
@@ -8,7 +7,7 @@ class Chunk:
     id: UUID = field(default_factory=uuid4)
     document_id: UUID = field(default_factory=uuid4)
     content: str = ""
-    embedding: Optional[List[float]] = None
+    embedding: list[float] | None = None
     metadata: dict = field(default_factory=dict)
     chunk_index: int = 0
 

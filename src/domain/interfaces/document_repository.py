@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from typing import List, Optional
 from uuid import UUID
 
 from src.domain.entities.document import Document
@@ -11,11 +10,11 @@ class DocumentRepository(ABC):
         pass
 
     @abstractmethod
-    async def find_by_id(self, document_id: UUID) -> Optional[Document]:
+    async def find_by_id(self, document_id: UUID) -> Document | None:
         pass
 
     @abstractmethod
-    async def find_all(self) -> List[Document]:
+    async def find_all(self) -> list[Document]:
         pass
 
     @abstractmethod

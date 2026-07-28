@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import List
 from uuid import UUID
 
 from src.domain.entities.conversation import Conversation
@@ -12,7 +11,7 @@ class MemoryConversationRepository(ConversationRepository):
 
     def __init__(self) -> None:
         self._conversations: dict[UUID, Conversation] = {}
-        self._messages: dict[UUID, List[Message]] = {}
+        self._messages: dict[UUID, list[Message]] = {}
 
     async def save_conversation(self, conversation: Conversation) -> None:
         existing = self._conversations.get(conversation.id)
@@ -37,7 +36,7 @@ class MemoryConversationRepository(ConversationRepository):
             raise KeyError(f"Conversation not found: {conversation_id}")
         return conversation
 
-    async def list_conversations(self, limit: int = 10) -> List[Conversation]:
+    async def list_conversations(self, limit: int = 10) -> list[Conversation]:
         all_conversations = list(self._conversations.values())
         all_conversations.sort(key=lambda c: c.updated_at or datetime.min, reverse=True)
         return all_conversations[:limit]
@@ -52,7 +51,7 @@ class MemoryConversationRepository(ConversationRepository):
             self._messages[conversation_id] = []
         self._messages[conversation_id].append(message)
 
-    async def get_messages(self, conversation_id: UUID) -> List[Message]:
+    async def get_messages(self, conversation_id: UUID) -> list[Message]:
         if conversation_id not in self._conversations:
             raise KeyError(f"Conversation not found: {conversation_id}")
         messages = self._messages.get(conversation_id, [])

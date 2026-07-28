@@ -5,7 +5,7 @@ Orchestrates the full RAG pipeline:
 """
 
 import logging
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
 from src.domain.interfaces.embedding_provider import EmbeddingProvider
 from src.domain.interfaces.llm_provider import LLMProvider
@@ -38,19 +38,21 @@ class RAGEngine:
     DEFAULT_TOP_K = 5
     MAX_CONTEXT_CHUNKS = 10
 
-    PROMPT_TEMPLATE = """You are a helpful assistant that answers questions based on the provided context.
-
-Context from documents:
-{context}
-
-Question: {question}
-
-Instructions:
-- Answer the question based on the context provided
-- If the context doesn't contain enough information, say so clearly
-- Cite your sources when possible by referencing the document names
-- Be concise and accurate
-- If multiple sources provide different information, mention both perspectives"""
+    PROMPT_TEMPLATE = (
+        "You are a helpful assistant that answers questions "
+        "based on the provided context.\n\n"
+        "Context from documents:\n{context}\n\n"
+        "Question: {question}\n\n"
+        "Instructions:\n"
+        "- Answer the question based on the context provided\n"
+        "- If the context doesn't contain enough information, "
+        "say so clearly\n"
+        "- Cite your sources when possible by referencing the "
+        "document names\n"
+        "- Be concise and accurate\n"
+        "- If multiple sources provide different information, "
+        "mention both perspectives"
+    )
 
     def __init__(
         self,
@@ -215,9 +217,7 @@ Instructions:
             # Extract score from metadata (stored by ChromaStore during search)
             score = chunk.metadata.get("score", 0.0)
             # Create a copy of metadata without the score to avoid duplication
-            display_metadata = {
-                k: v for k, v in chunk.metadata.items() if k != "score"
-            }
+            display_metadata = {k: v for k, v in chunk.metadata.items() if k != "score"}
             sources.append(
                 {
                     "content": chunk.content[:500],

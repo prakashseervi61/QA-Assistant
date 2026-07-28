@@ -70,7 +70,9 @@ class IngestDocumentUseCase:
         collection_name = settings.CHROMA_COLLECTION_NAME
 
         document_id = uuid4()
-        logger.info("Starting ingestion for '%s' (document_id=%s)", filename, document_id)
+        logger.info(
+            "Starting ingestion for '%s' (document_id=%s)", filename, document_id
+        )
 
         try:
             extension = Path(filename).suffix.lower()
@@ -90,7 +92,9 @@ class IngestDocumentUseCase:
                     f"Document '{filename}' produced no extractable text."
                 )
 
-            logger.info("Parsed '%s': %d characters extracted", filename, len(parsed_text))
+            logger.info(
+                "Parsed '%s': %d characters extracted", filename, len(parsed_text)
+            )
 
             metadata = {
                 "filename": filename,
@@ -111,7 +115,10 @@ class IngestDocumentUseCase:
 
             logger.info(
                 "Split '%s' into %d chunks (chunk_size=%d, overlap=%d)",
-                filename, len(chunks), self._text_splitter.chunk_size, self._text_splitter.chunk_overlap,
+                filename,
+                len(chunks),
+                self._text_splitter.chunk_size,
+                self._text_splitter.chunk_overlap,
             )
 
             chunk_texts = [chunk.content for chunk in chunks]
@@ -126,21 +133,29 @@ class IngestDocumentUseCase:
             embedded_chunks: list[Chunk] = []
             for chunk, embedding in zip(chunks, embeddings):
                 embedded_chunk = Chunk(
-                    id=chunk.id, document_id=chunk.document_id, content=chunk.content,
-                    embedding=embedding, metadata=chunk.metadata, chunk_index=chunk.chunk_index,
+                    id=chunk.id,
+                    document_id=chunk.document_id,
+                    content=chunk.content,
+                    embedding=embedding,
+                    metadata=chunk.metadata,
+                    chunk_index=chunk.chunk_index,
                 )
                 embedded_chunks.append(embedded_chunk)
 
             logger.info(
                 "Generated %d embeddings (dim=%d) for '%s'",
-                len(embedded_chunks), self._embedding_provider.get_embedding_dimension(), filename,
+                len(embedded_chunks),
+                self._embedding_provider.get_embedding_dimension(),
+                filename,
             )
 
             await self._vector_store.add_documents(embedded_chunks, collection_name)
 
             logger.info(
                 "Stored %d chunks in collection '%s' for document %s",
-                len(embedded_chunks), collection_name, document_id,
+                len(embedded_chunks),
+                collection_name,
+                document_id,
             )
 
             return {
@@ -148,7 +163,10 @@ class IngestDocumentUseCase:
                 "filename": filename,
                 "chunk_count": len(embedded_chunks),
                 "collection": collection_name,
-                "message": f"Successfully ingested '{filename}'. {len(embedded_chunks)} chunks stored.",
+                "message": (
+                    f"Successfully ingested '{filename}'. "
+                    f"{len(embedded_chunks)} chunks stored."
+                ),
             }
 
         except DocumentIngestionError:

@@ -4,11 +4,16 @@ Interactive chat interface for querying documents with streaming responses.
 Standalone Streamlit multipage page — navigable from the sidebar.
 """
 
-import streamlit as st
-import requests
 import json
 
-from src.presentation.streamlit.api_client import api_get, api_post, API_BASE_URL, API_TIMEOUT
+import requests
+import streamlit as st
+
+from src.presentation.streamlit.api_client import (
+    API_BASE_URL,
+    API_TIMEOUT,
+    api_get,
+)
 from src.presentation.streamlit.components import render_sources
 
 # ---------------------------------------------------------------------------

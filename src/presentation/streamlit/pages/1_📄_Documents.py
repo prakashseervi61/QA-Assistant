@@ -3,11 +3,11 @@
 Upload, view, and manage documents in the QA Assistant.
 """
 
-import streamlit as st
-import requests
 import time
 
-from src.presentation.streamlit.api_client import api_get, api_post, api_delete
+import streamlit as st
+
+from src.presentation.streamlit.api_client import api_delete, api_get, api_post
 
 UPLOAD_TYPES = ["pdf", "docx", "txt"]
 

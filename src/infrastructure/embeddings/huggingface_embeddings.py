@@ -61,7 +61,9 @@ class HuggingFaceEmbeddingProvider(EmbeddingProvider):
                 self._dimension,
             )
         except Exception as exc:
-            logger.error("Failed to load HuggingFace model '%s': %s", self._model_name, exc)
+            logger.error(
+                "Failed to load HuggingFace model '%s': %s", self._model_name, exc
+            )
             raise RuntimeError(
                 f"Failed to load HuggingFace model '{self._model_name}': {exc}"
             ) from exc
@@ -88,7 +90,9 @@ class HuggingFaceEmbeddingProvider(EmbeddingProvider):
             embedding = self._model.encode(text)  # type: ignore[union-attr]
             return embedding.tolist()
         except Exception as exc:
-            logger.error("HuggingFace embed failed for input of length %d: %s", len(text), exc)
+            logger.error(
+                "HuggingFace embed failed for input of length %d: %s", len(text), exc
+            )
             raise RuntimeError(f"HuggingFace embedding failed: {exc}") from exc
 
     async def embed_batch(self, texts: list[str]) -> list[list[float]]:
@@ -115,7 +119,9 @@ class HuggingFaceEmbeddingProvider(EmbeddingProvider):
             embeddings = self._model.encode(texts)  # type: ignore[union-attr]
             return [emb.tolist() for emb in embeddings]
         except Exception as exc:
-            logger.error("HuggingFace embed_batch failed for %d texts: %s", len(texts), exc)
+            logger.error(
+                "HuggingFace embed_batch failed for %d texts: %s", len(texts), exc
+            )
             raise RuntimeError(f"HuggingFace batch embedding failed: {exc}") from exc
 
     def get_embedding_dimension(self) -> int:

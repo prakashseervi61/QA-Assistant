@@ -1,7 +1,6 @@
 """Unit tests for application configuration settings."""
 
 import pytest
-from functools import lru_cache
 
 from src.infrastructure.config.settings import Settings, get_settings
 
@@ -69,7 +68,12 @@ class TestSettingsDefaults:
         assert Settings().CORS_ORIGINS == ["http://localhost:8501"]
 
     def test_api_keys_default_empty(self):
-        s = Settings(GEMINI_API_KEY="", OPENAI_API_KEY="", ANTHROPIC_API_KEY="", DEEPSEEK_API_KEY="")
+        s = Settings(
+            GEMINI_API_KEY="",
+            OPENAI_API_KEY="",
+            ANTHROPIC_API_KEY="",
+            DEEPSEEK_API_KEY="",
+        )
         assert s.GEMINI_API_KEY == ""
         assert s.OPENAI_API_KEY == ""
         assert s.ANTHROPIC_API_KEY == ""

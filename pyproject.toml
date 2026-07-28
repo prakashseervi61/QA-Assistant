@@ -34,6 +34,9 @@ target-version = "py310"
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP"]
 
+[tool.ruff.lint.per-file-ignores]
+"src/presentation/streamlit/pages/*.py" = ["N999"]
+
 [tool.mypy]
 python_version = "3.10"
 strict = true

@@ -25,20 +25,29 @@ class OpenAIProvider(LLMProvider):
         messages.append({"role": "user", "content": prompt})
         try:
             response = await self._client.chat.completions.create(
-                model=self._model, messages=messages, temperature=0.3, max_tokens=4096,
+                model=self._model,
+                messages=messages,
+                temperature=0.3,
+                max_tokens=4096,
             )
             return response.choices[0].message.content or ""
         except Exception as exc:
             raise RuntimeError(f"OpenAI API error: {exc}") from exc
 
-    async def generate_stream(self, prompt: str, system_prompt: str | None = None) -> AsyncIterator[str]:
+    async def generate_stream(
+        self, prompt: str, system_prompt: str | None = None
+    ) -> AsyncIterator[str]:
         messages: list[dict[str, str]] = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": prompt})
         try:
             stream = await self._client.chat.completions.create(
-                model=self._model, messages=messages, temperature=0.3, max_tokens=4096, stream=True,
+                model=self._model,
+                messages=messages,
+                temperature=0.3,
+                max_tokens=4096,
+                stream=True,
             )
             async for chunk in stream:
                 if chunk.choices[0].delta.content:
