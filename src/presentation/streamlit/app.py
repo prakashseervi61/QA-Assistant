@@ -356,6 +356,24 @@ def main() -> None:
     st.markdown(
         """
         <style>
+        /* ---- Move sidebar header above page nav ---- */
+        [data-testid="stSidebarNav"] {
+            order: 1;
+            margin-top: 0.5rem;
+        }
+        [data-testid="stSidebarUserContent"] {
+            order: 0;
+        }
+        [data-testid="stSidebar"] > div:first-child {
+            display: flex;
+            flex-direction: column;
+        }
+        [data-testid="stSidebar"] > div:first-child > div:first-child {
+            order: 0;
+        }
+        [data-testid="stSidebar"] > div:first-child > nav {
+            order: 1;
+        }
         /* ---- Sidebar styling ---- */
         [data-testid="stSidebar"] {
             background-color: #f8f9fa;
