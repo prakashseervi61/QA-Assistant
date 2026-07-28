@@ -1,0 +1,87 @@
+"""Application configuration settings using Pydantic BaseSettings."""
+
+from functools import lru_cache
+from typing import Literal
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    """Application settings loaded from environment variables."""
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+    )
+
+    # Application
+    APP_NAME: str = "QA Assistant"
+    DEBUG: bool = False
+    LOG_LEVEL: str = "INFO"
+
+    # LLM Provider
+    LLM_PROVIDER: Literal["gemini", "openai", "anthropic", "deepseek"] = "gemini"
+    GEMINI_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-2.0-flash"
+    OPENAI_API_KEY: str = ""
+    OPENAI_MODEL: str = "gpt-4o"
+    ANTHROPIC_API_KEY: str = ""
+    ANTHROPIC_MODEL: str = "claude-sonnet-4-20250514"
+    DEEPSEEK_API_KEY: str = ""
+    DEEPSEEK_MODEL: str = "deepseek-chat"
+
+    # Embedding Provider
+    EMBEDDING_PROVIDER: Literal["gemini", "openai", "huggingface"] = "gemini"
+    GEMINI_EMBEDDING_MODEL: str = "text-embedding-004"
+    OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"
+    HUGGINGFACE_MODEL: str = "all-MiniLM-L6-v2"
+
+    # Vector Store
+    CHROMA_PERSIST_DIR: str = "./data/chroma"
+    CHROMA_COLLECTION_NAME: str = "documents"
+
+    # Document Processing
+    CHUNK_SIZE: int = 1000
+    CHUNK_OVERLAP: int = 200
+    MAX_FILE_SIZE_MB: int = 50
+    ALLOWED_EXTENSIONS: list[str] = [".pdf", ".docx", ".txt"]
+
+    # Retrieval
+    RETRIEVAL_TOP_K: int = 5
+    RETRIEVAL_SCORE_THRESHOLD: float = 0.7
+
+    # API
+    API_HOST: str = "0.0.0.0"
+    API_PORT: int = 8000
+    CORS_ORIGINS: list[str] = ["http://localhost:8501"]
+
+    @property
+    def gemini_api_key_configured(self) -> bool:
+        """Check if Gemini API key is properly configured."""
+        return bool(self.GEMINI_API_KEY and self.GEMINI_API_KEY != "your-gemini-api-key-here")
+
+    @property
+    def openai_api_key_configured(self) -> bool:
+        """Check if OpenAI API key is properly configured."""
+        return bool(self.OPENAI_API_KEY and self.OPENAI_API_KEY != "your-openai-api-key-here")
+
+    @property
+    def anthropic_api_key_configured(self) -> bool:
+        """Check if Anthropic API key is properly configured."""
+        return bool(self.ANTHROPIC_API_KEY and self.ANTHROPIC_API_KEY != "your-anthropic-api-key-here")
+
+    @property
+    def deepseek_api_key_configured(self) -> bool:
+        """Check if DeepSeek API key is properly configured."""
+        return bool(self.DEEPSEEK_API_KEY and self.DEEPSEEK_API_KEY != "your-deepseek-api-key-here")
+
+
+@lru_cache
+def get_settings() -> Settings:
+    """Get cached settings instance.
+    
+    Returns:
+        Cached Settings instance.
+    """
+    return Settings()

@@ -1,0 +1,202 @@
+"""Document Management Page
+
+Upload, view, and manage documents in the QA Assistant.
+"""
+
+import streamlit as st
+import requests
+import time
+
+API_BASE_URL = "http://localhost:8000/api/v1"
+API_TIMEOUT = 60
+UPLOAD_TYPES = ["pdf", "docx", "txt"]
+
+
+# ---------------------------------------------------------------------------
+# API helpers
+# ---------------------------------------------------------------------------
+
+
+def _api_get(path: str, **kwargs) -> requests.Response | None:
+    try:
+        return requests.get(f"{API_BASE_URL}{path}", timeout=API_TIMEOUT, **kwargs)
+    except requests.ConnectionError:
+        return None
+
+
+def _api_post(path: str, **kwargs) -> requests.Response | None:
+    try:
+        return requests.post(f"{API_BASE_URL}{path}", timeout=API_TIMEOUT, **kwargs)
+    except requests.ConnectionError:
+        return None
+
+
+def _api_delete(path: str, **kwargs) -> requests.Response | None:
+    try:
+        return requests.delete(f"{API_BASE_URL}{path}", timeout=API_TIMEOUT, **kwargs)
+    except requests.ConnectionError:
+        return None
+
+
+# ---------------------------------------------------------------------------
+# Upload section
+# ---------------------------------------------------------------------------
+
+
+def render_upload_section() -> None:
+    """Render the document upload section."""
+    st.header("📤 Upload Documents")
+
+    uploaded_files = st.file_uploader(
+        "Choose files to upload",
+        type=UPLOAD_TYPES,
+        accept_multiple_files=True,
+        help=f"Supported formats: {', '.join(f.upper() for f in UPLOAD_TYPES)}",
+    )
+
+    if not uploaded_files:
+        return
+
+    # Preview files
+    st.subheader("Files to upload:")
+    for file in uploaded_files:
+        col_name, col_size, col_type = st.columns([4, 1, 1])
+        with col_name:
+            st.write(f"📄 {file.name}")
+        with col_size:
+            st.write(f"{file.size / 1024:.1f} KB")
+        with col_type:
+            st.write(file.type or "Unknown")
+
+    # Upload button
+    if st.button("Upload All", type="primary", use_container_width=True):
+        _upload_files(uploaded_files)
+
+
+def _upload_files(files) -> None:
+    """Upload files to the API."""
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+
+    for i, file in enumerate(files):
+        status_text.text(f"Uploading {file.name}...")
+
+        try:
+            file_dict = {"file": (file.name, file.getvalue())}
+            resp = _api_post("/documents/upload", files=file_dict)
+
+            if resp is None:
+                st.error(f"❌ {file.name}: Cannot reach backend")
+            elif resp.status_code == 200:
+                data = resp.json()
+                chunks = data.get("chunk_count", "?")
+                st.success(f"✅ {file.name} uploaded — {chunks} chunks created")
+            else:
+                st.error(f"❌ {file.name}: {resp.text}")
+
+        except Exception as e:
+            st.error(f"❌ {file.name}: {str(e)}")
+
+        progress_bar.progress((i + 1) / len(files))
+
+    status_text.text("Upload complete!")
+    time.sleep(1)
+    st.rerun()
+
+
+# ---------------------------------------------------------------------------
+# Documents list
+# ---------------------------------------------------------------------------
+
+
+def render_documents_list() -> None:
+    """Render the list of uploaded documents."""
+    st.header("📚 Uploaded Documents")
+
+    resp = _api_get("/documents")
+
+    if resp is None:
+        st.error("Cannot reach the backend. Is the API server running?")
+        return
+
+    if resp.status_code != 200:
+        st.error(f"Failed to fetch documents: {resp.text}")
+        return
+
+    documents = resp.json()
+
+    if not documents:
+        st.info("No documents uploaded yet. Upload your first document above!")
+        return
+
+    # Document table
+    for doc in documents:
+        col_name, col_size, col_chunks, col_delete = st.columns([4, 1, 1, 1])
+
+        with col_name:
+            filename = doc.get("filename", doc.get("name", "Unknown"))
+            st.write(f"📄 {filename}")
+
+        with col_size:
+            file_size = doc.get("file_size", doc.get("size", 0))
+            st.write(f"{file_size / 1024:.1f} KB")
+
+        with col_chunks:
+            chunk_count = doc.get("chunk_count", "?")
+            st.write(f"{chunk_count} chunks")
+
+        with col_delete:
+            doc_id = doc.get("id", "")
+            if st.button("🗑️", key=f"delete_{doc_id}"):
+                _delete_document(doc_id)
+
+        st.markdown("---")
+
+
+def _delete_document(document_id: str) -> None:
+    """Delete a document by ID."""
+    resp = _api_delete(f"/documents/{document_id}")
+
+    if resp is None:
+        st.error("Cannot reach backend")
+    elif resp.status_code == 200:
+        st.success("Document deleted!")
+        st.rerun()
+    else:
+        st.error(f"Delete failed: {resp.text}")
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+
+def main() -> None:
+    """Documents page entry point."""
+    st.set_page_config(
+        page_title="Documents - QA Assistant",
+        page_icon="📄",
+        layout="wide",
+    )
+
+    # Sidebar navigation
+    with st.sidebar:
+        st.markdown("## 📚 QA Assistant")
+        st.markdown("---")
+        st.page_link("app.py", label="🏠 Home", icon="🏠")
+        st.markdown("**📄 Documents**")
+        st.page_link(
+            "src/presentation/streamlit/pages/2_💬_Chat.py",
+            label="💬 Chat",
+            icon="💬",
+        )
+        st.markdown("---")
+
+    # Page content
+    render_upload_section()
+    st.markdown("---")
+    render_documents_list()
+
+
+if __name__ == "__main__":
+    main()

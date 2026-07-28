@@ -1,0 +1,122 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "project-coordinator": {
+      "description": "Coordinates all AI agents and manages development workflow. Single point of contact for the user.",
+      "mode": "primary",
+      "permission": {
+        "edit": "deny",
+        "bash": "deny",
+        "task": {
+          "*": "allow"
+        }
+      },
+      "prompt": "You are the Project Coordinator for the QA Assistant project. You are the sole user-facing agent. Your responsibilities:\n- Parse user intent and determine which sub-agent(s) to invoke\n- Route work to the correct specialist based on task type\n- Coordinate parallel execution when tasks are independent\n- Enforce the automatic quality pipeline\n- Review sub-agent outputs before returning to user\n- Never write production code directly\n- Never expose internal agent names or handoff details to the user\n\nWorkflow: User Request → Analyze → Select Agents → Execute Pipeline → Review → Return Response\n\nQuality Gates: Code Review → Security → QA → Performance (if needed) → DevOps (if deployment) → Documentation"
+    },
+    "product-manager": {
+      "description": "Analyzes requirements, creates user stories, defines acceptance criteria, and prioritizes features.",
+      "mode": "subagent",
+      "permission": {
+        "edit": "deny",
+        "bash": "deny"
+      }
+    },
+    "software-architect": {
+      "description": "Designs architecture, defines folder structure, creates coding standards, designs APIs, and defines module boundaries.",
+      "mode": "subagent",
+      "permission": {
+        "edit": "allow",
+        "bash": "deny"
+      }
+    },
+    "ui-designer": {
+      "description": "Designs layouts, creates wireframes, improves UX, ensures accessibility, and maintains design consistency.",
+      "mode": "subagent",
+      "permission": {
+        "edit": "allow",
+        "bash": "deny"
+      }
+    },
+    "frontend-developer": {
+      "description": "Builds responsive UI, integrates APIs, manages state, implements forms, handles uploads, and builds chat interface.",
+      "mode": "subagent",
+      "permission": {
+        "edit": "allow",
+        "bash": "allow"
+      }
+    },
+    "backend-developer": {
+      "description": "Builds REST APIs, handles authentication, implements business logic, manages file uploads, and handles error responses.",
+      "mode": "subagent",
+      "permission": {
+        "edit": "allow",
+        "bash": "allow"
+      }
+    },
+    "ai-engineer": {
+      "description": "Implements RAG pipeline, builds embedding pipeline, configures vector search, optimizes prompts, and integrates LLM APIs.",
+      "mode": "subagent",
+      "permission": {
+        "edit": "allow",
+        "bash": "allow"
+      }
+    },
+    "database-engineer": {
+      "description": "Designs schemas, optimizes queries, configures ChromaDB, manages metadata, improves indexing, and handles migrations.",
+      "mode": "subagent",
+      "permission": {
+        "edit": "allow",
+        "bash": "allow"
+      }
+    },
+    "security-engineer": {
+      "description": "Reviews authentication, validates inputs, protects secrets, prevents vulnerabilities, and reviews dependencies.",
+      "mode": "subagent",
+      "permission": {
+        "edit": "deny",
+        "bash": "allow"
+      }
+    },
+    "code-reviewer": {
+      "description": "Reviews code for bugs, detects issues, improves readability, enforces coding standards, and ensures architecture compliance.",
+      "mode": "subagent",
+      "permission": {
+        "edit": "deny",
+        "bash": "deny"
+      }
+    },
+    "qa-engineer": {
+      "description": "Writes unit tests, integration tests, API tests, UI tests, reports bugs, and validates acceptance criteria.",
+      "mode": "subagent",
+      "permission": {
+        "edit": "deny",
+        "bash": "allow"
+      }
+    },
+    "performance-engineer": {
+      "description": "Optimizes API speed, optimizes embeddings, reduces latency, improves caching, and profiles bottlenecks.",
+      "mode": "subagent",
+      "permission": {
+        "edit": "allow",
+        "bash": "allow"
+      }
+    },
+    "devops-engineer": {
+      "description": "Configures Docker, sets up CI/CD, manages deployment, configures environments, monitors production, and maintains infrastructure.",
+      "mode": "subagent",
+      "permission": {
+        "edit": "allow",
+        "bash": "allow"
+      }
+    },
+    "documentation-agent": {
+      "description": "Writes README, documents APIs, creates setup guides, documents architecture, and keeps documentation updated.",
+      "mode": "subagent",
+      "permission": {
+        "edit": "allow",
+        "bash": "deny"
+      }
+    }
+  },
+  "subagent_depth": 2
+}
