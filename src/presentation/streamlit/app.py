@@ -123,31 +123,36 @@ def delete_conversation(conversation_id: str) -> None:
 def render_sidebar() -> None:
     """Render the sidebar with minimal necessary controls."""
     with st.sidebar:
-        st.markdown("## 📚 QA Assistant")
-        st.caption("Document Q&A powered by RAG")
-        st.markdown("---")
+        # Title block — centered
+        st.markdown(
+            "<div style='text-align:center; padding:0.5rem 0 0.25rem;'>"
+            "<h2 style='margin:0; font-size:1.3rem;'>📚 QA Assistant</h2>"
+            "<p style='margin:0; font-size:0.85rem; color:#6c757d;'>Document Q&A powered by RAG</p>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
+        st.divider()
 
         # New conversation
-        if st.button("➕ New Conversation", use_container_width=True):
+        if st.button("➕ New Conversation", use_container_width=True, type="primary"):
             st.session_state.conversation_id = None
             st.session_state.messages = []
             st.rerun()
 
-        st.markdown("---")
-
-        # Conversation history (simple list, limited to 5)
+        # Conversation history
         conversations = fetch_conversations()
         if conversations:
             st.markdown("**Recent Conversations**")
-            for conv in conversations[:5]:  # show latest 5
+            for conv in conversations[:5]:
                 title = conv.get("title", "Untitled")[:20]
                 conv_id = conv["id"]
                 if st.button(title, key=f"hist_{conv_id}", use_container_width=True):
                     load_conversation(conv_id)
         else:
-            st.info("No conversations yet.")
+            st.caption("No conversations yet.")
 
-        st.markdown("---")
+        # Spacer pushes settings to bottom
+        st.markdown("<div style='flex:1'></div>", unsafe_allow_html=True)
 
         # Settings (collapsible)
         with st.expander("⚙️ Settings", expanded=False):
@@ -356,73 +361,44 @@ def main() -> None:
     st.markdown(
         """
         <style>
-        /* ---- Move sidebar header above page nav ---- */
-        [data-testid="stSidebarNav"] {
-            order: 1;
-            margin-top: 0.5rem;
-        }
-        [data-testid="stSidebarUserContent"] {
-            order: 0;
-        }
-        [data-testid="stSidebar"] > div:first-child {
-            display: flex;
-            flex-direction: column;
-        }
-        [data-testid="stSidebar"] > div:first-child > div:first-child {
-            order: 0;
-        }
-        [data-testid="stSidebar"] > div:first-child > nav {
-            order: 1;
-        }
         /* ---- Sidebar styling ---- */
         [data-testid="stSidebar"] {
             background-color: #f8f9fa;
             border-right: 1px solid #e9ecef;
-            border-radius: 0 12px 12px 0;
-            box-shadow: 2px 0 5px rgba(0,0,0,0.05);
-            padding-top: 2rem !important;
-            /* Remove default scrollbar (WebKit) */
-            scrollbar-width: thin; /* Firefox */
         }
         [data-testid="stSidebar"]::-webkit-scrollbar {
             width: 6px;
         }
-        [data-testid="stSidebar"]::-webkit-scrollbar-track {
-            background: transparent;
-        }
         [data-testid="stSidebar"]::-webkit-scrollbar-thumb {
-            background-color: rgba(0,0,0,0.2);
+            background-color: rgba(0,0,0,0.15);
             border-radius: 3px;
         }
-        /* Button styling inside sidebar */
+        /* Buttons inside sidebar */
         [data-testid="stSidebar"] .stButton>button {
-            width: 100%;
             border-radius: 8px;
-            margin-bottom: 0.5rem;
             font-weight: 500;
             transition: background-color 0.2s ease;
         }
-        [data-testid="stSidebar"] .stButton>button:hover {
-            background-color: #e9ecef;
+        /* Dividers inside sidebar */
+        [data-testid="stSidebar"] hr {
+            margin: 0.4rem 0;
+            border-color: #dee2e6;
         }
-        /* Expander (history) styling */
+        /* Info/caption styling */
+        [data-testid="stSidebar"] .stAlert,
+        [data-testid="stSidebar"] [data-testid="stCaptionContainer"] {
+            font-size: 0.82rem;
+        }
+        /* Expander styling */
         [data-testid="stSidebar"] .stExpander {
             border: none !important;
             box-shadow: none;
-            margin-top: 1rem;
         }
         [data-testid="stSidebar"] .stExpanderHeader {
             font-weight: 600;
             color: #495057;
         }
-        /* Ensure sidebar content does not scroll unnecessarily */
-        [data-testid="stSidebar"] > div {
-            overflow-y: visible !important;
-            max-height: none !important;
-        }
-
         /* ---- Responsive layout ---- */
-        /* Make columns stack on screens narrower than 640px */
         @media (max-width: 640px) {
             .stColumns > div {
                 flex: 1 1 100% !important;
