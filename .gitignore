@@ -56,3 +56,6 @@ htmlcov/
 .pytest_cache/
 *.pyc
 *.png
+
+# Node
+node_modules/
