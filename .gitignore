@@ -53,3 +53,4 @@ htmlcov/
 .opencode/
 .pytest_cache/
 *.pyc
+*.png
