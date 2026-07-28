@@ -1,127 +1,171 @@
-# QA Assistant - Multi-Agent System
+# QA Assistant
 
-## Overview
+A Document Q&A application powered by Retrieval-Augmented Generation (RAG). Upload documents, ask questions in natural language, and get accurate answers sourced directly from your content.
 
-This project uses a multi-agent software engineering team for development. Each agent has clearly defined responsibilities, permissions, and collaboration rules.
+Built with **FastAPI** (backend), **Streamlit** (frontend), **ChromaDB** (vector store), and a provider-agnostic architecture for swapping LLMs and embedding models via a single config change.
+
+## Features
+
+- **Multi-format ingestion** — PDF, DOCX, and TXT files with sentence-boundary-aware chunking
+- **RAG pipeline** — embed, retrieve, and generate answers with source citations
+- **Streaming responses** — Server-Sent Events for real-time token-by-token output
+- **4 LLM providers** — Gemini, OpenAI, Anthropic, DeepSeek (OpenAI-compatible)
+- **3 embedding providers** — Gemini, OpenAI, HuggingFace (runs locally, no API key needed)
+- **Conversation memory** — multi-turn conversations with full history
+- **Clean Architecture** — domain, application, infrastructure, presentation layers
+
+## Quick Start
+
+### Prerequisites
+
+- Python 3.10+
+- An API key for at least one LLM provider (DeepSeek free tier works out of the box)
+
+### 1. Clone and install
+
+```bash
+git clone https://github.com/prakashseervi61/QA-Assistant.git
+cd QA-Assistant
+pip install -e ".[dev]"
+```
+
+### 2. Configure
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` with your provider and API key. The defaults use **DeepSeek** (free tier) for LLM and **HuggingFace** (local) for embeddings — zero API cost:
+
+```bash
+LLM_PROVIDER=deepseek
+DEEPSEEK_API_KEY=your_key_here
+EMBEDDING_PROVIDER=huggingface
+```
+
+### 3. Run
+
+**Manual:**
+
+```bash
+# Terminal 1 — API
+uvicorn src.presentation.api.app:create_app --factory --reload --port 8000
+
+# Terminal 2 — UI
+streamlit run src/presentation/streamlit/app.py --server.port 8501
+```
+
+**Or both at once:**
+
+```bash
+bash scripts/start_all.sh
+```
+
+### 4. Open
+
+| Service | URL |
+|---|---|
+| Streamlit UI | http://localhost:8501 |
+| API | http://localhost:8000 |
+| Swagger docs | http://localhost:8000/docs |
+
+## Docker
+
+```bash
+docker compose up --build
+```
+
+| Service | Port |
+|---|---|
+| API | 8000 |
+| Frontend | 8501 |
+
+ChromaDB data persists in a Docker volume (`chroma_data`).
+
+## Configuration Reference
+
+All settings live in `.env` and are loaded via `pydantic-settings`:
+
+| Variable | Default | Description |
+|---|---|---|
+| `LLM_PROVIDER` | `gemini` | LLM backend — `gemini`, `openai`, `anthropic`, `deepseek` |
+| `EMBEDDING_PROVIDER` | `gemini` | Embedding backend — `gemini`, `openai`, `huggingface` |
+| `GEMINI_API_KEY` | `""` | Gemini API key (required if using Gemini) |
+| `OPENAI_API_KEY` | `""` | OpenAI API key (required if using OpenAI) |
+| `ANTHROPIC_API_KEY` | `""` | Anthropic API key (required if using Anthropic) |
+| `DEEPSEEK_API_KEY` | `""` | DeepSeek API key (required if using DeepSeek) |
+| `CHUNK_SIZE` | `1000` | Characters per document chunk |
+| `CHUNK_OVERLAP` | `200` | Overlap between consecutive chunks |
+| `CHROMA_PERSIST_DIR` | `./data/chroma` | ChromaDB storage directory |
+| `API_PORT` | `8000` | API server port |
+| `DEBUG` | `false` | Enable debug mode |
+
+Switching providers is a single-line change — no code modifications needed.
 
 ## Project Structure
 
 ```
-QA-assistant/
-├── opencode.json          # Main agent configuration
-├── AGENTS.md              # Agent system documentation
-├── README.md              # This file
-└── .opencode/
-    └── agents/            # Individual agent configurations
-        ├── project-coordinator.md
-        ├── product-manager.md
-        ├── software-architect.md
-        ├── ui-designer.md
-        ├── frontend-developer.md
-        ├── backend-developer.md
-        ├── ai-engineer.md
-        ├── database-engineer.md
-        ├── security-engineer.md
-        ├── code-reviewer.md
-        ├── qa-engineer.md
-        ├── performance-engineer.md
-        ├── devops-engineer.md
-        └── documentation-agent.md
+src/
+├── domain/                  # Entities, interfaces, value objects
+│   ├── entities/            # Document, Message, Conversation
+│   ├── interfaces/          # Abstract contracts (LLM, embeddings, repos, vector store)
+│   └── value_objects/       # Chunk
+├── application/             # Use cases and business logic
+│   ├── use_cases/           # IngestDocument, QueryDocument
+│   ├── services/            # RAGEngine (embed → retrieve → generate)
+│   └── dto/                 # Request/response DTOs
+├── infrastructure/          # External implementations
+│   ├── config/              # Settings (pydantic-settings)
+│   ├── llm/                 # Gemini, OpenAI, Anthropic, DeepSeek providers
+│   ├── embeddings/          # Gemini, OpenAI, HuggingFace providers
+│   ├── document_processing/ # PDF, DOCX, TXT parsers + text splitter
+│   ├── vector_store/        # ChromaDB store
+│   └── repositories/        # In-memory conversation store
+└── presentation/            # Interfaces
+    ├── api/                 # FastAPI REST API
+    │   └── routes/          # health, documents, chat
+    └── streamlit/           # Streamlit UI
+        ├── pages/           # Documents page, Chat page
+        └── components/      # Shared UI components
 ```
 
-## Agent Team
+## API Endpoints
 
-| Agent | Role | Can Write Code | Can Execute Terminal | Git Access |
-|-------|------|----------------|---------------------|------------|
-| Project Coordinator | Workflow orchestration | ❌ | ❌ | ❌ |
-| Product Manager | Requirements & planning | ❌ | ❌ | ❌ |
-| Software Architect | Architecture design | ✅ | ❌ | ❌ |
-| UI/UX Designer | Interface design | ✅ | ❌ | ❌ |
-| Frontend Developer | UI implementation | ✅ | ✅ | ❌ |
-| Backend Developer | API implementation | ✅ | ✅ | ❌ |
-| AI/ML Engineer | AI features | ✅ | ✅ | ❌ |
-| Database Engineer | Database management | ✅ | ✅ | ❌ |
-| Security Engineer | Security review | ❌ | ✅ | ❌ |
-| Code Reviewer | Code quality | ❌ | ❌ | ❌ |
-| QA Engineer | Testing | ❌ | ✅ | ❌ |
-| Performance Engineer | Optimization | ✅ | ✅ | ❌ |
-| DevOps Engineer | Deployment | ✅ | ✅ | ✅ |
-| Documentation Agent | Documentation | ❌ | ❌ | ❌ |
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/health` | Health check |
+| `POST` | `/api/documents/upload` | Upload and ingest a document |
+| `GET` | `/api/documents` | List ingested documents |
+| `DELETE` | `/api/documents/{id}` | Delete a document |
+| `POST` | `/api/query` | Ask a question (non-streaming) |
+| `POST` | `/api/query/stream` | Ask a question (streaming SSE) |
+| `GET` | `/api/conversations` | List conversations |
+| `GET` | `/api/conversations/{id}` | Get conversation messages |
 
-## Workflow
+## Testing
 
-```
-Project Coordinator
-        ↓
-Product Manager
-        ↓
-Software Architect
-        ↓
-UI/UX Designer
-        ↓
-Frontend Developer ←→ Backend Developer ←→ AI/ML Engineer ←→ Database Engineer
-        ↓
-Code Reviewer
-        ↓
-Security Engineer
-        ↓
-QA & Testing Engineer
-        ↓
-Performance Engineer
-        ↓
-DevOps Engineer
-        ↓
-Documentation Agent
+```bash
+# Run all tests
+pytest
+
+# With coverage
+pytest --cov=src --cov-report=html
+
+# Lint and type check
+ruff check src/
+mypy src/
 ```
 
-## Handoff Rules
+## Tech Stack
 
-1. **Product Manager → Software Architect**: Requirements and user stories
-2. **Software Architect → Implementation Teams**: Architecture and specifications
-3. **UI Designer → Frontend Developer**: Design specifications
-4. **Backend ↔ Database ↔ AI**: Coordinate through APIs only
-5. **All Implementers → Code Reviewer**: Completed code
-6. **Code Reviewer → Security Engineer**: Security review
-7. **Security Engineer → QA Engineer**: Security approval
-8. **QA Engineer → Performance Engineer**: Test approval
-9. **Performance Engineer → DevOps Engineer**: Performance approval
-10. **DevOps Engineer → Documentation Agent**: Deployment completion
-
-## Global Rules
-
-1. Follow SOLID, DRY, KISS, and Clean Architecture principles
-2. Never duplicate responsibilities between agents
-3. Only modify files within agent's responsibility
-4. Never assume ambiguous requirements; ask for clarification
-5. Use official documentation before implementing unfamiliar libraries
-6. Every implementation must pass Code Review before QA
-7. Every feature must pass QA before completion
-8. Maintain consistent coding standards
-9. Never expose secrets, API keys, or environment variables
-10. Produce production-quality code only
-
-## Usage
-
-1. **Start a new feature**: Project Coordinator assigns work to Product Manager
-2. **Requirements phase**: Product Manager creates user stories and acceptance criteria
-3. **Architecture phase**: Software Architect designs the solution
-4. **Implementation phase**: Development team implements features
-5. **Review phase**: Code Reviewer ensures quality
-6. **Security phase**: Security Engineer validates security
-7. **Testing phase**: QA Engineer validates functionality
-8. **Performance phase**: Performance Engineer optimizes
-9. **Deployment phase**: DevOps Engineer deploys
-10. **Documentation phase**: Documentation Agent updates docs
-
-## Configuration
-
-Agent configurations are stored in:
-- `opencode.json`: Main configuration file
-- `.opencode/agents/`: Individual agent system prompts
-
-Each agent includes:
-- Name and description
-- System prompt with responsibilities
-- Tool permissions
-- Handoff rules
-- Access permissions
+| Layer | Technology |
+|---|---|
+| Frontend | Streamlit |
+| Backend API | FastAPI + Uvicorn |
+| Vector Store | ChromaDB |
+| LLM Providers | Gemini, OpenAI, Anthropic, DeepSeek |
+| Embedding Providers | Gemini, OpenAI, HuggingFace (sentence-transformers) |
+| Document Parsing | PyPDF2, python-docx |
+| Configuration | pydantic-settings |
+| Architecture | Clean Architecture (Domain → Application → Infrastructure → Presentation) |
+| Python | 3.10+ |
