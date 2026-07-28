@@ -7,7 +7,7 @@ import streamlit as st
 import requests
 import time
 
-API_BASE_URL = "http://localhost:8000/api/v1"
+API_BASE_URL = "http://localhost:8000/api"
 API_TIMEOUT = 60
 UPLOAD_TYPES = ["pdf", "docx", "txt"]
 
@@ -36,6 +36,21 @@ def _api_delete(path: str, **kwargs) -> requests.Response | None:
         return requests.delete(f"{API_BASE_URL}{path}", timeout=API_TIMEOUT, **kwargs)
     except requests.ConnectionError:
         return None
+
+
+# ---------------------------------------------------------------------------
+# Cached data fetchers
+# ---------------------------------------------------------------------------
+
+
+@st.cache_data(ttl=2, show_spinner=False)
+def fetch_documents() -> list[dict]:
+    """Fetch the list of documents from the API."""
+    resp = _api_get("/documents")
+    if resp and resp.status_code == 200:
+        data = resp.json()
+        return data.get("documents", [])
+    return []
 
 
 # ---------------------------------------------------------------------------
@@ -101,6 +116,8 @@ def _upload_files(files) -> None:
 
     status_text.text("Upload complete!")
     time.sleep(1)
+    # Clear cached document list so the new upload appears
+    fetch_documents.clear()
     st.rerun()
 
 
@@ -113,17 +130,7 @@ def render_documents_list() -> None:
     """Render the list of uploaded documents."""
     st.header("📚 Uploaded Documents")
 
-    resp = _api_get("/documents")
-
-    if resp is None:
-        st.error("Cannot reach the backend. Is the API server running?")
-        return
-
-    if resp.status_code != 200:
-        st.error(f"Failed to fetch documents: {resp.text}")
-        return
-
-    documents = resp.json()
+    documents = fetch_documents()
 
     if not documents:
         st.info("No documents uploaded yet. Upload your first document above!")
@@ -161,6 +168,7 @@ def _delete_document(document_id: str) -> None:
         st.error("Cannot reach backend")
     elif resp.status_code == 200:
         st.success("Document deleted!")
+        fetch_documents.clear()  # clear cache after deletion
         st.rerun()
     else:
         st.error(f"Delete failed: {resp.text}")
@@ -186,7 +194,7 @@ def main() -> None:
         st.page_link("app.py", label="🏠 Home", icon="🏠")
         st.markdown("**📄 Documents**")
         st.page_link(
-            "src/presentation/streamlit/pages/2_💬_Chat.py",
+            "pages/2_💬_Chat.py",
             label="💬 Chat",
             icon="💬",
         )

@@ -18,10 +18,10 @@ class TestSettingsDefaults:
     """Verify default values match the specification."""
 
     def test_llm_provider_default(self):
-        assert Settings().LLM_PROVIDER == "gemini"
+        assert Settings().LLM_PROVIDER == "deepseek"
 
     def test_embedding_provider_default(self):
-        assert Settings().EMBEDDING_PROVIDER == "gemini"
+        assert Settings().EMBEDDING_PROVIDER == "huggingface"
 
     def test_chunk_size_default(self):
         assert Settings().CHUNK_SIZE == 1000

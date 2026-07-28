@@ -37,7 +37,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
 
     # Register routes
-    app.include_router(health.router, tags=["health"])
+    app.include_router(health.router, prefix="/api", tags=["health"])
     app.include_router(documents.router, prefix="/api", tags=["documents"])
     app.include_router(chat.router, prefix="/api", tags=["chat"])
 

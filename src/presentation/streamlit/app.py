@@ -13,8 +13,9 @@ from typing import Generator
 # Configuration
 # ---------------------------------------------------------------------------
 
-API_BASE_URL = "http://localhost:8000/api/v1"
+API_BASE_URL = "http://localhost:8000/api"
 UPLOAD_TYPES = ["pdf", "docx", "txt"]
+MAX_UPLOAD_SIZE_MB = 10
 API_TIMEOUT = 30
 
 
@@ -77,6 +78,7 @@ def check_api_connection() -> bool:
 # ---------------------------------------------------------------------------
 
 
+@st.cache_data(ttl=5)  # cache for 5 seconds
 def fetch_conversations() -> list[dict]:
     """Fetch the conversation list from the API."""
     resp = api_get("/conversations")
@@ -119,7 +121,7 @@ def delete_conversation(conversation_id: str) -> None:
 
 
 def render_sidebar() -> None:
-    """Render the sidebar with branding, history, and settings."""
+    """Render the sidebar with minimal necessary controls."""
     with st.sidebar:
         st.markdown("## 📚 QA Assistant")
         st.caption("Document Q&A powered by RAG")
@@ -133,43 +135,25 @@ def render_sidebar() -> None:
 
         st.markdown("---")
 
-        # Conversation history
-        st.subheader("💬 History")
-        _render_conversation_history()
-
-        st.markdown("---")
-
-        # Settings
-        _render_settings()
-
-        st.markdown("---")
-
-        # Connection indicator
-        if check_api_connection():
-            st.success("Backend connected")
+        # Conversation history (simple list, limited to 5)
+        conversations = fetch_conversations()
+        if conversations:
+            st.markdown("**Recent Conversations**")
+            for conv in conversations[:5]:  # show latest 5
+                title = conv.get("title", "Untitled")[:20]
+                conv_id = conv["id"]
+                if st.button(title, key=f"hist_{conv_id}", use_container_width=True):
+                    load_conversation(conv_id)
         else:
-            st.error("Backend unreachable")
+            st.info("No conversations yet.")
+
+        st.markdown("---")
+
+        # Settings (collapsible)
+        with st.expander("⚙️ Settings", expanded=False):
+            _render_settings()
 
 
-def _render_conversation_history() -> None:
-    """Render the scrollable conversation list inside the sidebar."""
-    conversations = fetch_conversations()
-
-    if not conversations:
-        st.info("No conversations yet.")
-        return
-
-    for conv in conversations:
-        title = conv.get("title", "Untitled")[:30]
-        conv_id = conv["id"]
-
-        col_label, col_del = st.columns([4, 1])
-        with col_label:
-            if st.button(title, key=f"conv_{conv_id}", use_container_width=True):
-                load_conversation(conv_id)
-        with col_del:
-            if st.button("🗑️", key=f"del_{conv_id}"):
-                delete_conversation(conv_id)
 
 
 def _render_settings() -> None:
@@ -187,7 +171,6 @@ def _render_settings() -> None:
             "Top K Results",
             min_value=1,
             max_value=20,
-            value=st.session_state.top_k,
             key="top_k",
         )
 
@@ -204,16 +187,24 @@ def render_document_upload() -> None:
     uploaded_file = st.file_uploader(
         "Choose a file",
         type=UPLOAD_TYPES,
-        help=f"Supported formats: {', '.join(f.upper() for f in UPLOAD_TYPES)}",
+        help=f"Supported formats: {', '.join(f.upper() for f in UPLOAD_TYPES)}. Max size: {MAX_UPLOAD_SIZE_MB} MB",
     )
 
     if uploaded_file is None:
         return
 
+    # File size validation
+    file_size_mb = uploaded_file.size / (1024 * 1024)
+    if file_size_mb > MAX_UPLOAD_SIZE_MB:
+        st.error(
+            f"File too large ({file_size_mb:.1f} MB). Maximum allowed size is {MAX_UPLOAD_SIZE_MB} MB."
+        )
+        return
+
     # Show file details before uploading
     file_details = {
         "Filename": uploaded_file.name,
-        "Size": f"{uploaded_file.size / 1024:.1f} KB",
+        "Size": f"{file_size_mb:.1f} MB",
     }
     st.json(file_details)
 
@@ -252,6 +243,11 @@ def render_chat_interface() -> None:
     if not question:
         return
 
+    # Basic validation: ignore empty/whitespace-only input
+    if not question.strip():
+        st.warning("Please enter a question.")
+        return
+
     # Append and display user message
     st.session_state.messages.append({"role": "user", "content": question})
     with st.chat_message("user"):
@@ -270,7 +266,7 @@ def render_chat_interface() -> None:
             }
 
             with requests.post(
-                f"{API_BASE_URL}/chat/query/stream",
+                f"{API_BASE_URL}/query/stream",
                 json=payload,
                 stream=True,
                 timeout=120,
@@ -354,6 +350,70 @@ def main() -> None:
         page_icon="📚",
         layout="wide",
         initial_sidebar_state="expanded",
+    )
+
+    # Inject custom CSS for modern sidebar and responsive layout
+    st.markdown(
+        """
+        <style>
+        /* ---- Sidebar styling ---- */
+        [data-testid="stSidebar"] {
+            background-color: #f8f9fa;
+            border-right: 1px solid #e9ecef;
+            border-radius: 0 12px 12px 0;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.05);
+            padding-top: 2rem !important;
+            /* Remove default scrollbar (WebKit) */
+            scrollbar-width: thin; /* Firefox */
+        }
+        [data-testid="stSidebar"]::-webkit-scrollbar {
+            width: 6px;
+        }
+        [data-testid="stSidebar"]::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        [data-testid="stSidebar"]::-webkit-scrollbar-thumb {
+            background-color: rgba(0,0,0,0.2);
+            border-radius: 3px;
+        }
+        /* Button styling inside sidebar */
+        [data-testid="stSidebar"] .stButton>button {
+            width: 100%;
+            border-radius: 8px;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            transition: background-color 0.2s ease;
+        }
+        [data-testid="stSidebar"] .stButton>button:hover {
+            background-color: #e9ecef;
+        }
+        /* Expander (history) styling */
+        [data-testid="stSidebar"] .stExpander {
+            border: none !important;
+            box-shadow: none;
+            margin-top: 1rem;
+        }
+        [data-testid="stSidebar"] .stExpanderHeader {
+            font-weight: 600;
+            color: #495057;
+        }
+        /* Ensure sidebar content does not scroll unnecessarily */
+        [data-testid="stSidebar"] > div {
+            overflow-y: visible !important;
+            max-height: none !important;
+        }
+
+        /* ---- Responsive layout ---- */
+        /* Make columns stack on screens narrower than 640px */
+        @media (max-width: 640px) {
+            .stColumns > div {
+                flex: 1 1 100% !important;
+                width: 100% !important;
+            }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
     )
 
     init_session_state()

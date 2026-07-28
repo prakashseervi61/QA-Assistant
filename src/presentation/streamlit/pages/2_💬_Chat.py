@@ -8,7 +8,7 @@ import streamlit as st
 import requests
 import json
 
-API_BASE_URL = "http://localhost:8000/api/v1"
+API_BASE_URL = "http://localhost:8000/api"
 API_TIMEOUT = 30
 
 # ---------------------------------------------------------------------------
@@ -209,7 +209,7 @@ def render_chat_input() -> None:
             }
 
             with requests.post(
-                f"{API_BASE_URL}/chat/query/stream",
+                f"{API_BASE_URL}/query/stream",
                 json=payload,
                 stream=True,
                 timeout=120,
@@ -288,9 +288,9 @@ def main() -> None:
         st.markdown("---")
         st.page_link("app.py", label="\U0001f3e0 Home", icon="\U0001f3e0")
         st.page_link(
-            "src/presentation/streamlit/pages/1_\U0001f4c4_Documents.py",
-            label="\U0001f4c4 Documents",
-            icon="\U0001f4c4",
+            "pages/1_📄_Documents.py",
+            label="📄 Documents",
+            icon="📄",
         )
         st.markdown("**\U0001f4ac Chat**")
         st.markdown("---")
