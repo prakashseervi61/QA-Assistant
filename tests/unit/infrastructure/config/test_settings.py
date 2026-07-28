@@ -69,10 +69,11 @@ class TestSettingsDefaults:
         assert Settings().CORS_ORIGINS == ["http://localhost:8501"]
 
     def test_api_keys_default_empty(self):
-        s = Settings()
+        s = Settings(GEMINI_API_KEY="", OPENAI_API_KEY="", ANTHROPIC_API_KEY="", DEEPSEEK_API_KEY="")
         assert s.GEMINI_API_KEY == ""
         assert s.OPENAI_API_KEY == ""
         assert s.ANTHROPIC_API_KEY == ""
+        assert s.DEEPSEEK_API_KEY == ""
 
 
 class TestSettingsCustomValues:
