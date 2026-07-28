@@ -7,35 +7,9 @@ import streamlit as st
 import requests
 import time
 
-API_BASE_URL = "http://localhost:8000/api"
-API_TIMEOUT = 60
+from src.presentation.streamlit.api_client import api_get, api_post, api_delete
+
 UPLOAD_TYPES = ["pdf", "docx", "txt"]
-
-
-# ---------------------------------------------------------------------------
-# API helpers
-# ---------------------------------------------------------------------------
-
-
-def _api_get(path: str, **kwargs) -> requests.Response | None:
-    try:
-        return requests.get(f"{API_BASE_URL}{path}", timeout=API_TIMEOUT, **kwargs)
-    except requests.ConnectionError:
-        return None
-
-
-def _api_post(path: str, **kwargs) -> requests.Response | None:
-    try:
-        return requests.post(f"{API_BASE_URL}{path}", timeout=API_TIMEOUT, **kwargs)
-    except requests.ConnectionError:
-        return None
-
-
-def _api_delete(path: str, **kwargs) -> requests.Response | None:
-    try:
-        return requests.delete(f"{API_BASE_URL}{path}", timeout=API_TIMEOUT, **kwargs)
-    except requests.ConnectionError:
-        return None
 
 
 # ---------------------------------------------------------------------------
@@ -46,7 +20,7 @@ def _api_delete(path: str, **kwargs) -> requests.Response | None:
 @st.cache_data(ttl=2, show_spinner=False)
 def fetch_documents() -> list[dict]:
     """Fetch the list of documents from the API."""
-    resp = _api_get("/documents")
+    resp = api_get("/documents")
     if resp and resp.status_code == 200:
         data = resp.json()
         return data.get("documents", [])
@@ -98,7 +72,7 @@ def _upload_files(files) -> None:
 
         try:
             file_dict = {"file": (file.name, file.getvalue())}
-            resp = _api_post("/documents/upload", files=file_dict)
+            resp = api_post("/documents/upload", files=file_dict)
 
             if resp is None:
                 st.error(f"❌ {file.name}: Cannot reach backend")
@@ -162,7 +136,7 @@ def render_documents_list() -> None:
 
 def _delete_document(document_id: str) -> None:
     """Delete a document by ID."""
-    resp = _api_delete(f"/documents/{document_id}")
+    resp = api_delete(f"/documents/{document_id}")
 
     if resp is None:
         st.error("Cannot reach backend")

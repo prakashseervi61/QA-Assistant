@@ -8,8 +8,8 @@ import streamlit as st
 import requests
 import json
 
-API_BASE_URL = "http://localhost:8000/api"
-API_TIMEOUT = 30
+from src.presentation.streamlit.api_client import api_get, api_post, API_BASE_URL, API_TIMEOUT
+from src.presentation.streamlit.components import render_sources
 
 # ---------------------------------------------------------------------------
 # Session state
@@ -29,40 +29,13 @@ def init_chat_session() -> None:
 
 
 # ---------------------------------------------------------------------------
-# API helpers
-# ---------------------------------------------------------------------------
-
-
-def _api_get(path: str, **kwargs) -> requests.Response | None:
-    """Send a GET request. Returns None on connection error."""
-    try:
-        return requests.get(f"{API_BASE_URL}{path}", timeout=API_TIMEOUT, **kwargs)
-    except requests.ConnectionError:
-        return None
-
-
-def _api_post(path: str, **kwargs) -> requests.Response | None:
-    """Send a POST request. Returns None on connection error."""
-    try:
-        return requests.post(f"{API_BASE_URL}{path}", timeout=API_TIMEOUT, **kwargs)
-    except requests.ConnectionError:
-        return None
-
-
-def _check_backend() -> bool:
-    """Return True if the backend API is reachable."""
-    resp = _api_get("/health")
-    return resp is not None and resp.status_code == 200
-
-
-# ---------------------------------------------------------------------------
 # Conversation helpers
 # ---------------------------------------------------------------------------
 
 
 def fetch_conversations() -> list[dict]:
     """Fetch the conversation list from the API."""
-    resp = _api_get("/conversations")
+    resp = api_get("/conversations")
     if resp and resp.status_code == 200:
         return resp.json()
     return []
@@ -73,7 +46,7 @@ def load_conversation(conversation_id: str) -> None:
     if st.session_state.current_conversation == conversation_id:
         return
 
-    resp = _api_get(f"/conversations/{conversation_id}")
+    resp = api_get(f"/conversations/{conversation_id}")
     if resp and resp.status_code == 200:
         raw_messages = resp.json()
         st.session_state.current_conversation = conversation_id
@@ -159,24 +132,7 @@ def render_chat_messages() -> None:
         with st.chat_message(role):
             st.markdown(message["content"])
             if message.get("sources"):
-                _render_sources(message["sources"], key_suffix=f"{idx}")
-
-
-def _render_sources(sources: list[dict], key_suffix: str = "") -> None:
-    """Render source citations inside a collapsible expander."""
-    with st.expander(f"\U0001f4ce {len(sources)} source{'s' if len(sources) != 1 else ''}", expanded=False):
-        for i, source in enumerate(sources, 1):
-            content = source.get("content", "")
-            metadata = source.get("metadata", {})
-            score = source.get("score", 0.0)
-            filename = metadata.get("filename", "unknown")
-
-            st.markdown(f"**Source {i}** \u2014 *{filename}* (relevance: {score:.2f})")
-            st.text(
-                content[:500] + ("..." if len(content) > 500 else "")
-            )
-            if i < len(sources):
-                st.markdown("---")
+                render_sources(message["sources"], key_suffix=f"{idx}")
 
 
 # ---------------------------------------------------------------------------
@@ -238,7 +194,7 @@ def render_chat_input() -> None:
                             st.session_state.current_conversation,
                         )
                         if sources:
-                            _render_sources(sources, key_suffix="new")
+                            render_sources(sources, key_suffix="new")
 
                     elif data["type"] == "error":
                         error_msg = data.get("message", "Unknown error")
@@ -295,7 +251,8 @@ def main() -> None:
         st.markdown("**\U0001f4ac Chat**")
         st.markdown("---")
 
-        if _check_backend():
+        resp = api_get("/health")
+        if resp is not None and resp.status_code == 200:
             st.success("Backend connected")
         else:
             st.error("Backend unreachable")

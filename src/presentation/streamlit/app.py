@@ -9,14 +9,15 @@ import requests
 import json
 from typing import Generator
 
+from src.presentation.streamlit.api_client import api_get, api_post, api_delete, API_BASE_URL
+from src.presentation.streamlit.components import render_sources
+
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
 
-API_BASE_URL = "http://localhost:8000/api"
 UPLOAD_TYPES = ["pdf", "docx", "txt"]
 MAX_UPLOAD_SIZE_MB = 10
-API_TIMEOUT = 30
 
 
 # ---------------------------------------------------------------------------
@@ -36,41 +37,6 @@ def init_session_state() -> None:
     for key, value in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = value
-
-
-# ---------------------------------------------------------------------------
-# API helpers
-# ---------------------------------------------------------------------------
-
-
-def api_get(path: str, **kwargs) -> requests.Response | None:
-    """Send a GET request to the API. Returns None on connection error."""
-    try:
-        return requests.get(f"{API_BASE_URL}{path}", timeout=API_TIMEOUT, **kwargs)
-    except requests.ConnectionError:
-        return None
-
-
-def api_post(path: str, **kwargs) -> requests.Response | None:
-    """Send a POST request to the API. Returns None on connection error."""
-    try:
-        return requests.post(f"{API_BASE_URL}{path}", timeout=API_TIMEOUT, **kwargs)
-    except requests.ConnectionError:
-        return None
-
-
-def api_delete(path: str, **kwargs) -> requests.Response | None:
-    """Send a DELETE request to the API. Returns None on connection error."""
-    try:
-        return requests.delete(f"{API_BASE_URL}{path}", timeout=API_TIMEOUT, **kwargs)
-    except requests.ConnectionError:
-        return None
-
-
-def check_api_connection() -> bool:
-    """Return True if the backend is reachable."""
-    resp = api_get("/health")
-    return resp is not None and resp.status_code == 200
 
 
 # ---------------------------------------------------------------------------
@@ -307,7 +273,7 @@ def render_chat_interface() -> None:
                             }
                         )
                         if sources:
-                            _render_sources(sources)
+                            render_sources(sources)
 
                     elif data["type"] == "error":
                         st.error(data.get("message", "Unknown error"))
@@ -326,21 +292,7 @@ def _render_message(message: dict) -> None:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
         if message.get("sources"):
-            _render_sources(message["sources"])
-
-
-def _render_sources(sources: list[dict]) -> None:
-    """Render source citations inside a collapsible expander."""
-    with st.expander(f"📎 Sources ({len(sources)})", expanded=False):
-        for i, source in enumerate(sources, 1):
-            content = source.get("content", "")
-            metadata = source.get("metadata", {})
-            score = source.get("score", 0.0)
-            filename = metadata.get("filename", "unknown")
-
-            st.markdown(f"**Source {i}** — *{filename}* (relevance: {score:.2f})")
-            st.text(content[:300] + ("..." if len(content) > 300 else ""))
-            st.markdown("---")
+            render_sources(message["sources"])
 
 
 # ---------------------------------------------------------------------------

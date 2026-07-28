@@ -32,12 +32,6 @@ class TestSettingsDefaults:
     def test_max_file_size_mb_default(self):
         assert Settings().MAX_FILE_SIZE_MB == 50
 
-    def test_retrieval_top_k_default(self):
-        assert Settings().RETRIEVAL_TOP_K == 5
-
-    def test_retrieval_score_threshold_default(self):
-        assert Settings().RETRIEVAL_SCORE_THRESHOLD == 0.7
-
     def test_api_host_default(self):
         assert Settings().API_HOST == "0.0.0.0"
 
@@ -102,41 +96,6 @@ class TestSettingsCustomValues:
 
     def test_custom_embedding_provider(self):
         assert Settings(EMBEDDING_PROVIDER="openai").EMBEDDING_PROVIDER == "openai"
-
-    def test_custom_retrieval_top_k(self):
-        assert Settings(RETRIEVAL_TOP_K=10).RETRIEVAL_TOP_K == 10
-
-
-class TestApiKeyConfiguration:
-    """Tests for the api_key_configured property methods."""
-
-    def test_gemini_api_key_configured_true(self):
-        assert Settings(GEMINI_API_KEY="real-key-12345").gemini_api_key_configured is True
-
-    def test_gemini_api_key_configured_false_empty(self):
-        assert Settings(GEMINI_API_KEY="").gemini_api_key_configured is False
-
-    def test_gemini_api_key_configured_false_placeholder(self):
-        assert Settings(GEMINI_API_KEY="your-gemini-api-key-here").gemini_api_key_configured is False
-
-    def test_openai_api_key_configured_true(self):
-        assert Settings(OPENAI_API_KEY="sk-real-key").openai_api_key_configured is True
-
-    def test_openai_api_key_configured_false_empty(self):
-        assert Settings(OPENAI_API_KEY="").openai_api_key_configured is False
-
-    def test_openai_api_key_configured_false_placeholder(self):
-        assert Settings(OPENAI_API_KEY="your-openai-api-key-here").openai_api_key_configured is False
-
-    def test_anthropic_api_key_configured_true(self):
-        assert Settings(ANTHROPIC_API_KEY="sk-ant-real").anthropic_api_key_configured is True
-
-    def test_anthropic_api_key_configured_false_empty(self):
-        assert Settings(ANTHROPIC_API_KEY="").anthropic_api_key_configured is False
-
-    def test_anthropic_api_key_configured_false_placeholder(self):
-        s = Settings(ANTHROPIC_API_KEY="your-anthropic-api-key-here")
-        assert s.anthropic_api_key_configured is False
 
 
 class TestGetSettingsSingleton:

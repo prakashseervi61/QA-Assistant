@@ -33,6 +33,8 @@ ENV/
 
 # Environment variables
 .env
+.env.*
+!.env.example
 
 # Data directories
 data/

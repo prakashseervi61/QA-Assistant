@@ -18,11 +18,3 @@ class Conversation:
     def add_message(self, message: Message) -> None:
         self.messages.append(message)
         self.updated_at = datetime.now()
-
-    def add_document(self, document_id: UUID) -> None:
-        if document_id not in self.document_ids:
-            self.document_ids.append(document_id)
-            self.updated_at = datetime.now()
-
-    def get_last_message(self) -> Optional[Message]:
-        return self.messages[-1] if self.messages else None

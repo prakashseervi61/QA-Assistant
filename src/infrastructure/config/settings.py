@@ -47,34 +47,10 @@ class Settings(BaseSettings):
     MAX_FILE_SIZE_MB: int = 50
     ALLOWED_EXTENSIONS: list[str] = [".pdf", ".docx", ".txt"]
 
-    # Retrieval
-    RETRIEVAL_TOP_K: int = 5
-    RETRIEVAL_SCORE_THRESHOLD: float = 0.7
-
     # API
     API_HOST: str = "0.0.0.0"
     API_PORT: int = 8000
     CORS_ORIGINS: list[str] = ["http://localhost:8501"]
-
-    @property
-    def gemini_api_key_configured(self) -> bool:
-        """Check if Gemini API key is properly configured."""
-        return bool(self.GEMINI_API_KEY and self.GEMINI_API_KEY != "your-gemini-api-key-here")
-
-    @property
-    def openai_api_key_configured(self) -> bool:
-        """Check if OpenAI API key is properly configured."""
-        return bool(self.OPENAI_API_KEY and self.OPENAI_API_KEY != "your-openai-api-key-here")
-
-    @property
-    def anthropic_api_key_configured(self) -> bool:
-        """Check if Anthropic API key is properly configured."""
-        return bool(self.ANTHROPIC_API_KEY and self.ANTHROPIC_API_KEY != "your-anthropic-api-key-here")
-
-    @property
-    def deepseek_api_key_configured(self) -> bool:
-        """Check if DeepSeek API key is properly configured."""
-        return bool(self.DEEPSEEK_API_KEY and self.DEEPSEEK_API_KEY != "your-deepseek-api-key-here")
 
 
 @lru_cache

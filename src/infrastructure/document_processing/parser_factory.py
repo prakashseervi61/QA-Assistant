@@ -1,5 +1,6 @@
 from src.domain.interfaces.document_parser import DocumentParser
-from src.infrastructure.config.constants import SUPPORTED_FILE_TYPES
+
+_SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".txt"}
 
 
 def create_parser(file_extension: str) -> DocumentParser:
@@ -20,9 +21,5 @@ def create_parser(file_extension: str) -> DocumentParser:
     else:
         raise ValueError(
             f"Unsupported file type: {ext}. "
-            f"Supported types: {list(SUPPORTED_FILE_TYPES.keys())}"
+            f"Supported types: {sorted(_SUPPORTED_EXTENSIONS)}"
         )
-
-
-def get_supported_extensions() -> list[str]:
-    return list(SUPPORTED_FILE_TYPES.keys())
