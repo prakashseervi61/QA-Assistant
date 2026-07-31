@@ -2,6 +2,10 @@ from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 
 
+class LLMQuotaExceededError(RuntimeError):
+    """Raised when the LLM provider is out of quota or rate-limited (HTTP 429)."""
+
+
 class LLMProvider(ABC):
     """Abstract base class for all LLM provider implementations."""
 
@@ -11,10 +15,16 @@ class LLMProvider(ABC):
         ...
 
     @abstractmethod
-    async def generate_stream(
+    def generate_stream(
         self, prompt: str, system_prompt: str | None = None
     ) -> AsyncIterator[str]:
-        """Generate a streaming response token by token."""
+        """Generate a streaming response token by token.
+
+        Async generator function — call once, then ``async for`` over the
+        returned async iterator. Implementations must be async generators
+        (``async def`` containing ``yield``); callers must not ``await``
+        this method directly.
+        """
         ...
 
     @abstractmethod

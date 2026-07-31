@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     # LLM Provider
     LLM_PROVIDER: Literal["gemini", "openai", "anthropic", "deepseek"] = "gemini"
     GEMINI_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-2.0-flash"
+    GEMINI_MODEL: str = "gemini-2.5-flash"
     OPENAI_API_KEY: str = ""
     OPENAI_MODEL: str = "gpt-4o"
     ANTHROPIC_API_KEY: str = ""
@@ -50,7 +50,7 @@ class Settings(BaseSettings):
     # API
     API_HOST: str = "0.0.0.0"
     API_PORT: int = 8000
-    CORS_ORIGINS: list[str] = ["http://localhost:8501"]
+    CORS_ORIGINS: list[str] = ["http://localhost:3000"]
 
 
 @lru_cache

@@ -91,6 +91,7 @@ export default function DocumentList() {
       setFile(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
       await loadDocs();
+      window.dispatchEvent(new CustomEvent('documents-changed'));
     } catch (err) {
       setError(err.message);
     } finally {
@@ -103,6 +104,7 @@ export default function DocumentList() {
     try {
       await deleteJSON(`/documents/${id}`);
       await loadDocs();
+      window.dispatchEvent(new CustomEvent('documents-changed'));
     } catch (err) {
       setError(err.message);
     }

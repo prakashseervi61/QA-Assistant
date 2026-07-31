@@ -27,3 +27,8 @@ class VectorStore(ABC):
     async def get_collection_count(self, collection_name: str) -> int:
         """Return the number of chunks in a collection."""
         ...
+
+    @abstractmethod
+    async def list_documents(self, collection_name: str) -> list[dict]:
+        """Return a summary per ingested document in the collection."""
+        ...

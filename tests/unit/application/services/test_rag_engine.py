@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from src.application.services.rag_engine import RAGEngine, RAGQueryError
+from src.domain.interfaces.llm_provider import LLMQuotaExceededError
 from src.domain.value_objects.chunk import Chunk
 
 # Fixtures
@@ -15,8 +16,17 @@ def mock_llm_provider():
     """Create a mock LLM provider."""
     provider = AsyncMock()
     provider.generate = AsyncMock(return_value="This is a generated answer.")
-    provider.generate_stream = AsyncMock()
     provider.get_model_name = MagicMock(return_value="test-model")
+
+    async def empty_stream(prompt):
+        """Valid async generator so ``generate_stream`` can be iterated."""
+        return
+        yield  # pragma: no cover - makes this an async generator
+
+    # generate_stream is an async-generator function: calling it must
+    # return an async iterator, NOT a coroutine (an AsyncMock would
+    # produce an un-awaited coroutine that ``async for`` cannot consume).
+    provider.generate_stream = MagicMock(side_effect=empty_stream)
     return provider
 
 
@@ -113,7 +123,10 @@ class TestRAGEngineQuery:
         await rag_engine.query("What is AI?")
         mock_vector_store.similarity_search.assert_awaited_once()
 
-    async def test_query_calls_llm_generate(self, rag_engine, mock_llm_provider):
+    async def test_query_calls_llm_generate(
+        self, rag_engine, mock_llm_provider, mock_vector_store, sample_chunks
+    ):
+        mock_vector_store.similarity_search.return_value = sample_chunks
         await rag_engine.query("What is AI?")
         mock_llm_provider.generate.assert_awaited_once()
 
@@ -174,10 +187,19 @@ class TestRAGEngineQuery:
         assert result["sources"] == []
 
     async def test_query_wraps_exceptions_in_rag_query_error(
-        self, rag_engine, mock_llm_provider
+        self, rag_engine, mock_llm_provider, mock_vector_store, sample_chunks
     ):
+        mock_vector_store.similarity_search.return_value = sample_chunks
         mock_llm_provider.generate.side_effect = RuntimeError("LLM exploded")
         with pytest.raises(RAGQueryError, match="Failed to process query"):
+            await rag_engine.query("test")
+
+    async def test_query_re_raises_quota_error_unwrapped(
+        self, rag_engine, mock_llm_provider, mock_vector_store, sample_chunks
+    ):
+        mock_vector_store.similarity_search.return_value = sample_chunks
+        mock_llm_provider.generate.side_effect = LLMQuotaExceededError("quota")
+        with pytest.raises(LLMQuotaExceededError):
             await rag_engine.query("test")
 
     async def test_query_embedding_error_wrapped(
@@ -187,10 +209,38 @@ class TestRAGEngineQuery:
         with pytest.raises(RAGQueryError, match="Failed to process query"):
             await rag_engine.query("test")
 
-    async def test_query_passes_llm_name_to_logger(self, rag_engine, mock_llm_provider):
+    async def test_query_passes_llm_name_to_logger(
+        self, rag_engine, mock_llm_provider, mock_vector_store, sample_chunks
+    ):
         """Verify get_model_name is called (for logging)."""
+        mock_vector_store.similarity_search.return_value = sample_chunks
         await rag_engine.query("test")
         mock_llm_provider.get_model_name.assert_called_once()
+
+    # New: empty-retrieval behavior (no documents / no relevant context)
+
+    async def test_query_no_documents_returns_upload_hint(
+        self, rag_engine, mock_vector_store, mock_llm_provider
+    ):
+        mock_vector_store.similarity_search.return_value = []
+        mock_vector_store.get_collection_count.return_value = 0
+        result = await rag_engine.query("What is AI?")
+        assert "No documents" in result["answer"]
+        assert "upload" in result["answer"].lower()
+        assert result["sources"] == []
+        assert result["confidence"] == 0.0
+        mock_llm_provider.generate.assert_not_awaited()
+
+    async def test_query_no_relevant_context_message(
+        self, rag_engine, mock_vector_store, mock_llm_provider
+    ):
+        mock_vector_store.similarity_search.return_value = []
+        mock_vector_store.get_collection_count.return_value = 3
+        result = await rag_engine.query("What is AI?")
+        assert "relevant" in result["answer"].lower()
+        assert result["sources"] == []
+        assert result["confidence"] == 0.0
+        mock_llm_provider.generate.assert_not_awaited()
 
 
 # RAGEngine.query_stream Tests
@@ -236,11 +286,51 @@ class TestRAGEngineQueryStream:
         call_kwargs = mock_vector_store.similarity_search.call_args
         assert call_kwargs.kwargs["k"] == 3
 
-    async def test_stream_error_wrapped(self, rag_engine, mock_llm_provider):
+    async def test_stream_error_wrapped(
+        self, rag_engine, mock_llm_provider, mock_vector_store, sample_chunks
+    ):
+        mock_vector_store.similarity_search.return_value = sample_chunks
         mock_llm_provider.generate_stream.side_effect = RuntimeError("boom")
         with pytest.raises(RAGQueryError, match="Failed to stream query"):
             async for _ in rag_engine.query_stream("test"):
                 pass
+
+    async def test_stream_re_raises_quota_error_unwrapped(
+        self, rag_engine, mock_llm_provider, mock_vector_store, sample_chunks
+    ):
+        mock_vector_store.similarity_search.return_value = sample_chunks
+
+        async def failing_stream(prompt):
+            raise LLMQuotaExceededError("quota")
+            yield  # pragma: no cover - unreachable, makes this a generator
+
+        mock_llm_provider.generate_stream = failing_stream
+
+        with pytest.raises(LLMQuotaExceededError):
+            async for _ in rag_engine.query_stream("test"):
+                pass
+
+    async def test_stream_no_documents_yields_hint(
+        self, rag_engine, mock_vector_store, mock_llm_provider
+    ):
+        mock_vector_store.similarity_search.return_value = []
+        mock_vector_store.get_collection_count.return_value = 0
+        collected = []
+        async for chunk in rag_engine.query_stream("test"):
+            collected.append(chunk)
+        assert collected == [rag_engine.NO_DOCUMENTS_MESSAGE]
+        mock_llm_provider.generate_stream.assert_not_called()
+
+    async def test_stream_no_relevant_context_yields_hint(
+        self, rag_engine, mock_vector_store, mock_llm_provider
+    ):
+        mock_vector_store.similarity_search.return_value = []
+        mock_vector_store.get_collection_count.return_value = 3
+        collected = []
+        async for chunk in rag_engine.query_stream("test"):
+            collected.append(chunk)
+        assert collected == [rag_engine.NO_RELEVANT_CONTEXT_MESSAGE]
+        mock_llm_provider.generate_stream.assert_not_called()
 
     async def test_stream_embedding_error_wrapped(
         self, rag_engine, mock_embedding_provider

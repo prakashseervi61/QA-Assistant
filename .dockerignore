@@ -7,5 +7,10 @@ __pycache__
 venv
 node_modules
 .pytest_cache
+.mypy_cache
+.ruff_cache
 .coverage
 htmlcov
+*.egg-info
+data/
+src/presentation/react/dist

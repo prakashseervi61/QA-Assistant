@@ -12,6 +12,7 @@ from uuid import UUID, uuid4
 from src.domain.entities.conversation import Conversation
 from src.domain.entities.message import Message
 from src.domain.interfaces.conversation_repository import ConversationRepository
+from src.domain.interfaces.llm_provider import LLMQuotaExceededError
 
 logger = logging.getLogger(__name__)
 
@@ -61,10 +62,16 @@ class QueryDocumentUseCase:
             user_message = Message(role="user", content=question)
             await self._conversation_repo.add_message(conversation.id, user_message)
 
+            if not conversation.title:
+                conversation.title = self._derive_title(question)
+                await self._conversation_repo.save_conversation(conversation)
+
             try:
                 rag_result = await self._rag_engine.query(
                     question=question, top_k=top_k
                 )
+            except LLMQuotaExceededError:
+                raise
             except Exception as exc:
                 logger.error(
                     "RAG engine failed for %s: %s", resolved_id, exc, exc_info=True
@@ -95,6 +102,8 @@ class QueryDocumentUseCase:
 
         except (ConversationNotFoundError, ValueError, QueryDocumentError):
             raise
+        except LLMQuotaExceededError:
+            raise
         except Exception as exc:
             logger.error("Unexpected error in query_document: %s", exc, exc_info=True)
             raise QueryDocumentError(f"Failed to query documents: {exc}") from exc
@@ -118,6 +127,10 @@ class QueryDocumentUseCase:
             user_message = Message(role="user", content=question)
             await self._conversation_repo.add_message(conversation.id, user_message)
 
+            if not conversation.title:
+                conversation.title = self._derive_title(question)
+                await self._conversation_repo.save_conversation(conversation)
+
             full_answer_parts: list[str] = []
             try:
                 async for chunk in self._rag_engine.query_stream(
@@ -125,6 +138,8 @@ class QueryDocumentUseCase:
                 ):
                     full_answer_parts.append(chunk)
                     yield {"type": "chunk", "content": chunk}
+            except LLMQuotaExceededError:
+                raise
             except Exception as exc:
                 logger.error(
                     "RAG stream failed for %s: %s", resolved_id, exc, exc_info=True
@@ -137,7 +152,7 @@ class QueryDocumentUseCase:
                 rag_result = await self._rag_engine.query(
                     question=question, top_k=top_k
                 )
-            except Exception as exc:
+            except (LLMQuotaExceededError, Exception) as exc:
                 logger.warning(
                     "Failed to fetch sources after stream for %s: %s", resolved_id, exc
                 )
@@ -165,6 +180,8 @@ class QueryDocumentUseCase:
 
         except (ConversationNotFoundError, ValueError, QueryDocumentError):
             raise
+        except LLMQuotaExceededError:
+            raise
         except Exception as exc:
             logger.error(
                 "Unexpected error in query_document stream: %s", exc, exc_info=True
@@ -177,6 +194,11 @@ class QueryDocumentUseCase:
     def _validate_question(question: str) -> None:
         if not question or not question.strip():
             raise ValueError("Question must not be empty.")
+
+    @staticmethod
+    def _derive_title(question: str) -> str:
+        title = " ".join(question.split()).strip()
+        return title[:57].rstrip() + "..." if len(title) > 60 else title
 
     async def _resolve_conversation(self, conversation_id: str | None) -> Conversation:
         if conversation_id is None:

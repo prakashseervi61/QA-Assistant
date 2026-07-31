@@ -44,6 +44,9 @@ chroma_db/
 .DS_Store
 Thumbs.db
 
+# Windows
+nul
+
 # Testing
 .pytest_cache/
 .coverage

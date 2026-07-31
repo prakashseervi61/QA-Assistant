@@ -186,29 +186,27 @@ class ChromaStore(VectorStore):
             metadatas = results.get("metadatas", [[]])[0]
             distances = results.get("distances", [[]])[0]
 
-            for idx in range(len(ids)):
-                metadata = dict(metadatas[idx]) if metadatas else {}
+            num_ids = len(ids)
+
+            for idx in range(num_ids):
+                metadata = dict(metadatas[idx]) if len(metadatas) > idx else {}
                 document_id_str = metadata.pop("document_id", None)
                 chunk_index = int(metadata.pop("chunk_index", 0))
 
                 # Convert cosine distance to similarity score (1 - distance)
-                if distances and idx < len(distances):
-                    metadata["score"] = round(1.0 - distances[idx], 4)
+                if len(distances) > idx:
+                    metadata["score"] = round(1.0 - float(distances[idx]), 4)
 
                 from uuid import UUID
 
                 embedding_list = (
-                    list(embeddings[idx])
-                    if embeddings and idx < len(embeddings)
-                    else None
+                    list(embeddings[idx]) if len(embeddings) > idx else None
                 )
 
                 chunk = Chunk(
                     id=UUID(ids[idx]),
                     document_id=UUID(document_id_str) if document_id_str else None,  # type: ignore[arg-type]
-                    content=documents[idx]
-                    if documents and idx < len(documents)
-                    else "",
+                    content=documents[idx] if len(documents) > idx else "",
                     embedding=embedding_list,
                     metadata=metadata,
                     chunk_index=chunk_index,
@@ -227,6 +225,63 @@ class ChromaStore(VectorStore):
         except Exception as exc:
             logger.error("ChromaDB similarity search failed: %s", exc)
             raise RuntimeError(f"ChromaDB similarity search failed: {exc}") from exc
+
+    async def list_documents(self, collection_name: str) -> list[dict]:
+        """Return a summary per ingested document in the collection.
+
+        Groups the stored chunks by their ``document_id`` metadata and
+        returns one entry per document with its filename, size, chunk
+        count, and creation timestamp.
+
+        Args:
+            collection_name: Name of the ChromaDB collection.
+
+        Returns:
+            A list of dicts with keys: ``document_id``, ``filename``,
+            ``file_type``, ``file_size``, ``chunk_count``, ``created_at``.
+            Empty list if the collection does not exist or is empty.
+
+        Raises:
+            RuntimeError: If listing the documents fails.
+        """
+
+        def _list() -> list[dict]:
+            try:
+                collection = self._client.get_collection(collection_name)
+            except ValueError:
+                return []
+
+            if collection.count() == 0:
+                return []
+
+            data = collection.get(include=["metadatas"])
+            documents: dict[str, dict[str, Any]] = {}
+            for meta in data.get("metadatas") or []:
+                if not meta:
+                    continue
+                document_id = meta.get("document_id")
+                if not document_id:
+                    continue
+                entry = documents.setdefault(
+                    str(document_id),
+                    {
+                        "document_id": str(document_id),
+                        "filename": str(meta.get("filename", "unknown")),
+                        "file_type": str(meta.get("file_type", "")),
+                        "file_size": int(meta.get("file_size", 0) or 0),
+                        "chunk_count": 0,
+                        "created_at": str(meta.get("created_at", "")),
+                    },
+                )
+                entry["chunk_count"] += 1
+
+            return list(documents.values())
+
+        try:
+            return await asyncio.to_thread(_list)
+        except Exception as exc:
+            logger.error("ChromaDB list_documents failed: %s", exc)
+            raise RuntimeError(f"ChromaDB list_documents failed: {exc}") from exc
 
     async def delete_by_metadata(self, filter_dict: dict, collection_name: str) -> None:
         """Delete chunks whose metadata matches all entries in *filter_dict*.

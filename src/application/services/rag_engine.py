@@ -8,7 +8,7 @@ import logging
 from collections.abc import AsyncIterator
 
 from src.domain.interfaces.embedding_provider import EmbeddingProvider
-from src.domain.interfaces.llm_provider import LLMProvider
+from src.domain.interfaces.llm_provider import LLMProvider, LLMQuotaExceededError
 from src.domain.interfaces.vector_store import VectorStore
 from src.infrastructure.config.settings import get_settings
 
@@ -37,6 +37,16 @@ class RAGEngine:
 
     DEFAULT_TOP_K = 5
     MAX_CONTEXT_CHUNKS = 10
+
+    NO_DOCUMENTS_MESSAGE = (
+        "No documents have been uploaded yet. Please upload a PDF, DOCX, or TXT "
+        "document from the Documents view, then ask your question again."
+    )
+
+    NO_RELEVANT_CONTEXT_MESSAGE = (
+        "I couldn't find a relevant answer in the uploaded documents. "
+        "Try rephrasing your question or uploading more documents."
+    )
 
     PROMPT_TEMPLATE = (
         "You are a helpful assistant that answers questions "
@@ -103,6 +113,9 @@ class RAGEngine:
             )
             logger.info("Retrieved %d context chunks", len(chunks))
 
+            if not chunks:
+                return await self._empty_retrieval_response(collection)
+
             # 3. Build prompt with context
             prompt = self._build_prompt(question, chunks)
 
@@ -122,6 +135,8 @@ class RAGEngine:
             }
 
         except RAGQueryError:
+            raise
+        except LLMQuotaExceededError:
             raise
         except Exception as exc:
             logger.error("RAG query failed: %s", exc, exc_info=True)
@@ -157,6 +172,21 @@ class RAGEngine:
             )
             logger.debug("Retrieved %d chunks for streaming query", len(chunks))
 
+            if not chunks:
+                count = await self._vector_store.get_collection_count(collection)
+                message = (
+                    self.NO_DOCUMENTS_MESSAGE
+                    if count == 0
+                    else self.NO_RELEVANT_CONTEXT_MESSAGE
+                )
+                logger.info(
+                    "No context retrieved for streaming query "
+                    "(chunks_in_collection=%d)",
+                    count,
+                )
+                yield message
+                return
+
             # 3. Build prompt with context
             prompt = self._build_prompt(question, chunks)
 
@@ -166,6 +196,8 @@ class RAGEngine:
 
         except RAGQueryError:
             raise
+        except LLMQuotaExceededError:
+            raise
         except Exception as exc:
             logger.error("RAG stream query failed: %s", exc, exc_info=True)
             raise RAGQueryError(f"Failed to stream query: {exc}") from exc
@@ -173,6 +205,33 @@ class RAGEngine:
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
+
+    async def _empty_retrieval_response(self, collection: str) -> dict:
+        """Return a friendly response when no context chunks were retrieved.
+
+        Distinguishes between "no documents uploaded yet" (empty
+        collection) and "documents exist but nothing relevant matched".
+
+        Args:
+            collection: Name of the vector store collection checked.
+
+        Returns:
+            A dict with ``answer``, ``sources``, and ``confidence`` keys.
+        """
+        count = await self._vector_store.get_collection_count(collection)
+        if count == 0:
+            logger.info("No documents in collection '%s'", collection)
+            return {
+                "answer": self.NO_DOCUMENTS_MESSAGE,
+                "sources": [],
+                "confidence": 0.0,
+            }
+        logger.info("No relevant chunks retrieved from collection '%s'", collection)
+        return {
+            "answer": self.NO_RELEVANT_CONTEXT_MESSAGE,
+            "sources": [],
+            "confidence": 0.0,
+        }
 
     def _build_prompt(self, question: str, chunks: list) -> str:
         """Build the RAG prompt with retrieved context and question.

@@ -6,6 +6,7 @@ Orchestrates the full ingestion pipeline:
 
 import io
 import logging
+from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
 
@@ -100,6 +101,7 @@ class IngestDocumentUseCase:
                 "filename": filename,
                 "file_type": extension,
                 "file_size": len(file_content),
+                "created_at": datetime.now().isoformat(timespec="seconds"),
             }
 
             chunks = self._text_splitter.split_text(

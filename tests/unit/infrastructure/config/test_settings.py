@@ -17,7 +17,7 @@ class TestSettingsDefaults:
     """Verify default values match the specification."""
 
     def test_llm_provider_default(self):
-        assert Settings().LLM_PROVIDER == "deepseek"
+        assert Settings().LLM_PROVIDER == "gemini"
 
     def test_embedding_provider_default(self):
         assert Settings().EMBEDDING_PROVIDER == "huggingface"
@@ -53,7 +53,7 @@ class TestSettingsDefaults:
         assert Settings().CHROMA_COLLECTION_NAME == "documents"
 
     def test_gemini_model_default(self):
-        assert Settings().GEMINI_MODEL == "gemini-2.0-flash"
+        assert Settings().GEMINI_MODEL == "gemini-2.5-flash"
 
     def test_openai_model_default(self):
         assert Settings().OPENAI_MODEL == "gpt-4o"
@@ -65,7 +65,7 @@ class TestSettingsDefaults:
         assert Settings().ALLOWED_EXTENSIONS == [".pdf", ".docx", ".txt"]
 
     def test_cors_origins_default(self):
-        assert Settings().CORS_ORIGINS == ["http://localhost:8501"]
+        assert Settings().CORS_ORIGINS == ["http://localhost:3000"]
 
     def test_api_keys_default_empty(self):
         s = Settings(

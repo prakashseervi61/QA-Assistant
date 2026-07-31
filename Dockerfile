@@ -18,5 +18,5 @@ COPY scripts/ scripts/
 # Expose ports
 EXPOSE 8000
 
-# Run API server
-CMD ["uvicorn", "src.presentation.api.app:app", "--host", "0.0.0.0", "--port", "8000"]
+# Run API server (app is exposed via the create_app factory)
+CMD ["uvicorn", "src.presentation.api.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]

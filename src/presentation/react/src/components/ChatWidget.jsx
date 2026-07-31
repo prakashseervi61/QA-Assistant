@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { FiChevronDown, FiFileText, FiLoader, FiMessageSquare, FiSend } from 'react-icons/fi';
+import { FiChevronDown, FiFileText, FiLoader, FiMessageSquare, FiSend, FiUploadCloud } from 'react-icons/fi';
 import { fetchJSON } from '../api';
 
 const SUGGESTIONS = [
@@ -20,14 +20,88 @@ function getSourceTitle(source, index) {
   return meta.filename || meta.source || meta.title || `Source ${index + 1}`;
 }
 
+/** Maps a server-side message (snake_case timestamps) to the local message shape. */
+function toLocalMessage(m) {
+  return {
+    id: m.id,
+    role: m.role,
+    content: m.content,
+    sources: m.sources || [],
+    createdAt: new Date(m.created_at),
+  };
+}
+
 export default function ChatWidget({ conversationId: initialConversationId = null }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [conversationId, setConversationId] = useState(initialConversationId);
   const [expandedSources, setExpandedSources] = useState({});
+  const [hasDocuments, setHasDocuments] = useState(null); // null = still checking
+  const [conversations, setConversations] = useState([]); // from GET /conversations
+  const [restoring, setRestoring] = useState(true); // gates empty-state flash
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
+
+  const LAST_CONVERSATION_KEY = 'qa-assistant.lastConversationId';
+
+  // Check whether any documents are available to query.
+  useEffect(() => {
+    let cancelled = false;
+    function checkDocuments() {
+      fetchJSON('/documents')
+        .then(data => {
+          if (!cancelled) setHasDocuments((data.total ?? 0) > 0);
+        })
+        .catch(() => {
+          // Never lock the chat out just because the check failed.
+          if (!cancelled) setHasDocuments(true);
+        });
+    }
+    checkDocuments();
+    window.addEventListener('documents-changed', checkDocuments);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('documents-changed', checkDocuments);
+    };
+  }, []);
+
+  // Restore the most recent conversation (or the last one the user opened) on mount.
+  useEffect(() => {
+    let cancelled = false;
+    fetchJSON('/conversations')
+      .then(list => {
+        if (cancelled) return undefined;
+        setConversations(list);
+        const savedId = localStorage.getItem(LAST_CONVERSATION_KEY);
+        const target =
+          savedId && list.some(conversation => conversation.id === savedId)
+            ? savedId
+            : (list[0]?.id ?? null);
+        if (!target) return undefined;
+        return fetchJSON(`/conversations/${target}`).then(msgs => {
+          if (cancelled) return;
+          setMessages(msgs.map(toLocalMessage));
+          setConversationId(target);
+          localStorage.setItem(LAST_CONVERSATION_KEY, target);
+        });
+      })
+      .catch(() => {
+        // Never lock the chat out; start fresh if restore fails.
+        if (!cancelled) localStorage.removeItem(LAST_CONVERSATION_KEY);
+      })
+      .finally(() => {
+        if (!cancelled) setRestoring(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Remember the active conversation across page reloads.
+  useEffect(() => {
+    if (conversationId) localStorage.setItem(LAST_CONVERSATION_KEY, conversationId);
+  }, [conversationId]);
 
   // Scroll to the newest message when the conversation changes.
   useEffect(() => {
@@ -59,9 +133,38 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
     setExpandedSources(prev => ({ ...prev, [key]: !prev[key] }));
   }
 
+  /** Silently refresh the conversation list (used after query/switch). */
+  function refreshConversations() {
+    fetchJSON('/conversations').then(setConversations).catch(() => {});
+  }
+
+  /** Load a different conversation into the panel, or reset to a fresh chat when id is empty. */
+  async function switchConversation(id) {
+    if (restoring || loading || id === conversationId) return;
+    if (!id) {
+      setMessages([]);
+      setConversationId(null);
+      setExpandedSources({});
+      localStorage.removeItem(LAST_CONVERSATION_KEY);
+      return;
+    }
+    setRestoring(true);
+    try {
+      const msgs = await fetchJSON(`/conversations/${id}`);
+      setMessages(msgs.map(toLocalMessage));
+      setConversationId(id);
+      setExpandedSources({});
+    } catch {
+      /* keep current chat */
+    } finally {
+      setRestoring(false);
+      refreshConversations();
+    }
+  }
+
   async function sendMessage(textOverride) {
     const text = (textOverride ?? input).trim();
-    if (!text || loading) return;
+    if (!text || loading || hasDocuments === false || restoring) return;
 
     setInput('');
     resetTextareaHeight();
@@ -82,7 +185,10 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
         body: JSON.stringify(payload),
       });
 
-      if (data.conversation_id) setConversationId(data.conversation_id);
+      if (data.conversation_id) {
+        setConversationId(data.conversation_id);
+        refreshConversations();
+      }
 
       const botMsg = {
         role: 'assistant',
@@ -103,30 +209,72 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-slate-50">
+      {/* Previous chats switcher */}
+      {conversations.length > 0 && (
+        <div className="border-b border-slate-200 bg-white px-3 py-2">
+          <select
+            aria-label="Previous chats"
+            value={conversationId ?? ''}
+            onChange={e => switchConversation(e.target.value)}
+            disabled={restoring || loading}
+            className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-700 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <option value="">New chat</option>
+            {conversations.map(conversation => (
+              <option key={conversation.id} value={conversation.id}>
+                {conversation.title || 'New chat'}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
       {/* Messages */}
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-        {messages.length === 0 && !loading ? (
-          <div className="flex h-full flex-col items-center justify-center px-4 text-center">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-100 text-brand-600">
-              <FiMessageSquare className="h-7 w-7" />
-            </div>
-            <h3 className="mt-4 text-base font-semibold text-slate-900">Ask a question…</h3>
-            <p className="mt-1 max-w-xs text-sm text-slate-500">
-              Get answers grounded in your uploaded documents.
-            </p>
-            <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-center">
-              {SUGGESTIONS.map(suggestion => (
-                <button
-                  key={suggestion}
-                  type="button"
-                  onClick={() => sendMessage(suggestion)}
-                  className="rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:border-brand-300 hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
-                >
-                  {suggestion}
-                </button>
-              ))}
-            </div>
+        {messages.length === 0 && restoring ? (
+          <div className="flex h-full flex-col items-center justify-center">
+            <FiLoader className="h-6 w-6 animate-spin text-brand-600" aria-hidden="true" />
+            <span className="sr-only">Loading conversation…</span>
           </div>
+        ) : messages.length === 0 && !loading ? (
+          hasDocuments === false ? (
+            <div className="flex h-full flex-col items-center justify-center px-4 text-center">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-100 text-brand-600">
+                <FiUploadCloud className="h-7 w-7" />
+              </div>
+              <h3 className="mt-4 text-base font-semibold text-slate-900">
+                Upload a document to continue
+              </h3>
+              <p className="mt-1 max-w-xs text-sm text-slate-500">
+                No documents are available yet. Upload a PDF, DOCX or TXT file from the
+                Documents view, then come back here to ask questions.
+              </p>
+            </div>
+          ) : (
+            <div className="flex h-full flex-col items-center justify-center px-4 text-center">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-100 text-brand-600">
+                <FiMessageSquare className="h-7 w-7" />
+              </div>
+              <h3 className="mt-4 text-base font-semibold text-slate-900">Ask a question…</h3>
+              <p className="mt-1 max-w-xs text-sm text-slate-500">
+                Get answers grounded in your uploaded documents.
+              </p>
+              {hasDocuments === true && (
+                <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-center">
+                  {SUGGESTIONS.map(suggestion => (
+                    <button
+                      key={suggestion}
+                      type="button"
+                      onClick={() => sendMessage(suggestion)}
+                      className="rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:border-brand-300 hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                    >
+                      {suggestion}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )
         ) : (
           <div role="log" aria-live="polite" className="space-y-4">
             {messages.map((msg, msgIndex) => {
@@ -244,7 +392,7 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
       <div className="border-t border-slate-200 bg-white p-3">
         <div
           className={`flex items-end gap-2 rounded-xl border bg-white px-3 py-2 transition-colors focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-500/20 ${
-            loading ? 'border-slate-200 opacity-60' : 'border-slate-300'
+            loading || hasDocuments === false ? 'border-slate-200 opacity-60' : 'border-slate-300'
           }`}
         >
           <textarea
@@ -253,8 +401,10 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
             value={input}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
-            placeholder="Ask a question about your documents…"
-            disabled={loading}
+            placeholder={
+              hasDocuments === false ? 'Upload a document first…' : 'Ask a question about your documents…'
+            }
+            disabled={loading || hasDocuments === false}
             aria-label="Your question"
             name="question"
             className="max-h-40 min-h-0 flex-1 resize-none bg-transparent py-1 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none disabled:cursor-not-allowed"
@@ -262,7 +412,7 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
           <button
             type="button"
             onClick={() => sendMessage()}
-            disabled={loading || !input.trim()}
+            disabled={loading || !input.trim() || hasDocuments === false}
             aria-label="Send message"
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-600 text-white transition-colors hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:bg-slate-300"
           >
@@ -274,7 +424,9 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
           </button>
         </div>
         <p className="mt-1.5 text-center text-[11px] text-slate-400">
-          Enter to send · Shift+Enter for a new line
+          {hasDocuments === false
+            ? 'Upload a document to start asking questions'
+            : 'Enter to send · Shift+Enter for a new line'}
         </p>
       </div>
     </div>
