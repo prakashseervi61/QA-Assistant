@@ -59,7 +59,7 @@ class TestExecuteStreamQuotaPropagation:
     async def test_execute_stream_re_raises_quota_error_unwrapped(
         self, use_case, mock_rag_engine
     ):
-        async def failing_stream(question=None, top_k=None):
+        async def failing_stream(question=None, top_k=None, metadata_filter=None):
             raise LLMQuotaExceededError("quota exceeded")
             yield  # pragma: no cover - unreachable, makes this a generator
 
@@ -77,7 +77,7 @@ class TestExecuteStreamSoftSourcesFailure:
     async def test_execute_stream_soft_fails_quota_on_sources_fetch(
         self, use_case, mock_rag_engine, mock_conversation_repo
     ):
-        async def ok_stream(question=None, top_k=None):
+        async def ok_stream(question=None, top_k=None, metadata_filter=None):
             yield "Hello "
             yield "world"
 
@@ -128,7 +128,7 @@ class TestAutoTitlePersistedOnFailure:
     async def test_execute_stream_quota_error_persists_auto_title(
         self, use_case, mock_rag_engine, mock_conversation_repo
     ):
-        async def failing_stream(question=None, top_k=None):
+        async def failing_stream(question=None, top_k=None, metadata_filter=None):
             raise LLMQuotaExceededError("quota exceeded")
             yield  # pragma: no cover - unreachable, makes this a generator
 
@@ -186,7 +186,7 @@ class TestAutoTitle:
     async def test_execute_stream_sets_title_from_first_question(
         self, use_case, mock_rag_engine, mock_conversation_repo
     ):
-        async def ok_stream(question=None, top_k=None):
+        async def ok_stream(question=None, top_k=None, metadata_filter=None):
             yield "Hello"
             yield "world"
 

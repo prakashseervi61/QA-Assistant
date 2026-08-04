@@ -141,6 +141,7 @@ class ChromaStore(VectorStore):
         query_embedding: list[float],
         k: int,
         collection_name: str,
+        metadata_filter: dict[str, object] | None = None,
     ) -> list[Chunk]:
         """Retrieve the *k* most similar chunks to the query embedding.
 
@@ -150,6 +151,8 @@ class ChromaStore(VectorStore):
             query_embedding: The query vector.
             k: Number of results to return.
             collection_name: Name of the ChromaDB collection.
+            metadata_filter: Optional metadata filter dict passed as
+                ``where`` to ChromaDB (e.g. ``{"document_id": "abc"}``).
 
         Returns:
             A list of ``Chunk`` instances ordered by relevance
@@ -159,72 +162,256 @@ class ChromaStore(VectorStore):
         Raises:
             RuntimeError: If the ChromaDB query fails.
         """
-
-        def _query() -> list[Chunk]:
-            try:
-                collection = self._client.get_collection(collection_name)
-            except ValueError:
-                # Collection does not exist yet.
-                return []
-
-            if collection.count() == 0:
-                return []
-
-            results = collection.query(
-                query_embeddings=[query_embedding],
-                n_results=min(k, collection.count()),
-                include=["documents", "embeddings", "metadatas", "distances"],
-            )
-
-            chunks: list[Chunk] = []
-            if not results or not results.get("ids"):
-                return chunks
-
-            ids = results["ids"][0]
-            documents = results.get("documents", [[]])[0]
-            embeddings = results.get("embeddings", [[]])[0]
-            metadatas = results.get("metadatas", [[]])[0]
-            distances = results.get("distances", [[]])[0]
-
-            num_ids = len(ids)
-
-            for idx in range(num_ids):
-                metadata = dict(metadatas[idx]) if len(metadatas) > idx else {}
-                document_id_str = metadata.pop("document_id", None)
-                chunk_index = int(metadata.pop("chunk_index", 0))
-
-                # Convert cosine distance to similarity score (1 - distance)
-                if len(distances) > idx:
-                    metadata["score"] = round(1.0 - float(distances[idx]), 4)
-
-                from uuid import UUID
-
-                embedding_list = (
-                    list(embeddings[idx]) if len(embeddings) > idx else None
-                )
-
-                chunk = Chunk(
-                    id=UUID(ids[idx]),
-                    document_id=UUID(document_id_str) if document_id_str else None,  # type: ignore[arg-type]
-                    content=documents[idx] if len(documents) > idx else "",
-                    embedding=embedding_list,
-                    metadata=metadata,
-                    chunk_index=chunk_index,
-                )
-                chunks.append(chunk)
-
-            logger.debug(
-                "similarity_search returned %d chunks from '%s'",
-                len(chunks),
-                collection_name,
-            )
-            return chunks
-
         try:
-            return await asyncio.to_thread(_query)
+            return await asyncio.to_thread(
+                self._query_sync,
+                query_embedding,
+                k,
+                collection_name,
+                metadata_filter,
+            )
         except Exception as exc:
             logger.error("ChromaDB similarity search failed: %s", exc)
-            raise RuntimeError(f"ChromaDB similarity search failed: {exc}") from exc
+            raise RuntimeError(
+                f"ChromaDB similarity search failed: {exc}"
+            ) from exc
+
+    def _query_sync(
+        self,
+        query_embedding: list[float],
+        k: int,
+        collection_name: str,
+        metadata_filter: dict[str, object] | None = None,
+    ) -> list[Chunk]:
+        """Synchronous similarity search implementation.
+
+        Args:
+            query_embedding: The query vector.
+            k: Number of results to return.
+            collection_name: Name of the ChromaDB collection.
+            metadata_filter: Optional metadata filter dict passed as
+                ``where`` to ChromaDB.
+
+        Returns:
+            A list of ``Chunk`` instances ordered by relevance.
+        """
+        try:
+            collection = self._client.get_collection(collection_name)
+        except ValueError:
+            return []
+
+        if collection.count() == 0:
+            return []
+
+        query_kwargs: dict[str, object] = {
+            "query_embeddings": [query_embedding],
+            "n_results": min(k, collection.count()),
+            "include": [
+                "documents",
+                "embeddings",
+                "metadatas",
+                "distances",
+            ],
+        }
+        if metadata_filter:
+            query_kwargs["where"] = metadata_filter
+
+        results = collection.query(**query_kwargs)
+
+        chunks: list[Chunk] = []
+        if not results or not results.get("ids"):
+            return chunks
+
+        ids = results["ids"][0]
+        documents = results.get("documents", [[]])[0]
+        embeddings = results.get("embeddings", [[]])[0]
+        metadatas = results.get("metadatas", [[]])[0]
+        distances = results.get("distances", [[]])[0]
+
+        num_ids = len(ids)
+
+        for idx in range(num_ids):
+            metadata = (
+                dict(metadatas[idx]) if len(metadatas) > idx else {}
+            )
+            document_id_str = metadata.pop("document_id", None)
+            chunk_index = int(metadata.pop("chunk_index", 0))
+
+            # Convert cosine distance to similarity score
+            if len(distances) > idx:
+                metadata["score"] = round(
+                    1.0 - float(distances[idx]), 4
+                )
+
+            from uuid import UUID
+
+            embedding_list = (
+                list(embeddings[idx])
+                if len(embeddings) > idx
+                else None
+            )
+
+            chunk = Chunk(
+                id=UUID(ids[idx]),
+                document_id=UUID(document_id_str)  # type: ignore[arg-type]
+                if document_id_str
+                else None,
+                content=documents[idx]
+                if len(documents) > idx
+                else "",
+                embedding=embedding_list,
+                metadata=metadata,
+                chunk_index=chunk_index,
+            )
+            chunks.append(chunk)
+
+        logger.debug(
+            "similarity_search returned %d chunks from '%s'",
+            len(chunks),
+            collection_name,
+        )
+        return chunks
+
+    # ------------------------------------------------------------------
+    # Hybrid search
+    # ------------------------------------------------------------------
+
+    async def hybrid_search(
+        self,
+        query_embedding: list[float],
+        query_text: str,
+        k: int = 5,
+        collection_name: str = "documents",
+        metadata_filter: dict[str, object] | None = None,
+    ) -> list[Chunk]:
+        """Hybrid search combining dense and keyword retrieval via ChromaDB.
+
+        When *query_text* is non-empty, passes both ``query_embeddings``
+        and ``query_texts`` to ChromaDB so it can blend dense-vector
+        similarity with BM25-style keyword matching.
+
+        Falls back to pure dense ``similarity_search`` when *query_text*
+        is empty or whitespace-only.
+        """
+        if not query_text or not query_text.strip():
+            return await self.similarity_search(
+                query_embedding, k, collection_name, metadata_filter
+            )
+
+        try:
+            return await asyncio.to_thread(
+                self._hybrid_search_sync,
+                query_embedding,
+                query_text,
+                k,
+                collection_name,
+                metadata_filter,
+            )
+        except Exception as exc:
+            logger.error("ChromaDB hybrid search failed: %s", exc)
+            raise RuntimeError(
+                f"ChromaDB hybrid search failed: {exc}"
+            ) from exc
+
+    def _hybrid_search_sync(
+        self,
+        query_embedding: list[float],
+        query_text: str,
+        k: int,
+        collection_name: str,
+        metadata_filter: dict[str, object] | None = None,
+    ) -> list[Chunk]:
+        """Synchronous hybrid search implementation.
+
+        Passes both ``query_embeddings`` and ``query_texts`` to
+        ChromaDB's ``query()`` so it blends dense-vector similarity
+        with BM25-style keyword matching.
+
+        Args:
+            query_embedding: The dense query vector.
+            query_text:      The text query for keyword matching.
+            k:               Number of results to return.
+            collection_name: ChromaDB collection to search.
+            metadata_filter: Optional metadata filter dict passed as
+                ``where`` to ChromaDB.
+
+        Returns:
+            A list of ``Chunk`` instances ordered by relevance.
+            Empty list if the collection is missing or empty.
+        """
+        try:
+            collection = self._client.get_collection(collection_name)
+        except ValueError:
+            return []
+
+        if collection.count() == 0:
+            return []
+
+        query_kwargs: dict[str, object] = {
+            "query_embeddings": [query_embedding],
+            "n_results": min(k, collection.count()),
+            "include": [
+                "documents",
+                "embeddings",
+                "metadatas",
+                "distances",
+            ],
+        }
+        if query_text and query_text.strip():
+            query_kwargs["query_texts"] = [query_text]
+        if metadata_filter:
+            query_kwargs["where"] = metadata_filter
+
+        results = collection.query(**query_kwargs)
+
+        chunks: list[Chunk] = []
+        if not results or not results.get("ids"):
+            return chunks
+
+        ids = results["ids"][0]
+        documents = results.get("documents", [[]])[0]
+        embeddings_list = results.get("embeddings", [[]])[0]
+        metadatas = results.get("metadatas", [[]])[0]
+        distances = results.get("distances", [[]])[0]
+
+        for idx in range(len(ids)):
+            metadata = (
+                dict(metadatas[idx]) if len(metadatas) > idx else {}
+            )
+            document_id_str = metadata.pop("document_id", None)
+            chunk_index = int(metadata.pop("chunk_index", 0))
+
+            if len(distances) > idx:
+                metadata["score"] = round(
+                    1.0 - float(distances[idx]), 4
+                )
+
+            from uuid import UUID
+
+            embedding_list = (
+                list(embeddings_list[idx])
+                if len(embeddings_list) > idx
+                else None
+            )
+
+            chunk = Chunk(
+                id=UUID(ids[idx]),
+                document_id=UUID(document_id_str)  # type: ignore[arg-type]
+                if document_id_str
+                else None,
+                content=documents[idx] if len(documents) > idx else "",
+                embedding=embedding_list,
+                metadata=metadata,
+                chunk_index=chunk_index,
+            )
+            chunks.append(chunk)
+
+        logger.debug(
+            "hybrid_search returned %d chunks from '%s'",
+            len(chunks),
+            collection_name,
+        )
+        return chunks
 
     async def list_documents(self, collection_name: str) -> list[dict]:
         """Return a summary per ingested document in the collection.

@@ -81,6 +81,7 @@ def rag_engine(
     """Create a RAGEngine with mocked dependencies."""
     mock_settings = MagicMock()
     mock_settings.CHROMA_COLLECTION_NAME = "documents"
+    mock_settings.ENABLE_HYBRID_SEARCH = False
     mock_get_settings.return_value = mock_settings
     return RAGEngine(
         llm_provider=mock_llm_provider,
@@ -242,6 +243,27 @@ class TestRAGEngineQuery:
         assert result["confidence"] == 0.0
         mock_llm_provider.generate.assert_not_awaited()
 
+    async def test_hybrid_search_used_when_enabled(
+        self, rag_engine, mock_vector_store, sample_chunks
+    ):
+        """When ENABLE_HYBRID_SEARCH is True, hybrid_search is called."""
+        rag_engine._settings.ENABLE_HYBRID_SEARCH = True
+        rag_engine._embedding.embed = AsyncMock(return_value=[0.1, 0.2])
+        mock_vector_store.hybrid_search = AsyncMock(return_value=sample_chunks)
+
+        await rag_engine.query("What is AI?")
+        mock_vector_store.hybrid_search.assert_awaited_once()
+
+    async def test_similarity_search_used_when_hybrid_disabled(
+        self, rag_engine, mock_vector_store, sample_chunks
+    ):
+        """When ENABLE_HYBRID_SEARCH is False (default), similarity_search is called."""
+        rag_engine._settings.ENABLE_HYBRID_SEARCH = False
+        mock_vector_store.similarity_search.return_value = sample_chunks
+
+        await rag_engine.query("What is AI?")
+        mock_vector_store.similarity_search.assert_awaited_once()
+
 
 # RAGEngine.query_stream Tests
 
@@ -339,6 +361,23 @@ class TestRAGEngineQueryStream:
         with pytest.raises(RAGQueryError, match="Failed to stream query"):
             async for _ in rag_engine.query_stream("test"):
                 pass
+
+    async def test_stream_hybrid_search_when_enabled(
+        self, rag_engine, mock_vector_store, sample_chunks
+    ):
+        """When ENABLE_HYBRID_SEARCH is True, hybrid_search is called in stream."""
+        rag_engine._settings.ENABLE_HYBRID_SEARCH = True
+        rag_engine._embedding.embed = AsyncMock(return_value=[0.1, 0.2])
+        mock_vector_store.hybrid_search = AsyncMock(return_value=sample_chunks)
+
+        async def fake_stream(prompt):
+            yield "ok"
+
+        rag_engine._llm.generate_stream = fake_stream
+
+        async for _ in rag_engine.query_stream("test"):
+            pass
+        mock_vector_store.hybrid_search.assert_awaited_once()
 
 
 # RAGEngine._build_prompt Tests

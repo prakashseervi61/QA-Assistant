@@ -33,10 +33,15 @@ def _wire_dependencies(settings: Settings) -> None:
     embedding_provider = EmbeddingProviderFactory.create(settings)
     vector_store = ChromaStore(persist_directory=settings.CHROMA_PERSIST_DIR)
 
+    from src.infrastructure.rerankers.factory import create_reranker
+
+    reranker = create_reranker()
+
     rag_engine = RAGEngine(
         llm_provider=llm_provider,
         embedding_provider=embedding_provider,
         vector_store=vector_store,
+        reranker=reranker,
     )
     conversation_repository = MemoryConversationRepository()
     query_use_case = QueryDocumentUseCase(rag_engine, conversation_repository)

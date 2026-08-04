@@ -52,6 +52,13 @@ class Settings(BaseSettings):
     API_PORT: int = 8000
     CORS_ORIGINS: list[str] = ["http://localhost:3000"]
 
+    # Reranker
+    ENABLE_RERANKING: bool = False
+    RERANKER_MODEL: str = "BAAI/bge-reranker-v2-m3"
+
+    # Hybrid Search
+    ENABLE_HYBRID_SEARCH: bool = False
+
 
 @lru_cache
 def get_settings() -> Settings:

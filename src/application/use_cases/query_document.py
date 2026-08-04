@@ -48,6 +48,7 @@ class QueryDocumentUseCase:
         question: str,
         conversation_id: str | None = None,
         top_k: int = 5,
+        metadata_filter: dict[str, object] | None = None,
     ) -> dict:
         """Execute a document query (non-streaming)."""
         self._validate_question(question)
@@ -68,7 +69,9 @@ class QueryDocumentUseCase:
 
             try:
                 rag_result = await self._rag_engine.query(
-                    question=question, top_k=top_k
+                    question=question,
+                    top_k=top_k,
+                    metadata_filter=metadata_filter,
                 )
             except LLMQuotaExceededError:
                 raise
@@ -113,6 +116,7 @@ class QueryDocumentUseCase:
         question: str,
         conversation_id: str | None = None,
         top_k: int = 5,
+        metadata_filter: dict[str, object] | None = None,
     ) -> AsyncIterator[dict]:
         """Execute a document query with streaming response."""
         self._validate_question(question)
@@ -134,7 +138,9 @@ class QueryDocumentUseCase:
             full_answer_parts: list[str] = []
             try:
                 async for chunk in self._rag_engine.query_stream(
-                    question=question, top_k=top_k
+                    question=question,
+                    top_k=top_k,
+                    metadata_filter=metadata_filter,
                 ):
                     full_answer_parts.append(chunk)
                     yield {"type": "chunk", "content": chunk}
@@ -150,7 +156,9 @@ class QueryDocumentUseCase:
 
             try:
                 rag_result = await self._rag_engine.query(
-                    question=question, top_k=top_k
+                    question=question,
+                    top_k=top_k,
+                    metadata_filter=metadata_filter,
                 )
             except (LLMQuotaExceededError, Exception) as exc:
                 logger.warning(

@@ -138,6 +138,7 @@ async def query_documents(
             question=request.question,
             conversation_id=request.conversation_id,
             top_k=request.top_k,
+            metadata_filter=request.metadata_filter,
         )
 
         return QueryResponse(
@@ -175,6 +176,7 @@ async def _stream_events(
             question=request.question,
             conversation_id=request.conversation_id,
             top_k=request.top_k,
+            metadata_filter=request.metadata_filter,
         ):
             yield f"data: {json.dumps(event)}\n\n"
     except (

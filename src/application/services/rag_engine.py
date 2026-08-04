@@ -4,11 +4,13 @@ Orchestrates the full RAG pipeline:
   embed question → retrieve context → build prompt → generate answer
 """
 
+import asyncio
 import logging
 from collections.abc import AsyncIterator
 
 from src.domain.interfaces.embedding_provider import EmbeddingProvider
 from src.domain.interfaces.llm_provider import LLMProvider, LLMQuotaExceededError
+from src.domain.interfaces.reranker import Reranker
 from src.domain.interfaces.vector_store import VectorStore
 from src.infrastructure.config.settings import get_settings
 
@@ -69,17 +71,24 @@ class RAGEngine:
         llm_provider: LLMProvider,
         embedding_provider: EmbeddingProvider,
         vector_store: VectorStore,
+        reranker: Reranker | None = None,
     ) -> None:
         self._llm = llm_provider
         self._embedding = embedding_provider
         self._vector_store = vector_store
+        self._reranker = reranker
         self._settings = get_settings()
 
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
 
-    async def query(self, question: str, top_k: int | None = None) -> dict:
+    async def query(
+        self,
+        question: str,
+        top_k: int | None = None,
+        metadata_filter: dict[str, object] | None = None,
+    ) -> dict:
         """Process a query: embed → retrieve → generate.
 
         Args:
@@ -106,12 +115,29 @@ class RAGEngine:
             # 2. Retrieve similar chunks
             logger.debug("Searching vector store (top_k=%d)", k)
             collection = self._settings.CHROMA_COLLECTION_NAME
-            chunks = await self._vector_store.similarity_search(
-                query_embedding=query_embedding,
-                k=k,
-                collection_name=collection,
-            )
+
+            if getattr(self._settings, "ENABLE_HYBRID_SEARCH", False):
+                chunks = await self._vector_store.hybrid_search(
+                    query_embedding=query_embedding,
+                    query_text=question,
+                    k=k,
+                    collection_name=collection,
+                    metadata_filter=metadata_filter,
+                )
+            else:
+                chunks = await self._vector_store.similarity_search(
+                    query_embedding=query_embedding,
+                    k=k,
+                    collection_name=collection,
+                    metadata_filter=metadata_filter,
+                )
             logger.info("Retrieved %d context chunks", len(chunks))
+
+            # rerank
+            if self._reranker is not None and chunks:
+                chunks = await asyncio.to_thread(
+                    self._reranker.rerank, question, chunks, k
+                )
 
             if not chunks:
                 return await self._empty_retrieval_response(collection)
@@ -143,7 +169,10 @@ class RAGEngine:
             raise RAGQueryError(f"Failed to process query: {exc}") from exc
 
     async def query_stream(
-        self, question: str, top_k: int | None = None
+        self,
+        question: str,
+        top_k: int | None = None,
+        metadata_filter: dict[str, object] | None = None,
     ) -> AsyncIterator[str]:
         """Process a query with streaming response.
 
@@ -165,12 +194,29 @@ class RAGEngine:
 
             # 2. Retrieve similar chunks
             collection = self._settings.CHROMA_COLLECTION_NAME
-            chunks = await self._vector_store.similarity_search(
-                query_embedding=query_embedding,
-                k=k,
-                collection_name=collection,
-            )
+
+            if getattr(self._settings, "ENABLE_HYBRID_SEARCH", False):
+                chunks = await self._vector_store.hybrid_search(
+                    query_embedding=query_embedding,
+                    query_text=question,
+                    k=k,
+                    collection_name=collection,
+                    metadata_filter=metadata_filter,
+                )
+            else:
+                chunks = await self._vector_store.similarity_search(
+                    query_embedding=query_embedding,
+                    k=k,
+                    collection_name=collection,
+                    metadata_filter=metadata_filter,
+                )
             logger.debug("Retrieved %d chunks for streaming query", len(chunks))
+
+            # rerank
+            if self._reranker is not None and chunks:
+                chunks = await asyncio.to_thread(
+                    self._reranker.rerank, question, chunks, k
+                )
 
             if not chunks:
                 count = await self._vector_store.get_collection_count(collection)
