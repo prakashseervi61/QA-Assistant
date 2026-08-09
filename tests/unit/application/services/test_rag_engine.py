@@ -82,6 +82,11 @@ def rag_engine(
     mock_settings = MagicMock()
     mock_settings.CHROMA_COLLECTION_NAME = "documents"
     mock_settings.ENABLE_HYBRID_SEARCH = False
+    mock_settings.ENABLE_QUERY_REWRITING = False
+    mock_settings.QUERY_REWRITING_VARIANTS = 3
+    # MagicMock returns truthy values for unknown attributes, so every
+    # feature flag must be pinned to its OFF default explicitly.
+    mock_settings.ENABLE_PARENT_CHILD = False
     mock_get_settings.return_value = mock_settings
     return RAGEngine(
         llm_provider=mock_llm_provider,
@@ -264,6 +269,163 @@ class TestRAGEngineQuery:
         await rag_engine.query("What is AI?")
         mock_vector_store.similarity_search.assert_awaited_once()
 
+    async def test_query_with_query_rewriting_enabled(
+        self, rag_engine, mock_vector_store, sample_chunks, mock_llm_provider
+    ):
+        """When query rewriting is enabled, multi-query retrieval is used."""
+        rag_engine._settings.ENABLE_QUERY_REWRITING = True
+
+        mock_rewriter = AsyncMock()
+        mock_rewriter.rewrite = AsyncMock(
+            return_value=["original", "variant1", "variant2"]
+        )
+        rag_engine._query_rewriter = mock_rewriter
+
+        mock_vector_store.hybrid_search = AsyncMock(return_value=sample_chunks)
+        mock_vector_store.similarity_search = AsyncMock(return_value=sample_chunks)
+        rag_engine._settings.ENABLE_HYBRID_SEARCH = True
+
+        result = await rag_engine.query("What is AI?")
+        assert "answer" in result
+        mock_rewriter.rewrite.assert_awaited_once()
+
+    async def test_query_without_query_rewriting(
+        self, rag_engine, mock_vector_store, sample_chunks
+    ):
+        """When query rewriting is disabled, single query path is used."""
+        rag_engine._settings.ENABLE_QUERY_REWRITING = False
+        rag_engine._query_rewriter = None
+
+        await rag_engine.query("What is AI?")
+        mock_vector_store.similarity_search.assert_awaited_once()
+
+    # Parent-child retrieval (C2)
+
+    async def test_query_parent_child_searches_child_collection_and_expands_parents(
+        self, rag_engine, mock_vector_store, mock_llm_provider
+    ):
+        """With ENABLE_PARENT_CHILD, query() searches documents_child and
+        expands the retrieved children to their parent chunks."""
+        from uuid import uuid4
+
+        rag_engine._settings.ENABLE_PARENT_CHILD = True
+
+        parent = Chunk(
+            id=uuid4(),
+            content="Full parent context covering AI and ML concepts.",
+            metadata={"filename": "ai.pdf", "chunk_type": "parent", "score": 0.9},
+            chunk_index=0,
+        )
+        child = Chunk(
+            id=uuid4(),
+            content="ML is a subset of AI",
+            metadata={
+                "filename": "ai.pdf",
+                "chunk_type": "child",
+                "parent_id": str(parent.id),
+                "score": 0.95,
+            },
+            chunk_index=0,
+        )
+        mock_vector_store.similarity_search.return_value = [child]
+        mock_vector_store.get_documents_by_ids = AsyncMock(return_value=[parent])
+
+        result = await rag_engine.query("What is ML?")
+
+        assert "answer" in result
+        # The search targets the child collection, not the main one.
+        call_kwargs = mock_vector_store.similarity_search.call_args
+        assert call_kwargs.kwargs["collection_name"] == "documents_child"
+        # Parents were fetched via get_documents_by_ids.
+        mock_vector_store.get_documents_by_ids.assert_awaited_once()
+        ids_arg = mock_vector_store.get_documents_by_ids.call_args.args[0]
+        assert ids_arg == [str(parent.id)]
+        # The prompt context uses the parent content.
+        prompt = mock_llm_provider.generate.call_args.args[0]
+        assert "Full parent context" in prompt
+
+    async def test_query_parent_child_without_parent_id_falls_back_to_children(
+        self, rag_engine, mock_vector_store, mock_llm_provider
+    ):
+        """Children without parent_id metadata are used as-is (graceful)."""
+        from uuid import uuid4
+
+        rag_engine._settings.ENABLE_PARENT_CHILD = True
+
+        plain_child = Chunk(
+            id=uuid4(),
+            content="Plain chunk without parent link.",
+            metadata={"filename": "doc.txt", "score": 0.8},
+            chunk_index=0,
+        )
+        mock_vector_store.similarity_search.return_value = [plain_child]
+
+        result = await rag_engine.query("test")
+
+        assert "answer" in result
+        prompt = mock_llm_provider.generate.call_args.args[0]
+        assert "Plain chunk" in prompt
+        # No parent lookup was attempted.
+        mock_vector_store.get_documents_by_ids.assert_not_awaited()
+
+    # Query rewriting fallback (M1)
+
+    async def test_query_rewrite_failure_falls_back_to_single_query(
+        self, rag_engine, mock_vector_store, sample_chunks, mock_embedding_provider
+    ):
+        """If rewrite() raises, query() falls back to the original question."""
+        rag_engine._settings.ENABLE_QUERY_REWRITING = True
+        rag_engine._settings.ENABLE_HYBRID_SEARCH = False
+
+        mock_rewriter = AsyncMock()
+        mock_rewriter.rewrite = AsyncMock(side_effect=RuntimeError("LLM down"))
+        rag_engine._query_rewriter = mock_rewriter
+
+        mock_vector_store.similarity_search.return_value = sample_chunks
+
+        result = await rag_engine.query("What is AI?")
+
+        assert "answer" in result
+        # Single-query path embedded and searched only the original question.
+        mock_embedding_provider.embed.assert_awaited_once_with("What is AI?")
+        assert mock_vector_store.similarity_search.await_count == 1
+
+    async def test_query_rewrite_quota_error_propagates(
+        self, rag_engine, mock_vector_store
+    ):
+        """LLMQuotaExceededError from rewrite() must propagate (429)."""
+        rag_engine._settings.ENABLE_QUERY_REWRITING = True
+
+        mock_rewriter = AsyncMock()
+        mock_rewriter.rewrite = AsyncMock(side_effect=LLMQuotaExceededError("quota"))
+        rag_engine._query_rewriter = mock_rewriter
+
+        with pytest.raises(LLMQuotaExceededError):
+            await rag_engine.query("test")
+
+    async def test_query_rewrite_variant_search_failure_falls_back(
+        self, rag_engine, mock_vector_store, sample_chunks, mock_embedding_provider
+    ):
+        """If a variant embed/search raises, query() falls back gracefully."""
+        rag_engine._settings.ENABLE_QUERY_REWRITING = True
+        rag_engine._settings.ENABLE_HYBRID_SEARCH = False
+
+        mock_rewriter = AsyncMock()
+        mock_rewriter.rewrite = AsyncMock(
+            return_value=["original", "variant1", "variant2"]
+        )
+        rag_engine._query_rewriter = mock_rewriter
+
+        mock_vector_store.similarity_search = AsyncMock(
+            side_effect=[sample_chunks, RuntimeError("search boom"), sample_chunks]
+        )
+
+        result = await rag_engine.query("What is AI?")
+
+        assert "answer" in result
+        # Fallback re-embedded the original question.
+        mock_embedding_provider.embed.assert_awaited_with("What is AI?")
+
 
 # RAGEngine.query_stream Tests
 
@@ -378,6 +540,116 @@ class TestRAGEngineQueryStream:
         async for _ in rag_engine.query_stream("test"):
             pass
         mock_vector_store.hybrid_search.assert_awaited_once()
+
+    async def test_stream_with_query_rewriting_enabled(
+        self, rag_engine, mock_vector_store, sample_chunks
+    ):
+        """When query rewriting is enabled in stream, multi-query retrieval is used."""
+        rag_engine._settings.ENABLE_QUERY_REWRITING = True
+        rag_engine._settings.ENABLE_HYBRID_SEARCH = False
+
+        mock_rewriter = AsyncMock()
+        mock_rewriter.rewrite = AsyncMock(
+            return_value=["original", "variant1"]
+        )
+        rag_engine._query_rewriter = mock_rewriter
+
+        mock_vector_store.similarity_search = AsyncMock(return_value=sample_chunks)
+
+        async def fake_stream(prompt):
+            yield "streamed answer"
+
+        rag_engine._llm.generate_stream = fake_stream
+
+        collected = []
+        async for chunk in rag_engine.query_stream("What is AI?"):
+            collected.append(chunk)
+
+        assert collected == ["streamed answer"]
+        mock_rewriter.rewrite.assert_awaited_once()
+        assert mock_vector_store.similarity_search.await_count == 2
+
+    async def test_stream_rewrite_failure_falls_back_to_single_query(
+        self, rag_engine, mock_vector_store, sample_chunks, mock_embedding_provider
+    ):
+        """If rewrite() raises, query_stream() falls back to the original."""
+        rag_engine._settings.ENABLE_QUERY_REWRITING = True
+        rag_engine._settings.ENABLE_HYBRID_SEARCH = False
+
+        mock_rewriter = AsyncMock()
+        mock_rewriter.rewrite = AsyncMock(side_effect=RuntimeError("LLM down"))
+        rag_engine._query_rewriter = mock_rewriter
+
+        mock_vector_store.similarity_search.return_value = sample_chunks
+
+        async def fake_stream(prompt):
+            yield "streamed answer"
+
+        rag_engine._llm.generate_stream = fake_stream
+
+        collected = []
+        async for chunk in rag_engine.query_stream("What is AI?"):
+            collected.append(chunk)
+
+        assert collected == ["streamed answer"]
+        mock_embedding_provider.embed.assert_awaited_once_with("What is AI?")
+        assert mock_vector_store.similarity_search.await_count == 1
+
+    async def test_stream_rewrite_quota_error_propagates(
+        self, rag_engine, mock_vector_store
+    ):
+        """LLMQuotaExceededError from rewrite() propagates in stream mode."""
+        rag_engine._settings.ENABLE_QUERY_REWRITING = True
+
+        mock_rewriter = AsyncMock()
+        mock_rewriter.rewrite = AsyncMock(side_effect=LLMQuotaExceededError("quota"))
+        rag_engine._query_rewriter = mock_rewriter
+
+        with pytest.raises(LLMQuotaExceededError):
+            async for _ in rag_engine.query_stream("test"):
+                pass
+
+    async def test_stream_parent_child_searches_child_collection(
+        self, rag_engine, mock_vector_store
+    ):
+        """query_stream() searches the child collection when enabled."""
+        from uuid import uuid4
+
+        rag_engine._settings.ENABLE_PARENT_CHILD = True
+
+        parent = Chunk(
+            id=uuid4(),
+            content="Parent context for streaming.",
+            metadata={"filename": "ai.pdf", "chunk_type": "parent", "score": 0.9},
+            chunk_index=0,
+        )
+        child = Chunk(
+            id=uuid4(),
+            content="Child hit",
+            metadata={
+                "filename": "ai.pdf",
+                "chunk_type": "child",
+                "parent_id": str(parent.id),
+                "score": 0.95,
+            },
+            chunk_index=0,
+        )
+        mock_vector_store.similarity_search.return_value = [child]
+        mock_vector_store.get_documents_by_ids = AsyncMock(return_value=[parent])
+
+        async def fake_stream(prompt):
+            yield "streamed answer"
+
+        rag_engine._llm.generate_stream = fake_stream
+
+        collected = []
+        async for chunk in rag_engine.query_stream("What is ML?"):
+            collected.append(chunk)
+
+        assert collected == ["streamed answer"]
+        call_kwargs = mock_vector_store.similarity_search.call_args
+        assert call_kwargs.kwargs["collection_name"] == "documents_child"
+        mock_vector_store.get_documents_by_ids.assert_awaited_once()
 
 
 # RAGEngine._build_prompt Tests
@@ -579,6 +851,7 @@ class TestRAGEngineInit:
         assert engine._llm is llm
         assert engine._embedding is emb
         assert engine._vector_store is vs
+        assert engine._query_rewriter is None
 
     def test_init_loads_settings(self, mock_get_settings):
         mock_settings = MagicMock()

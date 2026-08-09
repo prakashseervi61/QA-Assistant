@@ -16,9 +16,14 @@ class TextSplitter:
             chunk_overlap if chunk_overlap is not None else settings.CHUNK_OVERLAP
         )
 
-    def split_text(
-        self, text: str, document_id: UUID, metadata: dict = None
+    async def split_text(
+        self, text: str, document_id: UUID, metadata: dict | None = None
     ) -> list[Chunk]:
+        """Split text into fixed-size chunks (async for a uniform interface).
+
+        The body is synchronous; the ``async`` signature matches
+        :class:`SemanticChunker` so callers can ``await`` either splitter.
+        """
         if metadata is None:
             metadata = {}
 

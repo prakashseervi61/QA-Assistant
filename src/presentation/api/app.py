@@ -37,11 +37,20 @@ def _wire_dependencies(settings: Settings) -> None:
 
     reranker = create_reranker()
 
+    from src.infrastructure.llm.query_rewriter_factory import (
+        create_query_rewriter,
+    )
+
+    query_rewriter = create_query_rewriter(
+        llm_provider, embedding_provider, vector_store
+    )
+
     rag_engine = RAGEngine(
         llm_provider=llm_provider,
         embedding_provider=embedding_provider,
         vector_store=vector_store,
         reranker=reranker,
+        query_rewriter=query_rewriter,
     )
     conversation_repository = MemoryConversationRepository()
     query_use_case = QueryDocumentUseCase(rag_engine, conversation_repository)

@@ -59,6 +59,27 @@ class Settings(BaseSettings):
     # Hybrid Search
     ENABLE_HYBRID_SEARCH: bool = False
 
+    # Query Rewriting
+    ENABLE_QUERY_REWRITING: bool = False
+    QUERY_REWRITING_VARIANTS: int = 3
+
+    # Parent-Child Retrieval
+    ENABLE_PARENT_CHILD: bool = False
+    PARENT_CHUNK_SIZE: int = 2000
+    CHILD_CHUNK_SIZE: int = 200
+    CHILD_CHUNK_OVERLAP: int = 50
+
+    # Semantic Chunking
+    ENABLE_SEMANTIC_CHUNKING: bool = False
+    SEMANTIC_SIMILARITY_THRESHOLD: float = 0.5
+    SEMANTIC_MIN_CHUNK_SIZE: int = 100
+    SEMANTIC_MAX_CHUNK_SIZE: int = 2000
+
+    # Chunk Enrichment
+    ENABLE_CHUNK_ENRICHMENT: bool = False
+    ENABLE_CHUNK_ENRICHMENT_SUMMARIES: bool = False
+    CHUNK_ENRICHMENT_MAX_KEYWORDS: int = 10
+
 
 @lru_cache
 def get_settings() -> Settings:

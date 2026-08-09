@@ -413,6 +413,85 @@ class ChromaStore(VectorStore):
         )
         return chunks
 
+    async def get_documents_by_ids(
+        self,
+        ids: list[str],
+        collection_name: str = "documents",
+    ) -> list[Chunk]:
+        """Retrieve chunks by their IDs from ChromaDB.
+
+        Args:
+            ids: List of chunk ID strings to retrieve.
+            collection_name: Name of the ChromaDB collection.
+
+        Returns:
+            A list of ``Chunk`` instances for the found IDs.
+            Missing IDs are silently skipped.
+        """
+
+        def _get() -> list[Chunk]:
+            try:
+                collection = self._client.get_collection(collection_name)
+            except ValueError:
+                return []
+
+            if not ids:
+                return []
+
+            results = collection.get(
+                ids=ids,
+                include=["documents", "embeddings", "metadatas"],
+            )
+
+            chunks: list[Chunk] = []
+            if not results or not results.get("ids"):
+                return chunks
+
+            for idx, chunk_id in enumerate(results["ids"]):
+                metadata = (
+                    dict(results["metadatas"][idx])
+                    if results.get("metadatas")
+                    else {}
+                )
+                document_id_str = metadata.pop("document_id", None)
+                chunk_index = int(metadata.pop("chunk_index", 0))
+                embedding_list = (
+                    list(results["embeddings"][idx])
+                    if results.get("embeddings")
+                    else None
+                )
+
+                from uuid import UUID as _UUID
+
+                chunks.append(
+                    Chunk(
+                        id=_UUID(chunk_id),
+                        document_id=_UUID(document_id_str)
+                        if document_id_str
+                        else None,  # type: ignore[arg-type]
+                        content=(
+                            results["documents"][idx]
+                            if results.get("documents")
+                            else ""
+                        ),
+                        embedding=embedding_list,
+                        metadata=metadata,
+                        chunk_index=chunk_index,
+                    )
+                )
+
+            return chunks
+
+        try:
+            return await asyncio.to_thread(_get)
+        except Exception as exc:
+            logger.error(
+                "ChromaDB get_documents_by_ids failed: %s", exc
+            )
+            raise RuntimeError(
+                f"ChromaDB get_documents_by_ids failed: {exc}"
+            ) from exc
+
     async def list_documents(self, collection_name: str) -> list[dict]:
         """Return a summary per ingested document in the collection.
 
