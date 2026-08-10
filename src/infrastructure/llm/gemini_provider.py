@@ -37,6 +37,7 @@ class GeminiProvider(LLMProvider):
 
     def __init__(self, api_key: str, model: str) -> None:
         self._model = model
+        self._last_response = None
         try:
             import google.generativeai as genai
 
@@ -51,10 +52,64 @@ class GeminiProvider(LLMProvider):
             kwargs = {}
             if system_prompt:
                 kwargs["system_instruction"] = system_prompt
-            return self._client.generate_content(prompt, **kwargs).text or ""
+            return self._client.generate_content(prompt, **kwargs)
 
         try:
-            return await asyncio.to_thread(_gen)
+            response = await asyncio.to_thread(_gen)
+            self._last_response = response
+            return response.text or ""
+        except Exception as exc:
+            if _is_quota_error(exc):
+                raise LLMQuotaExceededError(
+                    QUOTA_ERROR_MESSAGE.format(model=self._model)
+                ) from exc
+            raise RuntimeError(f"Gemini API error: {exc}") from exc
+
+    async def get_usage(self) -> dict[str, object]:
+        """Return token usage from the most recent generate call.
+
+        Uses ``response.usage_metadata`` from the google-generativeai SDK
+        (``prompt_token_count`` / ``candidates_token_count``). Returns an
+        empty dict when no response has been produced yet or the response
+        carries no usage metadata.
+        """
+        response = self._last_response
+        if response is None:
+            return {}
+        usage_metadata = getattr(response, "usage_metadata", None)
+        if usage_metadata is None:
+            return {}
+        return {
+            "prompt_tokens": getattr(usage_metadata, "prompt_token_count", 0),
+            "completion_tokens": getattr(usage_metadata, "candidates_token_count", 0),
+        }
+
+    async def generate_json(
+        self, prompt: str, system_prompt: str | None = None
+    ) -> str:
+        """Generate a response with JSON mode enforced by the model API.
+
+        Uses ``response_mime_type="application/json"`` (supported by
+        google-generativeai >= 0.8) so the model is constrained to emit
+        valid JSON, which the structured-output parser can rely on.
+        """
+        import google.generativeai as genai
+
+        def _gen():
+            kwargs = {}
+            if system_prompt:
+                kwargs["system_instruction"] = system_prompt
+            config = genai.types.GenerationConfig(
+                response_mime_type="application/json"
+            )
+            return self._client.generate_content(
+                prompt, generation_config=config, **kwargs
+            )
+
+        try:
+            response = await asyncio.to_thread(_gen)
+            self._last_response = response
+            return response.text or ""
         except Exception as exc:
             if _is_quota_error(exc):
                 raise LLMQuotaExceededError(

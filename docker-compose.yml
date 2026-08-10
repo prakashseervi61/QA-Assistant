@@ -12,6 +12,11 @@ services:
       - CHUNK_SIZE=${CHUNK_SIZE:-1000}
       - CHUNK_OVERLAP=${CHUNK_OVERLAP:-200}
       - CHROMA_PERSIST_DIR=/data/chroma
+      # Observability — Phoenix tracing (see the `phoenix` service below).
+      # Enable by setting ENABLE_TRACING=true; the API reaches Phoenix via
+      # the compose service name.
+      - ENABLE_TRACING=${ENABLE_TRACING:-false}
+      - TRACING_ENDPOINT=${TRACING_ENDPOINT:-http://phoenix:6006/v1/traces}
     volumes:
       - chroma_data:/data/chroma
     healthcheck:
@@ -30,5 +35,13 @@ services:
       api:
         condition: service_healthy
 
+  phoenix:
+    image: arizephoenix/phoenix:latest
+    ports:
+      - "6006:6006"
+    volumes:
+      - phoenix-data:/data
+
 volumes:
   chroma_data:
+  phoenix-data:

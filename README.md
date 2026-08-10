@@ -138,6 +138,18 @@ All settings live in `.env` (or as environment variables) and are loaded via `py
 | `API_HOST` | `0.0.0.0` | Reserved — uvicorn is launched with an explicit host |
 | `API_PORT` | `8000` | Reserved — uvicorn is launched with an explicit port |
 | `CORS_ORIGINS` | `["http://localhost:3000"]` | Allowed CORS origins (JSON list) |
+| `ENABLE_USAGE_TRACKING` | `true` | Record LLM token usage & cost; exposes `GET /api/usage`. On by default so cost/usage is visible without extra config — disable only if you don't want in-memory accounting |
+| `ENABLE_TRACING` | `false` | Send OpenTelemetry traces to Phoenix (`true` to enable) |
+| `TRACING_ENDPOINT` | `http://localhost:6006/v1/traces` | OTLP HTTP endpoint for trace export |
+| `TRACING_SERVICE_NAME` | `qa-assistant` | Service name reported to the trace backend |
+
+> **Note on structured output:** the RAG engine supports an opt-in
+> structured-output mode (`use_structured_output=True` on `RAGEngine.query`)
+> that returns JSON answers with citations, but it is **not** exposed as an
+> environment variable — the chat API contract (`QueryResponse`) does not yet
+> carry the citations field, so wiring a setting through would silently drop
+> them. It stays an engine-level parameter until the API contract supports
+> citations end-to-end.
 
 > **Note on the embedding default:** the code default for `EMBEDDING_PROVIDER` is `gemini`, but the shipped `.env.example` and `docker-compose.yml` set it to `huggingface` — a local, free, keyless default. Either works; switch by changing a single line.
 
@@ -190,6 +202,7 @@ All routes are served under the `/api` prefix.
 | `POST` | `/api/query/stream` | Ask a question (streaming SSE) |
 | `GET` | `/api/conversations` | List recent conversations (max 10, newest first) |
 | `GET` | `/api/conversations/{id}` | Get conversation messages |
+| `GET` | `/api/usage` | LLM token usage summary and recent records |
 
 ### `GET /api/health`
 
@@ -295,22 +308,62 @@ Only conversations that contain at least one message are returned, newest first 
 
 Status codes: `400` invalid UUID · `404` conversation not found.
 
+### `GET /api/usage`
+
+```json
+{
+  "requests": 3,
+  "prompt_tokens": 300,
+  "completion_tokens": 150,
+  "total_tokens": 450,
+  "est_cost_usd": 0.0012,
+  "recent": [
+    { "model": "gemini-2.5-flash", "prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150, "timestamp": 1789123456.78, "request_id": "..." }
+  ]
+}
+```
+
+Optional query param `limit` (1–100, default 10) controls how many recent records are returned. Only populated when `ENABLE_USAGE_TRACKING=true` (the default); when disabled, the endpoint returns zeroed totals and an empty `recent` list.
+
+## Usage Tracking & Tracing
+
+- **Usage tracking** (`ENABLE_USAGE_TRACKING`, default `true`): the API wraps the LLM provider with a `TrackingLLMProvider` that records per-call token usage and estimated cost in memory (per-model prices in `src/infrastructure/llm/token_tracker.py`). Totals are exposed via `GET /api/usage`. Records are per-process only and reset on restart.
+- **Tracing** (`ENABLE_TRACING`, default `false`): when enabled, the RAG pipeline emits OpenTelemetry spans (retrieval, rerank, generation) to the configured OTLP endpoint. `TRACING_ENDPOINT` defaults to the local Phoenix collector (`http://localhost:6006/v1/traces`); in Docker Compose the API points at the `phoenix` service. OpenTelemetry packages are optional — install with `pip install -e ".[tracing]"`. If tracing is enabled but the packages are missing, the app logs a warning and falls back to a no-op tracer instead of crashing.
+
 ## Testing
 
 ```bash
-# Run all tests (153 tests)
+# Run all tests (317 tests)
 python -m pytest tests/ -q
 
 # Lint (and formatting, as enforced in CI)
-python -m ruff check src tests
-python -m ruff format --check src tests
+python -m ruff check src eval tests
+python -m ruff format --check src eval tests
 
 # Type check (best effort — see note)
 python -m mypy src
 ```
 
 - `mypy` is configured (`strict`) and runs in CI with `continue-on-error: true` — it is **not** a gate. It may fail in some local environments (e.g. missing numpy stubs pulled in transitively); treat it as best-effort/optional.
-- CI (`pytest` on Python 3.10/3.11/3.12, ruff, Docker builds) runs on every push/PR to `main`.
+- CI (`pytest` on Python 3.10/3.11/3.12, ruff, Docker builds) runs on every push/PR to `main`. The RAGAS eval job runs with `continue-on-error: true` until LLM provider secrets are configured (see `eval/README.md`).
+
+## Evaluation
+
+RAG quality is measured offline with [RAGAS](https://docs.ragas.io/) metrics
+against a golden dataset (`eval/golden_dataset.jsonl`):
+faithfulness (**> 0.8**), answer_relevancy, context_precision, context_recall.
+
+```bash
+# Live evaluation against the running RAG pipeline (first 3 questions)
+python eval/ragas_eval.py --sample 3
+
+# Offline evaluation of pre-generated results (used in CI; no live service)
+python eval/ragas_eval.py --offline eval/sample_results.jsonl
+```
+
+The harness exits non-zero when a metric falls below its threshold. Unit
+tests for the harness: `python -m pytest eval/ -q`. See `eval/README.md`
+for details.
 
 ## Troubleshooting
 

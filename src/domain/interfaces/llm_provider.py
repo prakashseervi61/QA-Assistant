@@ -31,3 +31,27 @@ class LLMProvider(ABC):
     def get_model_name(self) -> str:
         """Return the current model identifier."""
         ...
+
+    async def generate_json(self, prompt: str, system_prompt: str | None = None) -> str:
+        """Generate a response constrained to JSON-only output.
+
+        Default implementation falls back to :meth:`generate` with a
+        JSON-mode system-prompt hint, so providers without native JSON
+        mode still return parseable JSON (prompt-enforced). Providers
+        whose model API supports native JSON mode (e.g. Gemini's
+        ``response_mime_type="application/json"``) should override this
+        to request it, improving parse reliability.
+        """
+        json_hint = system_prompt or (
+            "Return ONLY valid JSON. No markdown, no prose around it."
+        )
+        return await self.generate(prompt, system_prompt=json_hint)
+
+    async def get_usage(self) -> dict[str, object]:
+        """Return token usage from the last generate call.
+
+        Returns ``{"prompt_tokens": int, "completion_tokens": int}`` when
+        the provider exposes usage metadata, or ``{}`` when unavailable.
+        Concrete method so existing providers work unchanged.
+        """
+        return {}

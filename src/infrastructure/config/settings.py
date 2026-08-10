@@ -80,6 +80,14 @@ class Settings(BaseSettings):
     ENABLE_CHUNK_ENRICHMENT_SUMMARIES: bool = False
     CHUNK_ENRICHMENT_MAX_KEYWORDS: int = 10
 
+    # Token Usage Tracking
+    ENABLE_USAGE_TRACKING: bool = True
+
+    # Observability / Tracing
+    ENABLE_TRACING: bool = False
+    TRACING_ENDPOINT: str = "http://localhost:6006/v1/traces"
+    TRACING_SERVICE_NAME: str = "qa-assistant"
+
 
 @lru_cache
 def get_settings() -> Settings:

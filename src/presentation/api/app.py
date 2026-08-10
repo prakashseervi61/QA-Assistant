@@ -14,22 +14,29 @@ from src.application.use_cases.query_document import QueryDocumentUseCase
 from src.infrastructure.config.settings import Settings, get_settings
 from src.infrastructure.embeddings.factory import EmbeddingProviderFactory
 from src.infrastructure.llm.factory import LLMProviderFactory
+from src.infrastructure.llm.token_tracker import TokenTracker, TrackingLLMProvider
 from src.infrastructure.repositories.memory_conversation_repository import (
     MemoryConversationRepository,
 )
 from src.infrastructure.vector_store.chroma_store import ChromaStore
-from src.presentation.api.routes import chat, documents, health
+from src.presentation.api.routes import chat, documents, health, usage
 
 logger = logging.getLogger(__name__)
 
 
-def _wire_dependencies(settings: Settings) -> None:
+def _wire_dependencies(settings: Settings) -> TokenTracker:
     """Build shared infrastructure and inject it into the routers.
 
     Creates a single LLM provider, embedding provider, and ChromaStore so
     that chat and document routes operate on the same instances.
+
+    Returns:
+        The shared :class:`TokenTracker` used to record LLM usage.
     """
+    tracker = TokenTracker()
     llm_provider = LLMProviderFactory.create(settings)
+    if settings.ENABLE_USAGE_TRACKING:
+        llm_provider = TrackingLLMProvider(llm_provider, tracker)
     embedding_provider = EmbeddingProviderFactory.create(settings)
     vector_store = ChromaStore(persist_directory=settings.CHROMA_PERSIST_DIR)
 
@@ -45,12 +52,17 @@ def _wire_dependencies(settings: Settings) -> None:
         llm_provider, embedding_provider, vector_store
     )
 
+    from src.infrastructure.observability.tracer import create_tracer
+
+    tracer = create_tracer()
+
     rag_engine = RAGEngine(
         llm_provider=llm_provider,
         embedding_provider=embedding_provider,
         vector_store=vector_store,
         reranker=reranker,
         query_rewriter=query_rewriter,
+        tracer=tracer,
     )
     conversation_repository = MemoryConversationRepository()
     query_use_case = QueryDocumentUseCase(rag_engine, conversation_repository)
@@ -71,6 +83,7 @@ def _wire_dependencies(settings: Settings) -> None:
         settings.LLM_PROVIDER,
         settings.EMBEDDING_PROVIDER,
     )
+    return tracker
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -85,7 +98,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     if settings is None:
         settings = get_settings()
 
-    _wire_dependencies(settings)
+    tracker = _wire_dependencies(settings)
+    usage.set_tracker(tracker)
 
     app = FastAPI(
         title=settings.APP_NAME,
@@ -108,5 +122,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(health.router, prefix="/api", tags=["health"])
     app.include_router(documents.router, prefix="/api", tags=["documents"])
     app.include_router(chat.router, prefix="/api", tags=["chat"])
+    # usage router defines its own /api/usage path — no prefix.
+    app.include_router(usage.router, tags=["usage"])
 
     return app

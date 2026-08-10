@@ -7,6 +7,7 @@ Orchestrates the full RAG pipeline:
 import asyncio
 import logging
 from collections.abc import AsyncIterator
+from contextlib import nullcontext
 from typing import TYPE_CHECKING
 
 from src.domain.interfaces.embedding_provider import EmbeddingProvider
@@ -15,6 +16,10 @@ from src.domain.interfaces.query_rewriter import QueryRewriter
 from src.domain.interfaces.reranker import Reranker
 from src.domain.interfaces.vector_store import VectorStore
 from src.infrastructure.config.settings import get_settings
+from src.infrastructure.llm.structured_output import (
+    StructuredOutputError,
+    generate_structured_answer,
+)
 
 if TYPE_CHECKING:
     from src.domain.value_objects.chunk import Chunk
@@ -78,13 +83,28 @@ class RAGEngine:
         vector_store: VectorStore,
         reranker: Reranker | None = None,
         query_rewriter: QueryRewriter | None = None,
+        tracer: object | None = None,
     ) -> None:
         self._llm = llm_provider
         self._embedding = embedding_provider
         self._vector_store = vector_store
         self._reranker = reranker
         self._query_rewriter = query_rewriter
+        self._tracer = tracer
         self._settings = get_settings()
+
+    def _span(self, name: str) -> object:
+        """Return a span context manager when tracing is enabled, else a no-op.
+
+        Args:
+            name: Span name (e.g. "retrieval", "rerank", "llm_generate").
+
+        Returns:
+            A context manager object usable with ``with``.
+        """
+        if self._tracer is not None:
+            return self._tracer.start_as_current_span(name)
+        return nullcontext()
 
     # ------------------------------------------------------------------
     # Public API
@@ -95,6 +115,7 @@ class RAGEngine:
         question: str,
         top_k: int | None = None,
         metadata_filter: dict[str, object] | None = None,
+        use_structured_output: bool = False,
     ) -> dict:
         """Process a query: embed → retrieve → generate.
 
@@ -102,12 +123,27 @@ class RAGEngine:
             question: The user's natural-language question.
             top_k:    Number of context chunks to retrieve.
                       Defaults to ``DEFAULT_TOP_K``.
+            use_structured_output: When True, the LLM is asked for a JSON
+                      answer with citations (``StructuredAnswer`` shape)
+                      instead of free-form text. On any parse failure the
+                      engine falls back to the default generation path.
+
+        Note:
+            When query rewriting is enabled, the LLM is invoked twice per
+            query — once to rewrite the question and once to generate the
+            answer.
 
         Returns:
             A dict with keys:
-                - answer    (str)   – generated answer
-                - sources   (list)  – source chunks with metadata
+                - answer    (str)  – generated answer
+                - sources   (list) – source chunks with metadata
                 - confidence (float) – average similarity score
+
+            With ``use_structured_output=True`` the dict instead carries:
+                - answer    (str)  – structured answer text
+                - citations (list) – [chunk_id, source, page, excerpt] dicts
+                - confidence (float)
+                - metadata  (dict) – {"mode": "structured"}
 
         Raises:
             RAGQueryError: On any failure during the pipeline.
@@ -187,24 +223,25 @@ class RAGEngine:
                     chunks = None
 
             if chunks is None:
-                query_embedding = await self._embedding.embed(question)
-                if getattr(
-                    self._settings, "ENABLE_HYBRID_SEARCH", False
-                ):
-                    chunks = await self._vector_store.hybrid_search(
-                        query_embedding=query_embedding,
-                        query_text=question,
-                        k=k,
-                        collection_name=collection,
-                        metadata_filter=metadata_filter,
-                    )
-                else:
-                    chunks = await self._vector_store.similarity_search(
-                        query_embedding=query_embedding,
-                        k=k,
-                        collection_name=collection,
-                        metadata_filter=metadata_filter,
-                    )
+                with self._span("retrieval"):
+                    query_embedding = await self._embedding.embed(question)
+                    if getattr(
+                        self._settings, "ENABLE_HYBRID_SEARCH", False
+                    ):
+                        chunks = await self._vector_store.hybrid_search(
+                            query_embedding=query_embedding,
+                            query_text=question,
+                            k=k,
+                            collection_name=collection,
+                            metadata_filter=metadata_filter,
+                        )
+                    else:
+                        chunks = await self._vector_store.similarity_search(
+                            query_embedding=query_embedding,
+                            k=k,
+                            collection_name=collection,
+                            metadata_filter=metadata_filter,
+                        )
             logger.info("Retrieved %d context chunks", len(chunks))
 
             # Parent-child retrieval: swap the retrieved children for their
@@ -216,19 +253,51 @@ class RAGEngine:
 
             # rerank
             if self._reranker is not None and chunks:
-                chunks = await asyncio.to_thread(
-                    self._reranker.rerank, question, chunks, k
-                )
+                with self._span("rerank"):
+                    chunks = await asyncio.to_thread(
+                        self._reranker.rerank, question, chunks, k
+                    )
 
             if not chunks:
                 return await self._empty_retrieval_response(collection)
+
+            # Structured output path (optional, feature-flagged): ask the LLM
+            # for a JSON answer with citations instead of free-form text.
+            if use_structured_output:
+                try:
+                    structured = await generate_structured_answer(
+                        llm_provider=self._llm,
+                        question=question,
+                        chunks=chunks,
+                    )
+                    return {
+                        "answer": structured.answer,
+                        "citations": [
+                            {
+                                "chunk_id": c.chunk_id,
+                                "source": c.source,
+                                "page": c.page,
+                                "excerpt": c.excerpt,
+                            }
+                            for c in structured.citations
+                        ],
+                        "confidence": structured.confidence,
+                        "metadata": {"mode": "structured"},
+                    }
+                except StructuredOutputError as exc:
+                    logger.warning(
+                        "Structured output failed (%s); falling back to default",
+                        exc,
+                    )
+                    # fall through to the normal generation path
 
             # 3. Build prompt with context
             prompt = self._build_prompt(question, chunks)
 
             # 4. Generate answer
             logger.debug("Generating answer via %s", self._llm.get_model_name())
-            answer = await self._llm.generate(prompt)
+            with self._span("llm_generate"):
+                answer = await self._llm.generate(prompt)
             logger.info("Generated answer (len=%d)", len(answer))
 
             # 5. Format sources and compute confidence
@@ -256,6 +325,13 @@ class RAGEngine:
         metadata_filter: dict[str, object] | None = None,
     ) -> AsyncIterator[str]:
         """Process a query with streaming response.
+
+        Note:
+            Structured output is intentionally NOT supported here: JSON-mode
+            generation does not stream reliably, so ``query_stream`` always
+            uses the default free-form generation path. Callers that need
+            citations should use :meth:`query` with
+            ``use_structured_output=True``.
 
         Args:
             question: The user's natural-language question.
