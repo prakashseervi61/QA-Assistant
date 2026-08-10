@@ -4,6 +4,7 @@ from typing import Any
 
 import chromadb
 from chromadb.config import Settings as ChromaSettings
+from chromadb.errors import NotFoundError
 
 from src.domain.interfaces.vector_store import VectorStore
 from src.domain.value_objects.chunk import Chunk
@@ -491,6 +492,89 @@ class ChromaStore(VectorStore):
             raise RuntimeError(
                 f"ChromaDB get_documents_by_ids failed: {exc}"
             ) from exc
+
+    async def get_by_metadata(
+        self,
+        metadata_filter: dict[str, object],
+        collection_name: str = "documents",
+    ) -> list[Chunk]:
+        """Retrieve chunks whose metadata matches all entries in *metadata_filter*.
+
+        Used by incremental ingestion to find existing chunks with a
+        given ``content_hash``. The filter is passed to ChromaDB as the
+        ``where`` clause (server-side filtering).
+
+        Args:
+            metadata_filter: Metadata key-value pairs to match.
+            collection_name: Name of the ChromaDB collection.
+
+        Returns:
+            A list of ``Chunk`` instances matching the filter.
+            Empty list if the collection does not exist or has no matches.
+
+        Raises:
+            RuntimeError: If the ChromaDB get fails.
+        """
+
+        def _get() -> list[Chunk]:
+            try:
+                collection = self._client.get_collection(collection_name)
+            except (ValueError, NotFoundError):
+                return []
+
+            if collection.count() == 0:
+                return []
+
+            results = collection.get(
+                where=metadata_filter,
+                include=["documents", "embeddings", "metadatas"],
+            )
+
+            chunks: list[Chunk] = []
+            if not results or not results.get("ids"):
+                return chunks
+
+            chunk_ids = results["ids"]
+            metadatas = results.get("metadatas") or []
+            documents = results.get("documents") or []
+            # NOTE: embeddings come back as a numpy array — never test it
+            # for truthiness (ambiguous for multi-element arrays).
+            embeddings = results.get("embeddings")
+
+            for idx, chunk_id in enumerate(chunk_ids):
+                metadata = (
+                    dict(metadatas[idx]) if len(metadatas) > idx else {}
+                )
+                document_id_str = metadata.pop("document_id", None)
+                chunk_index = int(metadata.pop("chunk_index", 0))
+                embedding_list = (
+                    list(embeddings[idx])
+                    if embeddings is not None and len(embeddings) > idx
+                    else None
+                )
+
+                from uuid import UUID as _UUID
+
+                chunks.append(
+                    Chunk(
+                        id=_UUID(chunk_id),
+                        document_id=_UUID(document_id_str)
+                        if document_id_str
+                        else None,  # type: ignore[arg-type]
+                        content=documents[idx] if len(documents) > idx else "",
+                        embedding=embedding_list,
+                        metadata=metadata,
+                        chunk_index=chunk_index,
+                    )
+                )
+
+            return chunks
+
+        try:
+            return await asyncio.to_thread(_get)
+        except Exception as exc:
+            logger.error("ChromaDB get_by_metadata failed: %s", exc)
+            raise RuntimeError(f"ChromaDB get_by_metadata failed: {exc}") from exc
 
     async def list_documents(self, collection_name: str) -> list[dict]:
         """Return a summary per ingested document in the collection.

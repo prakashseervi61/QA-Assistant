@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { FiChevronDown, FiFileText, FiLoader, FiMessageSquare, FiSend, FiUploadCloud } from 'react-icons/fi';
-import { fetchJSON } from '../api';
+import { FiChevronDown, FiFileText, FiLoader, FiMessageSquare, FiSend, FiSquare, FiUploadCloud } from 'react-icons/fi';
+import { fetchJSON, streamChat } from '../api';
 
 const SUGGESTIONS = [
   'Summarize the key points of my documents',
@@ -42,6 +42,7 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
   const [restoring, setRestoring] = useState(true); // gates empty-state flash
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
+  const abortRef = useRef(null); // AbortController for the in-flight stream
 
   const LAST_CONVERSATION_KEY = 'qa-assistant.lastConversationId';
 
@@ -108,6 +109,11 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
+  // Abort any in-flight stream if the widget unmounts (e.g. mobile drawer close).
+  useEffect(() => {
+    return () => abortRef.current?.abort();
+  }, []);
+
   function resetTextareaHeight() {
     const el = textareaRef.current;
     if (el) el.style.height = 'auto';
@@ -162,6 +168,33 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
     }
   }
 
+  /** Immutably patch the message at `index` in the message list. */
+  function updateMessageAt(index, updater) {
+    setMessages(prev => prev.map((msg, i) => (i === index ? updater(msg) : msg)));
+  }
+
+  /** Append streamed text to the assistant message at `index`. */
+  function appendStreamText(index, text) {
+    updateMessageAt(index, msg => ({ ...msg, content: msg.content + text }));
+  }
+
+  /** Flag the assistant message at `index` as failed, preserving partial content. */
+  function markStreamError(index, message) {
+    updateMessageAt(index, msg => {
+      const note = `Something went wrong: ${message}`;
+      return {
+        ...msg,
+        error: true,
+        content: msg.content ? `${msg.content}\n\n${note}` : note,
+      };
+    });
+  }
+
+  /** Stop the in-flight stream; the partial answer stays on screen. */
+  function stopStreaming() {
+    abortRef.current?.abort();
+  }
+
   async function sendMessage(textOverride) {
     const text = (textOverride ?? input).trim();
     if (!text || loading || hasDocuments === false || restoring) return;
@@ -173,36 +206,76 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
     setMessages(prev => [...prev, userMsg]);
     setLoading(true);
 
+    // Append the assistant bubble once; streamed chunks fill it in incrementally.
+    const botIndex = messages.length + 1; // index right after the user message
+    setMessages(prev => [...prev, { role: 'assistant', content: '', sources: [], createdAt: new Date() }]);
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    let streamError = null;
+    let doneEvent = null;
+    let blockedEvent = null;
+
     try {
       const payload = {
         question: text,
         conversation_id: conversationId,
         top_k: 5,
       };
-      const data = await fetchJSON('/query', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+      await streamChat(payload, {
+        signal: controller.signal,
+        onEvent(event) {
+          switch (event.type) {
+            case 'chunk':
+              appendStreamText(botIndex, event.content ?? '');
+              break;
+            case 'done':
+              doneEvent = event;
+              if (event.conversation_id) {
+                setConversationId(event.conversation_id);
+                refreshConversations();
+              }
+              if (event.sources?.length > 0) {
+                updateMessageAt(botIndex, msg => ({ ...msg, sources: event.sources }));
+              }
+              break;
+            case 'error':
+              streamError = event.message || 'Stream failed';
+              break;
+            case 'blocked':
+              // Input guardrails blocked the question: record the server's
+              // message and close the stream (the abort rejects the in-flight
+              // read below). Nothing is persisted or refreshed here.
+              blockedEvent = event;
+              controller.abort();
+              break;
+            default:
+              break;
+          }
+        },
       });
 
-      if (data.conversation_id) {
-        setConversationId(data.conversation_id);
-        refreshConversations();
+      if (blockedEvent) {
+        markStreamError(botIndex, blockedEvent.message || 'Your question was blocked');
+      } else if (streamError) {
+        markStreamError(botIndex, streamError);
+      } else if (controller.signal.aborted) {
+        // User pressed stop — keep the partial answer as-is.
+      } else if (doneEvent) {
+        // Stream completed cleanly; never leave a visually empty bubble.
+        updateMessageAt(botIndex, msg => (msg.content ? msg : { ...msg, content: 'No response' }));
+      } else {
+        markStreamError(botIndex, 'Stream ended before a complete response');
       }
-
-      const botMsg = {
-        role: 'assistant',
-        content: data.answer || data.content || 'No response',
-        sources: data.sources || [],
-        createdAt: new Date(),
-      };
-      setMessages(prev => [...prev, botMsg]);
     } catch (err) {
-      setMessages(prev => [
-        ...prev,
-        { role: 'assistant', content: `Something went wrong: ${err.message}`, error: true, createdAt: new Date() },
-      ]);
+      if (blockedEvent) {
+        markStreamError(botIndex, blockedEvent.message || 'Your question was blocked');
+      } else if (!controller.signal.aborted) {
+        markStreamError(botIndex, err.message || 'Unknown error');
+      }
     } finally {
+      abortRef.current = null;
       setLoading(false);
     }
   }
@@ -295,7 +368,20 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
                           : 'rounded-bl-md border border-slate-200 bg-white text-slate-800'
                     }`}
                   >
-                    <p className="whitespace-pre-wrap">{msg.content}</p>
+                    {!isUser && msg.content === '' && loading ? (
+                      <div className="flex items-center gap-1.5 py-1">
+                        {[0, 1, 2].map(i => (
+                          <span
+                            key={i}
+                            className="h-2 w-2 animate-bounce rounded-full bg-brand-400"
+                            style={{ animationDelay: `${i * 150}ms` }}
+                          />
+                        ))}
+                        <span className="sr-only">Assistant is thinking…</span>
+                      </div>
+                    ) : (
+                      <p className="whitespace-pre-wrap">{msg.content}</p>
+                    )}
 
                     {!isUser && msg.sources?.length > 0 && (
                       <div className="mt-3 border-t border-slate-100 pt-2.5">
@@ -363,26 +449,6 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
                 </div>
               );
             })}
-
-            {loading && (
-              <div className="flex items-end gap-2">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-100 text-brand-700">
-                  <FiMessageSquare className="h-4 w-4" />
-                </div>
-                <div className="rounded-2xl rounded-bl-md border border-slate-200 bg-white px-4 py-3 shadow-sm">
-                  <div className="flex items-center gap-1.5">
-                    {[0, 1, 2].map(i => (
-                      <span
-                        key={i}
-                        className="h-2 w-2 animate-bounce rounded-full bg-brand-400"
-                        style={{ animationDelay: `${i * 150}ms` }}
-                      />
-                    ))}
-                  </div>
-                  <span className="sr-only">Assistant is thinking…</span>
-                </div>
-              </div>
-            )}
           </div>
         )}
         <div ref={messagesEndRef} />
@@ -409,19 +475,27 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
             name="question"
             className="max-h-40 min-h-0 flex-1 resize-none bg-transparent py-1 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none disabled:cursor-not-allowed"
           />
-          <button
-            type="button"
-            onClick={() => sendMessage()}
-            disabled={loading || !input.trim() || hasDocuments === false}
-            aria-label="Send message"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-600 text-white transition-colors hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:bg-slate-300"
-          >
-            {loading ? (
-              <FiLoader className="h-4 w-4 animate-spin" aria-hidden="true" />
-            ) : (
+          {loading ? (
+            <button
+              type="button"
+              onClick={stopStreaming}
+              aria-label="Stop generating"
+              title="Stop generating"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-red-600 text-white transition-colors hover:bg-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-1"
+            >
+              <FiSquare className="h-4 w-4" aria-hidden="true" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => sendMessage()}
+              disabled={!input.trim() || hasDocuments === false}
+              aria-label="Send message"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-600 text-white transition-colors hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:bg-slate-300"
+            >
               <FiSend className="h-4 w-4" aria-hidden="true" />
-            )}
-          </button>
+            </button>
+          )}
         </div>
         <p className="mt-1.5 text-center text-[11px] text-slate-400">
           {hasDocuments === false

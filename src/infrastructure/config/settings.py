@@ -3,7 +3,13 @@
 from functools import lru_cache
 from typing import Literal
 
+from pydantic import ValidationInfo, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# The bundled development secret. Validation refuses to run with it once
+# authentication is enabled, so a misconfigured deployment can never
+# ship with the well-known default.
+_DEV_SECRET_KEY = "dev-secret-change-me"
 
 
 class Settings(BaseSettings):
@@ -40,6 +46,11 @@ class Settings(BaseSettings):
     # Vector Store
     CHROMA_PERSIST_DIR: str = "./data/chroma"
     CHROMA_COLLECTION_NAME: str = "documents"
+
+    # Database (optional)
+    # When set, conversations persist in PostgreSQL; otherwise the app keeps
+    # using in-memory storage. Requires the optional deps: sqlalchemy, asyncpg.
+    DATABASE_URL: str | None = None
 
     # Document Processing
     CHUNK_SIZE: int = 1000
@@ -80,6 +91,12 @@ class Settings(BaseSettings):
     ENABLE_CHUNK_ENRICHMENT_SUMMARIES: bool = False
     CHUNK_ENRICHMENT_MAX_KEYWORDS: int = 10
 
+    # Incremental Ingestion (optional — OFF by default)
+    # When enabled, re-uploading a byte-identical file (same SHA-256
+    # content hash) returns a "duplicate detected" result instead of
+    # re-parsing, re-embedding, and re-storing it.
+    ENABLE_INCREMENTAL_INGESTION: bool = False
+
     # Token Usage Tracking
     ENABLE_USAGE_TRACKING: bool = True
 
@@ -87,6 +104,46 @@ class Settings(BaseSettings):
     ENABLE_TRACING: bool = False
     TRACING_ENDPOINT: str = "http://localhost:6006/v1/traces"
     TRACING_SERVICE_NAME: str = "qa-assistant"
+
+    # Authentication (optional — OFF by default)
+    # When ENABLE_AUTH is true, every API endpoint except /api/health
+    # requires a valid JWT bearer token (see src/infrastructure/auth/).
+    ENABLE_AUTH: bool = False
+    SECRET_KEY: str = _DEV_SECRET_KEY
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+    # API key exchanged for a short-lived JWT via POST /api/auth/token
+    # (see src/presentation/api/routes/auth.py). When empty (the
+    # default), the token endpoint rejects every request.
+    AUTH_API_KEY: str = ""
+
+    @field_validator("SECRET_KEY")
+    @classmethod
+    def validate_secret_key(cls, v: str, info: ValidationInfo) -> str:
+        """Refuse the bundled dev secret when authentication is enabled."""
+        if info.data.get("ENABLE_AUTH") and v == _DEV_SECRET_KEY:
+            raise ValueError(
+                "SECRET_KEY must be overridden with a long random value "
+                "when ENABLE_AUTH is true"
+            )
+        return v
+
+    # Rate Limiting (optional — OFF by default)
+    # When ENABLE_RATE_LIMITING is true, each client IP is limited to
+    # RATE_LIMIT_MAX_REQUESTS requests per RATE_LIMIT_WINDOW_SECONDS using
+    # an in-memory sliding window (see src/infrastructure/ratelimit/).
+    ENABLE_RATE_LIMITING: bool = False
+    RATE_LIMIT_MAX_REQUESTS: int = 60
+    RATE_LIMIT_WINDOW_SECONDS: int = 60
+
+    # Guardrails (optional — OFF by default)
+    # When ENABLE_GUARDRAILS is true, the RAG pipeline runs input checks
+    # (PII + prompt injection) before retrieval and output checks
+    # (groundedness + PII leak) after generation. Violations are flagged
+    # but never block the pipeline unless GUARDRAIL_BLOCK_VIOLATIONS is
+    # true (see src/infrastructure/guardrails/).
+    ENABLE_GUARDRAILS: bool = False
+    GUARDRAIL_BLOCK_VIOLATIONS: bool = False
+    GUARDRAIL_GROUNDEDNESS_THRESHOLD: float = 0.2
 
 
 @lru_cache

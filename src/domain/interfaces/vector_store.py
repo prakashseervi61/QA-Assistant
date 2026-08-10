@@ -57,6 +57,19 @@ class VectorStore(ABC):
         """Retrieve chunks by their IDs. Default returns empty."""
         return []
 
+    async def get_by_metadata(
+        self,
+        metadata_filter: dict[str, object],
+        collection_name: str = "documents",
+    ) -> list[Chunk]:
+        """Retrieve chunks whose metadata matches *metadata_filter*.
+
+        Used by incremental ingestion to find existing chunks with a
+        given ``content_hash``. Default returns an empty list; override
+        in subclasses for real metadata lookups.
+        """
+        return []
+
     @abstractmethod
     async def list_documents(self, collection_name: str) -> list[dict]:
         """Return a summary per ingested document in the collection."""

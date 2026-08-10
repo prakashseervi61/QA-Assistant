@@ -28,6 +28,10 @@ tracing = [
     "opentelemetry-sdk>=1.20.0",
     "opentelemetry-exporter-otlp-proto-http>=1.20.0",
 ]
+postgres = [
+    "sqlalchemy>=2.0",
+    "asyncpg>=0.29",
+]
 
 [build-system]
 requires = ["setuptools>=68.0", "wheel"]

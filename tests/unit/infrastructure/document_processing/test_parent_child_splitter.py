@@ -449,6 +449,7 @@ class TestParentChildIngestion:
             settings = MagicMock()
             settings.CHROMA_COLLECTION_NAME = "documents"
             settings.ENABLE_PARENT_CHILD = True
+            settings.ENABLE_INCREMENTAL_INGESTION = False
             mock_settings.return_value = settings
             mock_create_parser.return_value = mock_deps["parser"]
 
@@ -504,6 +505,7 @@ class TestParentChildIngestion:
             settings = MagicMock()
             settings.CHROMA_COLLECTION_NAME = "documents"
             settings.ENABLE_PARENT_CHILD = True
+            settings.ENABLE_INCREMENTAL_INGESTION = False
             mock_settings.return_value = settings
             mock_create_parser.return_value = mock_deps["parser"]
 
@@ -558,6 +560,7 @@ class TestParentChildIngestion:
             settings = MagicMock()
             settings.CHROMA_COLLECTION_NAME = "documents"
             settings.ENABLE_PARENT_CHILD = False
+            settings.ENABLE_INCREMENTAL_INGESTION = False
             mock_settings.return_value = settings
             mock_create_parser.return_value = mock_deps["parser"]
 
@@ -616,6 +619,7 @@ class TestParentChildIngestion:
             settings = MagicMock()
             settings.CHROMA_COLLECTION_NAME = "documents"
             settings.ENABLE_PARENT_CHILD = True
+            settings.ENABLE_INCREMENTAL_INGESTION = False
             mock_settings.return_value = settings
             mock_create_parser.return_value = mock_deps["parser"]
 
@@ -695,6 +699,7 @@ class TestParentChildIngestion:
             settings.CHROMA_COLLECTION_NAME = "documents"
             settings.ENABLE_PARENT_CHILD = False
             settings.ENABLE_CHUNK_ENRICHMENT = True
+            settings.ENABLE_INCREMENTAL_INGESTION = False
             mock_settings.return_value = settings
             mock_create_parser.return_value = mock_deps["parser"]
 

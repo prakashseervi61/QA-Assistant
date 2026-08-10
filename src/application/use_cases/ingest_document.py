@@ -4,6 +4,7 @@ Orchestrates the full ingestion pipeline:
   file bytes → parse → split → embed → store
 """
 
+import hashlib
 import io
 import logging
 from datetime import datetime
@@ -24,6 +25,16 @@ from src.infrastructure.document_processing.semantic_chunker import SemanticChun
 from src.infrastructure.document_processing.text_splitter import TextSplitter
 
 logger = logging.getLogger(__name__)
+
+
+def compute_content_hash(file_bytes: bytes) -> str:
+    """Compute a stable SHA-256 hex digest of raw file bytes.
+
+    Used by incremental ingestion to detect re-uploads of byte-identical
+    files. The digest is stored in every chunk's metadata and compared
+    on subsequent uploads (see ``ENABLE_INCREMENTAL_INGESTION``).
+    """
+    return hashlib.sha256(file_bytes).hexdigest()
 
 
 class DocumentIngestionError(Exception):
@@ -74,16 +85,65 @@ class IngestDocumentUseCase:
         logger.info("Enriched %d chunks with metadata", len(chunks))
         return chunks
 
+    async def _find_duplicate(
+        self, content_hash: str, collection_name: str
+    ) -> tuple[Chunk, str, int] | None:
+        """Find existing chunks whose metadata carries *content_hash*.
+
+        Checks the main collection plus the ``_parent``/``_child``
+        collections used in parent-child mode, so duplicates are
+        detected regardless of the active chunking mode. Missing
+        collections yield no matches (``get_by_metadata`` returns an
+        empty list for them).
+
+        Returns:
+            A tuple of ``(first matching chunk, collection where found,
+            total number of matching chunks)``, or ``None`` when no
+            chunk with the hash exists yet.
+        """
+        first_chunk: Chunk | None = None
+        found_collection = collection_name
+        total_chunks = 0
+
+        for candidate in (
+            collection_name,
+            f"{collection_name}_parent",
+            f"{collection_name}_child",
+        ):
+            matches = await self._vector_store.get_by_metadata(
+                {"content_hash": content_hash}, candidate
+            )
+            # Chunks ingested before ``document_id`` became part of the
+            # metadata (legacy documents) come back with a None
+            # document_id. Skip them so a duplicate result can never
+            # surface a bogus "None" document id.
+            valid_matches = [
+                match for match in matches if match.document_id is not None
+            ]
+            if not valid_matches:
+                continue
+            total_chunks += len(valid_matches)
+            if first_chunk is None:
+                first_chunk = valid_matches[0]
+                found_collection = candidate
+
+        if first_chunk is None:
+            return None
+        return first_chunk, found_collection, total_chunks
+
     async def execute(self, file_content: bytes, filename: str) -> dict:
         """Execute the document ingestion pipeline.
 
         Steps:
             1. Generate a unique document ID.
             2. Validate the file extension against supported types.
-            3. Parse the raw bytes into plain text.
-            4. Split the text into overlapping chunks.
-            5. Generate embedding vectors for every chunk.
-            6. Persist chunks + embeddings in the vector store.
+            3. (Feature-gated) Detect byte-identical re-uploads via
+               SHA-256 content hash and return a duplicate result
+               without parsing/embedding/storing.
+            4. Parse the raw bytes into plain text.
+            5. Split the text into overlapping chunks.
+            6. Generate embedding vectors for every chunk.
+            7. Persist chunks + embeddings in the vector store.
 
         Args:
             file_content: Raw bytes of the uploaded file.
@@ -97,6 +157,11 @@ class IngestDocumentUseCase:
                 - chunk_count  (int)  – number of chunks created
                 - collection   (str)  – vector store collection used
                 - message      (str)  – human-readable summary
+
+            When ``ENABLE_INCREMENTAL_INGESTION`` is on and the content
+            hash already exists, additionally includes:
+                - status   (str)  – ``"duplicate"``
+                - duplicate (bool) – ``True``
 
         Raises:
             DocumentIngestionError: On any failure during the pipeline.
@@ -116,6 +181,36 @@ class IngestDocumentUseCase:
                     f"Cannot determine file type from filename '{filename}'. "
                     "File must have an extension (e.g. .pdf, .docx, .txt)."
                 )
+
+            # --- Incremental ingestion (feature-gated, OFF by default) ---
+            # When enabled, a byte-identical file whose SHA-256 content
+            # hash already exists in the vector store is reported as a
+            # duplicate WITHOUT parsing, embedding, or storing. When
+            # disabled, no hash is computed or stored (zero overhead,
+            # behavior unchanged).
+            content_hash: str | None = None
+            if getattr(settings, "ENABLE_INCREMENTAL_INGESTION", False):
+                content_hash = compute_content_hash(file_content)
+                duplicate = await self._find_duplicate(content_hash, collection_name)
+                if duplicate is not None:
+                    chunk, _found_collection, chunk_count = duplicate
+                    logger.info(
+                        "Duplicate detected for '%s' (content_hash=%s)",
+                        filename,
+                        content_hash,
+                    )
+                    return {
+                        "document_id": str(chunk.document_id),
+                        "filename": filename,
+                        "chunk_count": chunk_count,
+                        "collection": collection_name,
+                        "status": "duplicate",
+                        "message": (
+                            f"Document '{filename}' already ingested "
+                            "(duplicate detected)."
+                        ),
+                        "duplicate": True,
+                    }
 
             parser = create_parser(extension)
 
@@ -137,6 +232,8 @@ class IngestDocumentUseCase:
                 "file_size": len(file_content),
                 "created_at": datetime.now().isoformat(timespec="seconds"),
             }
+            if content_hash is not None:
+                metadata["content_hash"] = content_hash
 
             # --- Parent-child mode: split ONCE, store parents/children ---
             enable_pc = getattr(settings, "ENABLE_PARENT_CHILD", False)
@@ -293,8 +390,7 @@ class IngestDocumentUseCase:
                 "chunk_count": total_chunks,
                 "collection": collection_name,
                 "message": (
-                    f"Successfully ingested '{filename}'. "
-                    f"{total_chunks} chunks stored."
+                    f"Successfully ingested '{filename}'. {total_chunks} chunks stored."
                 ),
             }
 

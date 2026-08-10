@@ -52,6 +52,9 @@ class TestSettingsDefaults:
     def test_chroma_collection_name_default(self):
         assert Settings().CHROMA_COLLECTION_NAME == "documents"
 
+    def test_database_url_default_none(self):
+        assert Settings().DATABASE_URL is None
+
     def test_gemini_model_default(self):
         assert Settings().GEMINI_MODEL == "gemini-2.5-flash"
 
@@ -130,6 +133,50 @@ class TestGetSettingsSingleton:
     def test_get_settings_multiple_calls_same_identity(self):
         instances = [get_settings() for _ in range(10)]
         assert all(inst is instances[0] for inst in instances)
+
+
+class TestAuthAndRateLimitDefaults:
+    """Auth and rate limiting must be OFF by default (zero behavior change)."""
+
+    def test_enable_auth_default_false(self):
+        assert Settings().ENABLE_AUTH is False
+
+    def test_secret_key_default(self):
+        assert Settings().SECRET_KEY == "dev-secret-change-me"
+
+    def test_access_token_expire_minutes_default(self):
+        assert Settings().ACCESS_TOKEN_EXPIRE_MINUTES == 60
+
+    def test_enable_rate_limiting_default_false(self):
+        assert Settings().ENABLE_RATE_LIMITING is False
+
+    def test_rate_limit_defaults(self):
+        s = Settings()
+        assert s.RATE_LIMIT_MAX_REQUESTS == 60
+        assert s.RATE_LIMIT_WINDOW_SECONDS == 60
+
+
+class TestSecretKeyValidation:
+    """The bundled dev SECRET_KEY must not be used when auth is enabled."""
+
+    def test_auth_enabled_with_default_secret_raises(self):
+        """ENABLE_AUTH=True + default SECRET_KEY -> construction fails."""
+        with pytest.raises(ValueError):
+            Settings(ENABLE_AUTH=True)
+
+    def test_auth_enabled_with_custom_secret_ok(self):
+        """ENABLE_AUTH=True + custom SECRET_KEY -> accepted."""
+        s = Settings(ENABLE_AUTH=True, SECRET_KEY="a-long-random-secret")
+        assert s.SECRET_KEY == "a-long-random-secret"
+
+    def test_auth_disabled_with_default_secret_ok(self):
+        """ENABLE_AUTH=False + default SECRET_KEY -> accepted (dev default)."""
+        s = Settings(ENABLE_AUTH=False)
+        assert s.SECRET_KEY == "dev-secret-change-me"
+
+    def test_auth_api_key_default_empty(self):
+        """AUTH_API_KEY defaults to empty -> token endpoint closed."""
+        assert Settings().AUTH_API_KEY == ""
 
 
 class TestSettingsValidation:

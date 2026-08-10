@@ -136,14 +136,24 @@ class QueryDocumentUseCase:
                 await self._conversation_repo.save_conversation(conversation)
 
             full_answer_parts: list[str] = []
+            stream_guardrails: dict[str, object] | None = None
             try:
-                async for chunk in self._rag_engine.query_stream(
+                async for event in self._rag_engine.query_stream(
                     question=question,
                     top_k=top_k,
                     metadata_filter=metadata_filter,
                 ):
-                    full_answer_parts.append(chunk)
-                    yield {"type": "chunk", "content": chunk}
+                    if isinstance(event, dict):
+                        event_type = event.get("type")
+                        if event_type == "blocked":
+                            yield event
+                            return
+                        if event_type == "done":
+                            stream_guardrails = event.get("guardrails")
+                            continue
+                    else:
+                        full_answer_parts.append(event)
+                        yield {"type": "chunk", "content": event}
             except LLMQuotaExceededError:
                 raise
             except Exception as exc:
@@ -177,7 +187,7 @@ class QueryDocumentUseCase:
             )
             await self._conversation_repo.save_conversation(conversation)
 
-            yield {
+            done_event: dict[str, object] = {
                 "type": "done",
                 "answer": full_answer,
                 "sources": sources,
@@ -185,6 +195,9 @@ class QueryDocumentUseCase:
                 "conversation_id": resolved_id,
                 "message_id": str(assistant_message.id),
             }
+            if stream_guardrails is not None:
+                done_event["guardrails"] = stream_guardrails
+            yield done_event
 
         except (ConversationNotFoundError, ValueError, QueryDocumentError):
             raise

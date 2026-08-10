@@ -45,10 +45,23 @@ class RAGEngine:
         llm_provider:      LLM provider for text generation.
         embedding_provider: Embedding provider for query embedding.
         vector_store:      Vector store for similarity search.
+        reranker:          Optional reranker applied after retrieval.
+        query_rewriter:    Optional query rewriter for multi-query retrieval.
+        tracer:            Optional OpenTelemetry-style tracer.
+        guardrail_manager: Optional guardrail manager. When provided, the
+                           user question is checked (PII + prompt injection)
+                           before retrieval and the generated answer is
+                           checked (groundedness + PII leak) afterwards;
+                           results are merged into the response metadata
+                           under ``"guardrails"`` (streaming mode attaches
+                           them to the final ``done`` event). When None
+                           (default), the pipeline behaves exactly as before.
     """
 
     DEFAULT_TOP_K = 5
     MAX_CONTEXT_CHUNKS = 10
+
+    BLOCKED_MESSAGE = "Your request was blocked by safety filters."
 
     NO_DOCUMENTS_MESSAGE = (
         "No documents have been uploaded yet. Please upload a PDF, DOCX, or TXT "
@@ -84,6 +97,7 @@ class RAGEngine:
         reranker: Reranker | None = None,
         query_rewriter: QueryRewriter | None = None,
         tracer: object | None = None,
+        guardrail_manager: object | None = None,
     ) -> None:
         self._llm = llm_provider
         self._embedding = embedding_provider
@@ -91,6 +105,7 @@ class RAGEngine:
         self._reranker = reranker
         self._query_rewriter = query_rewriter
         self._tracer = tracer
+        self._guardrail_manager = guardrail_manager
         self._settings = get_settings()
 
     def _span(self, name: str) -> object:
@@ -151,6 +166,23 @@ class RAGEngine:
         k = top_k or self.DEFAULT_TOP_K
 
         try:
+            # 0. Guardrails: input check (pre-retrieval, optional). Never
+            # crashes the pipeline — on any failure we log and pass through.
+            guardrail_metadata: dict[str, object] | None = None
+            if self._guardrail_manager is not None:
+                input_check = self._check_input(question)
+                guardrail_metadata = {"input": input_check, "output": {}}
+                if input_check.get("blocked", False):
+                    logger.info("Query blocked by input guardrails")
+                    return self._finalize(
+                        {
+                            "answer": self.BLOCKED_MESSAGE,
+                            "sources": [],
+                            "confidence": 0.0,
+                        },
+                        guardrail_metadata,
+                    )
+
             # 1. Embed the question
             logger.debug("Embedding question (len=%d)", len(question))
 
@@ -259,7 +291,8 @@ class RAGEngine:
                     )
 
             if not chunks:
-                return await self._empty_retrieval_response(collection)
+                result = await self._empty_retrieval_response(collection)
+                return self._finalize(result, guardrail_metadata)
 
             # Structured output path (optional, feature-flagged): ask the LLM
             # for a JSON answer with citations instead of free-form text.
@@ -270,7 +303,7 @@ class RAGEngine:
                         question=question,
                         chunks=chunks,
                     )
-                    return {
+                    result = {
                         "answer": structured.answer,
                         "citations": [
                             {
@@ -284,6 +317,9 @@ class RAGEngine:
                         "confidence": structured.confidence,
                         "metadata": {"mode": "structured"},
                     }
+                    return self._finalize(
+                        result, guardrail_metadata, structured.answer, chunks
+                    )
                 except StructuredOutputError as exc:
                     logger.warning(
                         "Structured output failed (%s); falling back to default",
@@ -304,11 +340,12 @@ class RAGEngine:
             sources = self._format_sources(chunks)
             confidence = self._compute_confidence(chunks)
 
-            return {
+            result = {
                 "answer": answer,
                 "sources": sources,
                 "confidence": confidence,
             }
+            return self._finalize(result, guardrail_metadata, answer, chunks)
 
         except RAGQueryError:
             raise
@@ -323,7 +360,7 @@ class RAGEngine:
         question: str,
         top_k: int | None = None,
         metadata_filter: dict[str, object] | None = None,
-    ) -> AsyncIterator[str]:
+    ) -> AsyncIterator[str | dict[str, object]]:
         """Process a query with streaming response.
 
         Note:
@@ -333,12 +370,28 @@ class RAGEngine:
             citations should use :meth:`query` with
             ``use_structured_output=True``.
 
+        Note:
+            When a guardrail manager is wired in, the user question is
+            checked (PII + prompt injection) before retrieval and the
+            generated answer is checked (groundedness + PII leak) after
+            generation. A blocked question ends the stream with a
+            ``{"type": "blocked", ...}`` event before any LLM call; a
+            successful stream ends with a ``{"type": "done", ...}`` event
+            that carries the guardrail results. Without a manager the
+            generator yields only raw answer text chunks, exactly as
+            before.
+
         Args:
             question: The user's natural-language question.
             top_k:    Number of context chunks to retrieve.
 
         Yields:
-            Chunks of the generated answer as they arrive.
+            Raw answer text chunks as they arrive. When a guardrail manager
+            is wired in, the stream additionally ends with a
+            ``{"type": "done", "answer": ..., "guardrails": {"input": ...,
+            "output": ...}}`` event, or — when the input check blocks the
+            question — a ``{"type": "blocked", "message": ...,
+            "reason": ...}`` event with no LLM call.
 
         Raises:
             RAGQueryError: On any failure during the pipeline.
@@ -346,6 +399,18 @@ class RAGEngine:
         k = top_k or self.DEFAULT_TOP_K
 
         try:
+            # 0. Guardrails: input check (pre-retrieval, optional). Never
+            # crashes the pipeline — on any failure we log and pass through.
+            input_check = self._check_input(question)
+            if input_check.get("blocked", False):
+                logger.info("Stream query blocked by input guardrails")
+                yield {
+                    "type": "blocked",
+                    "message": self.BLOCKED_MESSAGE,
+                    "reason": input_check,
+                }
+                return
+
             # 1. Embed the question
             base_collection = self._settings.CHROMA_COLLECTION_NAME
             use_parent_child = getattr(self._settings, "ENABLE_PARENT_CHILD", False)
@@ -453,14 +518,32 @@ class RAGEngine:
                     count,
                 )
                 yield message
+                if self._guardrail_manager is not None:
+                    yield {
+                        "type": "done",
+                        "answer": message,
+                        "guardrails": {"input": input_check, "output": {}},
+                    }
                 return
 
             # 3. Build prompt with context
             prompt = self._build_prompt(question, chunks)
 
-            # 4. Stream answer
+            # 4. Stream answer (accumulated for the post-generation check)
+            answer_parts: list[str] = []
             async for chunk in self._llm.generate_stream(prompt):
+                answer_parts.append(chunk)
                 yield chunk
+
+            # 5. Guardrails: output check (post-generation) + done event.
+            if self._guardrail_manager is not None:
+                answer = "".join(answer_parts)
+                output_check = self._check_output(answer, chunks)
+                yield {
+                    "type": "done",
+                    "answer": answer,
+                    "guardrails": {"input": input_check, "output": output_check},
+                }
 
         except RAGQueryError:
             raise
@@ -636,6 +719,84 @@ class RAGEngine:
             "sources": [],
             "confidence": 0.0,
         }
+
+    # ------------------------------------------------------------------
+    # Guardrail helpers (optional — pass-through when no manager is wired)
+    # ------------------------------------------------------------------
+
+    def _check_input(self, question: str) -> dict[str, object]:
+        """Run the input guardrail check without ever raising.
+
+        Guardrails are best-effort: on any failure the check is logged and
+        treated as a clean pass-through so the pipeline keeps running.
+
+        Args:
+            question: The user question to check.
+
+        Returns:
+            ``{"flagged": bool, "issues": list, "blocked": bool}``.
+        """
+        if self._guardrail_manager is None:
+            return {"flagged": False, "issues": [], "blocked": False}
+        try:
+            return self._guardrail_manager.check_input(question)
+        except Exception as exc:
+            logger.warning("Input guardrail check failed: %s", exc)
+            return {"flagged": False, "issues": [], "blocked": False}
+
+    def _check_output(self, answer: str, chunks: list) -> dict[str, object]:
+        """Run the output guardrail check without ever raising.
+
+        Args:
+            answer: The generated answer text.
+            chunks: Retrieved chunks used as grounding context.
+
+        Returns:
+            ``{"flagged": bool, "issues": list, "groundedness": float}``.
+        """
+        if self._guardrail_manager is None:
+            return {"flagged": False, "issues": [], "groundedness": 1.0}
+        try:
+            contexts = [chunk.content for chunk in chunks]
+            return self._guardrail_manager.check_output(answer, contexts)
+        except Exception as exc:
+            logger.warning("Output guardrail check failed: %s", exc)
+            return {"flagged": False, "issues": [], "groundedness": 1.0}
+
+    def _finalize(
+        self,
+        result: dict,
+        guardrail_metadata: dict[str, object] | None,
+        answer: str | None = None,
+        chunks: list | None = None,
+    ) -> dict:
+        """Merge guardrail results into the response metadata.
+
+        When guardrails are inactive (``guardrail_metadata`` is None) the
+        result is returned untouched, preserving the previous pipeline
+        behaviour exactly. When active, the output check runs if an answer
+        and chunks are available, and the results are stored under
+        ``metadata["guardrails"]`` without dropping existing metadata keys
+        (e.g. the structured-output ``"mode"`` key).
+
+        Args:
+            result:             The pipeline result dict.
+            guardrail_metadata: In-progress guardrail metadata, or None.
+            answer:             Generated answer; output check runs when set.
+            chunks:             Retrieved chunks used as output-check context.
+
+        Returns:
+            ``result`` with guardrail metadata merged in when active.
+        """
+        if guardrail_metadata is None:
+            return result
+        if answer is not None and chunks is not None:
+            output_check = self._check_output(answer, chunks)
+            guardrail_metadata["output"] = output_check
+        metadata = dict(result.get("metadata") or {})
+        metadata["guardrails"] = guardrail_metadata
+        result["metadata"] = metadata
+        return result
 
     def _build_prompt(self, question: str, chunks: list) -> str:
         """Build the RAG prompt with retrieved context and question.
