@@ -21,7 +21,9 @@ from src.infrastructure.ratelimit.limiter import rate_limit_dependency
 from src.infrastructure.repositories.conversation_repository_factory import (
     create_conversation_repository,
 )
-from src.infrastructure.vector_store.chroma_store import ChromaStore
+from src.infrastructure.vector_store.vector_store_factory import (
+    create_vector_store,
+)
 from src.presentation.api.routes import auth, chat, documents, health, usage
 
 logger = logging.getLogger(__name__)
@@ -38,8 +40,9 @@ PROTECTED_ROUTER_DEPENDENCIES = [
 def _wire_dependencies(settings: Settings) -> TokenTracker:
     """Build shared infrastructure and inject it into the routers.
 
-    Creates a single LLM provider, embedding provider, and ChromaStore so
-    that chat and document routes operate on the same instances.
+    Creates a single LLM provider, embedding provider, and vector store
+    (ChromaDB by default, Qdrant when configured) so that chat and
+    document routes operate on the same instances.
 
     Returns:
         The shared :class:`TokenTracker` used to record LLM usage.
@@ -49,7 +52,7 @@ def _wire_dependencies(settings: Settings) -> TokenTracker:
     if settings.ENABLE_USAGE_TRACKING:
         llm_provider = TrackingLLMProvider(llm_provider, tracker)
     embedding_provider = EmbeddingProviderFactory.create(settings)
-    vector_store = ChromaStore(persist_directory=settings.CHROMA_PERSIST_DIR)
+    vector_store = create_vector_store()
 
     from src.infrastructure.rerankers.factory import create_reranker
 
@@ -91,9 +94,10 @@ def _wire_dependencies(settings: Settings) -> TokenTracker:
     )
 
     logger.info(
-        "Wired application dependencies: llm=%s embeddings=%s",
+        "Wired application dependencies: llm=%s embeddings=%s vector_store=%s",
         settings.LLM_PROVIDER,
         settings.EMBEDDING_PROVIDER,
+        settings.VECTOR_STORE_BACKEND,
     )
     return tracker
 

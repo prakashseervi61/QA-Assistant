@@ -5,6 +5,7 @@ Orchestrates the full RAG pipeline:
 """
 
 import asyncio
+import hashlib
 import logging
 from collections.abc import AsyncIterator
 from contextlib import nullcontext
@@ -16,6 +17,11 @@ from src.domain.interfaces.query_rewriter import QueryRewriter
 from src.domain.interfaces.reranker import Reranker
 from src.domain.interfaces.vector_store import VectorStore
 from src.infrastructure.config.settings import get_settings
+from src.infrastructure.llm.prompt_registry import (
+    DEFAULT_PROMPT_VERSION,
+    PROMPT_VERSIONS,
+    create_prompt_registry,
+)
 from src.infrastructure.llm.structured_output import (
     StructuredOutputError,
     generate_structured_answer,
@@ -73,21 +79,11 @@ class RAGEngine:
         "Try rephrasing your question or uploading more documents."
     )
 
-    PROMPT_TEMPLATE = (
-        "You are a helpful assistant that answers questions "
-        "based on the provided context.\n\n"
-        "Context from documents:\n{context}\n\n"
-        "Question: {question}\n\n"
-        "Instructions:\n"
-        "- Answer the question based on the context provided\n"
-        "- If the context doesn't contain enough information, "
-        "say so clearly\n"
-        "- Cite your sources when possible by referencing the "
-        "document names\n"
-        "- Be concise and accurate\n"
-        "- If multiple sources provide different information, "
-        "mention both perspectives"
-    )
+    # Backward-compatible alias for the original system prompt. The
+    # versioned templates live in
+    # ``src/infrastructure/llm/prompt_registry.py``; ``v1`` is byte-
+    # identical to the historical prompt so default behaviour is unchanged.
+    PROMPT_TEMPLATE = PROMPT_VERSIONS["v1"]
 
     def __init__(
         self,
@@ -107,6 +103,7 @@ class RAGEngine:
         self._tracer = tracer
         self._guardrail_manager = guardrail_manager
         self._settings = get_settings()
+        self._prompt_registry = create_prompt_registry(self._settings)
 
     def _span(self, name: str) -> object:
         """Return a span context manager when tracing is enabled, else a no-op.
@@ -166,6 +163,11 @@ class RAGEngine:
         k = top_k or self.DEFAULT_TOP_K
 
         try:
+            # 0. Prompt version selection (settings + optional A/B knob).
+            # Purely deterministic from the question, so it can be
+            # computed once and attached to every finalized response.
+            selected_version = self._select_prompt_version(question)
+
             # 0. Guardrails: input check (pre-retrieval, optional). Never
             # crashes the pipeline — on any failure we log and pass through.
             guardrail_metadata: dict[str, object] | None = None
@@ -181,6 +183,7 @@ class RAGEngine:
                             "confidence": 0.0,
                         },
                         guardrail_metadata,
+                        prompt_version=selected_version,
                     )
 
             # 1. Embed the question
@@ -292,7 +295,9 @@ class RAGEngine:
 
             if not chunks:
                 result = await self._empty_retrieval_response(collection)
-                return self._finalize(result, guardrail_metadata)
+                return self._finalize(
+                    result, guardrail_metadata, prompt_version=selected_version
+                )
 
             # Structured output path (optional, feature-flagged): ask the LLM
             # for a JSON answer with citations instead of free-form text.
@@ -318,7 +323,11 @@ class RAGEngine:
                         "metadata": {"mode": "structured"},
                     }
                     return self._finalize(
-                        result, guardrail_metadata, structured.answer, chunks
+                        result,
+                        guardrail_metadata,
+                        structured.answer,
+                        chunks,
+                        selected_version,
                     )
                 except StructuredOutputError as exc:
                     logger.warning(
@@ -328,7 +337,7 @@ class RAGEngine:
                     # fall through to the normal generation path
 
             # 3. Build prompt with context
-            prompt = self._build_prompt(question, chunks)
+            prompt = self._build_prompt(question, chunks, selected_version)
 
             # 4. Generate answer
             logger.debug("Generating answer via %s", self._llm.get_model_name())
@@ -345,7 +354,9 @@ class RAGEngine:
                 "sources": sources,
                 "confidence": confidence,
             }
-            return self._finalize(result, guardrail_metadata, answer, chunks)
+            return self._finalize(
+                result, guardrail_metadata, answer, chunks, selected_version
+            )
 
         except RAGQueryError:
             raise
@@ -399,6 +410,9 @@ class RAGEngine:
         k = top_k or self.DEFAULT_TOP_K
 
         try:
+            # 0. Prompt version selection (settings + optional A/B knob).
+            selected_version = self._select_prompt_version(question)
+
             # 0. Guardrails: input check (pre-retrieval, optional). Never
             # crashes the pipeline — on any failure we log and pass through.
             input_check = self._check_input(question)
@@ -523,11 +537,12 @@ class RAGEngine:
                         "type": "done",
                         "answer": message,
                         "guardrails": {"input": input_check, "output": {}},
+                        "prompt_version": selected_version,
                     }
                 return
 
             # 3. Build prompt with context
-            prompt = self._build_prompt(question, chunks)
+            prompt = self._build_prompt(question, chunks, selected_version)
 
             # 4. Stream answer (accumulated for the post-generation check)
             answer_parts: list[str] = []
@@ -543,6 +558,7 @@ class RAGEngine:
                     "type": "done",
                     "answer": answer,
                     "guardrails": {"input": input_check, "output": output_check},
+                    "prompt_version": selected_version,
                 }
 
         except RAGQueryError:
@@ -769,41 +785,104 @@ class RAGEngine:
         guardrail_metadata: dict[str, object] | None,
         answer: str | None = None,
         chunks: list | None = None,
+        prompt_version: str | None = None,
     ) -> dict:
-        """Merge guardrail results into the response metadata.
+        """Merge guardrail results and the prompt version into the metadata.
 
-        When guardrails are inactive (``guardrail_metadata`` is None) the
+        When neither guardrails nor a prompt version is supplied the
         result is returned untouched, preserving the previous pipeline
-        behaviour exactly. When active, the output check runs if an answer
-        and chunks are available, and the results are stored under
-        ``metadata["guardrails"]`` without dropping existing metadata keys
-        (e.g. the structured-output ``"mode"`` key).
+        behaviour exactly. When supplied, the output check runs if an
+        answer and chunks are available, and the results are stored under
+        ``metadata["guardrails"]`` and ``metadata["prompt_version"]``
+        without dropping existing metadata keys (e.g. the structured-
+        output ``"mode"`` key).
 
         Args:
             result:             The pipeline result dict.
             guardrail_metadata: In-progress guardrail metadata, or None.
             answer:             Generated answer; output check runs when set.
             chunks:             Retrieved chunks used as output-check context.
+            prompt_version:     Selected system-prompt version id, or None.
 
         Returns:
-            ``result`` with guardrail metadata merged in when active.
+            ``result`` with guardrail results / prompt version merged in
+            when supplied.
         """
-        if guardrail_metadata is None:
+        if guardrail_metadata is None and prompt_version is None:
             return result
-        if answer is not None and chunks is not None:
+        if (
+            guardrail_metadata is not None
+            and answer is not None
+            and chunks is not None
+        ):
             output_check = self._check_output(answer, chunks)
             guardrail_metadata["output"] = output_check
         metadata = dict(result.get("metadata") or {})
-        metadata["guardrails"] = guardrail_metadata
+        if prompt_version is not None:
+            metadata["prompt_version"] = prompt_version
+        if guardrail_metadata is not None:
+            metadata["guardrails"] = guardrail_metadata
         result["metadata"] = metadata
         return result
 
-    def _build_prompt(self, question: str, chunks: list) -> str:
-        """Build the RAG prompt with retrieved context and question.
+    def _select_prompt_version(self, question: str) -> str:
+        """Pick the system-prompt version for a question from settings.
+
+        Returns ``PROMPT_VERSION`` by default. When
+        ``ENABLE_PROMPT_AB_TESTING`` is on, the question is hashed into a
+        stable [0.0, 1.0) bucket; buckets below ``PROMPT_AB_PERCENTAGE``
+        are served ``PROMPT_AB_VERSION`` instead. The same question always
+        selects the same version, so A/B cohorts are stable per query.
 
         Args:
             question: The user's question.
-            chunks:   Retrieved text chunks for context.
+
+        Returns:
+            The selected prompt version id (e.g. ``"v1"``).
+        """
+        settings = self._settings
+        if getattr(settings, "ENABLE_PROMPT_AB_TESTING", False) is True:
+            percentage = getattr(settings, "PROMPT_AB_PERCENTAGE", 0.5)
+            if (
+                isinstance(percentage, (int, float))
+                and float(percentage) > 0.0
+                and self._ab_bucket(question) < float(percentage)
+            ):
+                variant = getattr(settings, "PROMPT_AB_VERSION", "v2")
+                if isinstance(variant, str) and variant:
+                    return variant
+        version = getattr(settings, "PROMPT_VERSION", DEFAULT_PROMPT_VERSION)
+        if not isinstance(version, str) or not version:
+            version = DEFAULT_PROMPT_VERSION
+        return version
+
+    @staticmethod
+    def _ab_bucket(question: str) -> float:
+        """Map a question to a stable bucket in [0.0, 1.0).
+
+        Uses the first 8 bytes of the SHA-256 digest of the question as a
+        big-endian integer, normalized by 2**64. Deterministic: the same
+        question always lands in the same bucket.
+
+        Args:
+            question: The user's question.
+
+        Returns:
+            A float in [0.0, 1.0).
+        """
+        digest = hashlib.sha256(question.encode("utf-8")).digest()
+        return int.from_bytes(digest[:8], "big") / float(2**64)
+
+    def _build_prompt(
+        self, question: str, chunks: list, prompt_version: str | None = None
+    ) -> str:
+        """Build the RAG prompt with retrieved context and question.
+
+        Args:
+            question:       The user's question.
+            chunks:         Retrieved text chunks for context.
+            prompt_version: Version id whose template to use; when None
+                            the version is selected from settings.
 
         Returns:
             The formatted prompt string.
@@ -822,7 +901,10 @@ class RAGEngine:
         if not context:
             context = "No relevant context found in the documents."
 
-        return self.PROMPT_TEMPLATE.format(
+        if prompt_version is None:
+            prompt_version = self._select_prompt_version(question)
+        template = self._prompt_registry.get_prompt(prompt_version)
+        return template.format(
             context=context,
             question=question,
         )
