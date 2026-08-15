@@ -207,19 +207,13 @@ class RAGEngine:
                     num_variants = getattr(
                         self._settings, "QUERY_REWRITING_VARIANTS", 3
                     )
-                    queries = await rewriter.rewrite(
-                        question, num_queries=num_variants
-                    )
-                    logger.debug(
-                        "Multi-query retrieval: %d variants", len(queries)
-                    )
+                    queries = await rewriter.rewrite(question, num_queries=num_variants)
+                    logger.debug("Multi-query retrieval: %d variants", len(queries))
 
                     all_result_lists: list[list] = []
                     for q in queries:
                         q_emb = await self._embedding.embed(q)
-                        if getattr(
-                            self._settings, "ENABLE_HYBRID_SEARCH", False
-                        ):
+                        if getattr(self._settings, "ENABLE_HYBRID_SEARCH", False):
                             q_chunks = await self._vector_store.hybrid_search(
                                 query_embedding=q_emb,
                                 query_text=q,
@@ -228,13 +222,11 @@ class RAGEngine:
                                 metadata_filter=metadata_filter,
                             )
                         else:
-                            q_chunks = (
-                                await self._vector_store.similarity_search(
-                                    query_embedding=q_emb,
-                                    k=k,
-                                    collection_name=collection,
-                                    metadata_filter=metadata_filter,
-                                )
+                            q_chunks = await self._vector_store.similarity_search(
+                                query_embedding=q_emb,
+                                k=k,
+                                collection_name=collection,
+                                metadata_filter=metadata_filter,
                             )
                         all_result_lists.append(q_chunks)
 
@@ -258,9 +250,7 @@ class RAGEngine:
             if chunks is None:
                 with self._span("retrieval"):
                     query_embedding = await self._embedding.embed(question)
-                    if getattr(
-                        self._settings, "ENABLE_HYBRID_SEARCH", False
-                    ):
+                    if getattr(self._settings, "ENABLE_HYBRID_SEARCH", False):
                         chunks = await self._vector_store.hybrid_search(
                             query_embedding=query_embedding,
                             query_text=question,
@@ -443,16 +433,12 @@ class RAGEngine:
                     num_variants = getattr(
                         self._settings, "QUERY_REWRITING_VARIANTS", 3
                     )
-                    queries = await rewriter.rewrite(
-                        question, num_queries=num_variants
-                    )
+                    queries = await rewriter.rewrite(question, num_queries=num_variants)
 
                     all_result_lists: list[list] = []
                     for q in queries:
                         q_emb = await self._embedding.embed(q)
-                        if getattr(
-                            self._settings, "ENABLE_HYBRID_SEARCH", False
-                        ):
+                        if getattr(self._settings, "ENABLE_HYBRID_SEARCH", False):
                             q_chunks = await self._vector_store.hybrid_search(
                                 query_embedding=q_emb,
                                 query_text=q,
@@ -461,13 +447,11 @@ class RAGEngine:
                                 metadata_filter=metadata_filter,
                             )
                         else:
-                            q_chunks = (
-                                await self._vector_store.similarity_search(
-                                    query_embedding=q_emb,
-                                    k=k,
-                                    collection_name=collection,
-                                    metadata_filter=metadata_filter,
-                                )
+                            q_chunks = await self._vector_store.similarity_search(
+                                query_embedding=q_emb,
+                                k=k,
+                                collection_name=collection,
+                                metadata_filter=metadata_filter,
                             )
                         all_result_lists.append(q_chunks)
 
@@ -485,9 +469,7 @@ class RAGEngine:
 
             if chunks is None:
                 query_embedding = await self._embedding.embed(question)
-                if getattr(
-                    self._settings, "ENABLE_HYBRID_SEARCH", False
-                ):
+                if getattr(self._settings, "ENABLE_HYBRID_SEARCH", False):
                     chunks = await self._vector_store.hybrid_search(
                         query_embedding=query_embedding,
                         query_text=question,
@@ -688,9 +670,7 @@ class RAGEngine:
                     chunk_map[chunk_id] = chunk
                 else:
                     try:
-                        previous_score = float(
-                            previous.metadata.get("score", 0.0)
-                        )
+                        previous_score = float(previous.metadata.get("score", 0.0))
                     except (TypeError, ValueError):
                         previous_score = 0.0
                     if current_score > previous_score:
@@ -808,11 +788,7 @@ class RAGEngine:
         """
         if guardrail_metadata is None and prompt_version is None:
             return result
-        if (
-            guardrail_metadata is not None
-            and answer is not None
-            and chunks is not None
-        ):
+        if guardrail_metadata is not None and answer is not None and chunks is not None:
             output_check = self._check_output(answer, chunks)
             guardrail_metadata["output"] = output_check
         metadata = dict(result.get("metadata") or {})

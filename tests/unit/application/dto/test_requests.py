@@ -6,9 +6,7 @@ from src.application.dto.requests import QueryRequest
 
 
 def test_valid_flat_filter():
-    req = QueryRequest(
-        question="test", metadata_filter={"document_id": "abc"}
-    )
+    req = QueryRequest(question="test", metadata_filter={"document_id": "abc"})
     assert req.metadata_filter == {"document_id": "abc"}
 
 
@@ -19,9 +17,7 @@ def test_none_filter_allowed():
 
 def test_rejects_nested_dict():
     with pytest.raises(Exception):
-        QueryRequest(
-            question="test", metadata_filter={"key": {"nested": "value"}}
-        )
+        QueryRequest(question="test", metadata_filter={"key": {"nested": "value"}})
 
 
 def test_rejects_list_value():

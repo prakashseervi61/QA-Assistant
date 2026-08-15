@@ -290,9 +290,7 @@ class TestParentRetrieval:
         assert len(parent_chunks) == 2
 
     @pytest.mark.asyncio
-    async def test_expand_to_parents_handles_missing_parents(
-        self, mock_vector_store
-    ):
+    async def test_expand_to_parents_handles_missing_parents(self, mock_vector_store):
         """Gracefully handles parents that don't exist in the store."""
         from src.application.services.rag_engine import RAGEngine
 
@@ -402,9 +400,7 @@ class TestParentChildIngestion:
         }
 
     @pytest.mark.asyncio
-    async def test_ingest_stores_both_parent_and_child_collections(
-        self, mock_deps
-    ):
+    async def test_ingest_stores_both_parent_and_child_collections(self, mock_deps):
         """IngestDocumentUseCase stores to both parent and child collections."""
         mock_deps["parser"].parse = AsyncMock(return_value="A" * 500)
 
@@ -461,9 +457,7 @@ class TestParentChildIngestion:
         assert mock_deps["vector_store"].add_documents.call_count >= 1
 
     @pytest.mark.asyncio
-    async def test_ingest_stores_parent_and_child_separately(
-        self, mock_deps
-    ):
+    async def test_ingest_stores_parent_and_child_separately(self, mock_deps):
         """Parent and child chunks are stored in separate collections."""
         from src.application.use_cases.ingest_document import (
             IngestDocumentUseCase,
@@ -512,9 +506,7 @@ class TestParentChildIngestion:
             await uc.execute(b"fake", "test.pdf")
 
         # Check the collection names used in add_documents calls
-        call_args_list = (
-            mock_deps["vector_store"].add_documents.call_args_list
-        )
+        call_args_list = mock_deps["vector_store"].add_documents.call_args_list
         collection_names = [call.args[1] for call in call_args_list]
         assert "documents_parent" in collection_names
         assert "documents_child" in collection_names
@@ -635,14 +627,10 @@ class TestParentChildIngestion:
         assert "documents" not in collection_names
 
         stored_parents = [
-            call.args[0]
-            for call in calls
-            if call.args[1] == "documents_parent"
+            call.args[0] for call in calls if call.args[1] == "documents_parent"
         ][0]
         stored_children = [
-            call.args[0]
-            for call in calls
-            if call.args[1] == "documents_child"
+            call.args[0] for call in calls if call.args[1] == "documents_child"
         ][0]
         parent_ids = {str(p.id) for p in stored_parents}
         for child in stored_children:

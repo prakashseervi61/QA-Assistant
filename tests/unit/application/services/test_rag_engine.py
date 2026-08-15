@@ -549,9 +549,7 @@ class TestRAGEngineQueryStream:
         rag_engine._settings.ENABLE_HYBRID_SEARCH = False
 
         mock_rewriter = AsyncMock()
-        mock_rewriter.rewrite = AsyncMock(
-            return_value=["original", "variant1"]
-        )
+        mock_rewriter.rewrite = AsyncMock(return_value=["original", "variant1"])
         rag_engine._query_rewriter = mock_rewriter
 
         mock_vector_store.similarity_search = AsyncMock(return_value=sample_chunks)

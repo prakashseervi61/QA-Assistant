@@ -26,9 +26,7 @@ class TestVectorStoreHybridSearch:
         method = getattr(VectorStore, "hybrid_search")
         assert not getattr(method, "__isabstractmethod__", False)
 
-    @patch(
-        "src.infrastructure.vector_store.chroma_store.chromadb.PersistentClient"
-    )
+    @patch("src.infrastructure.vector_store.chroma_store.chromadb.PersistentClient")
     def test_chroma_hybrid_search_with_both_params(self, mock_client_cls):
         """hybrid_search passes both query_texts and query_embeddings."""
         from src.infrastructure.vector_store.chroma_store import ChromaStore
@@ -39,9 +37,7 @@ class TestVectorStoreHybridSearch:
             "ids": [[_UUID1]],
             "documents": [["doc1"]],
             "embeddings": [[[0.1, 0.2]]],
-            "metadatas": [
-                [{"document_id": _DOC_UUID, "chunk_index": 0}]
-            ],
+            "metadatas": [[{"document_id": _DOC_UUID, "chunk_index": 0}]],
             "distances": [[0.3]],
         }
         mock_client = MagicMock()
@@ -63,9 +59,7 @@ class TestVectorStoreHybridSearch:
         assert call_kwargs["query_texts"] == ["test query"]
         assert len(result) == 1
 
-    @patch(
-        "src.infrastructure.vector_store.chroma_store.chromadb.PersistentClient"
-    )
+    @patch("src.infrastructure.vector_store.chroma_store.chromadb.PersistentClient")
     def test_chroma_hybrid_search_empty_collection(self, mock_client_cls):
         """hybrid_search returns [] for empty collection."""
         from src.infrastructure.vector_store.chroma_store import ChromaStore
@@ -82,9 +76,7 @@ class TestVectorStoreHybridSearch:
         )
         assert result == []
 
-    @patch(
-        "src.infrastructure.vector_store.chroma_store.chromadb.PersistentClient"
-    )
+    @patch("src.infrastructure.vector_store.chroma_store.chromadb.PersistentClient")
     def test_chroma_hybrid_search_falls_back_to_dense(self, mock_client_cls):
         """When query_text is empty, falls back to pure dense search."""
         from src.infrastructure.vector_store.chroma_store import ChromaStore
@@ -95,9 +87,7 @@ class TestVectorStoreHybridSearch:
             "ids": [[_UUID1]],
             "documents": [["d"]],
             "embeddings": [[[0.1]]],
-            "metadatas": [
-                [{"document_id": _DOC_UUID, "chunk_index": 0}]
-            ],
+            "metadatas": [[{"document_id": _DOC_UUID, "chunk_index": 0}]],
             "distances": [[0.2]],
         }
         mock_client = MagicMock()
@@ -113,12 +103,8 @@ class TestVectorStoreHybridSearch:
         assert "query_texts" not in call_kwargs
         assert "query_embeddings" in call_kwargs
 
-    @patch(
-        "src.infrastructure.vector_store.chroma_store.chromadb.PersistentClient"
-    )
-    def test_chroma_hybrid_search_whitespace_only_falls_back(
-        self, mock_client_cls
-    ):
+    @patch("src.infrastructure.vector_store.chroma_store.chromadb.PersistentClient")
+    def test_chroma_hybrid_search_whitespace_only_falls_back(self, mock_client_cls):
         """When query_text is whitespace only, falls back to dense."""
         from src.infrastructure.vector_store.chroma_store import ChromaStore
 
@@ -128,9 +114,7 @@ class TestVectorStoreHybridSearch:
             "ids": [[_UUID1]],
             "documents": [["d"]],
             "embeddings": [[[0.1]]],
-            "metadatas": [
-                [{"document_id": _DOC_UUID, "chunk_index": 0}]
-            ],
+            "metadatas": [[{"document_id": _DOC_UUID, "chunk_index": 0}]],
             "distances": [[0.1]],
         }
         mock_client = MagicMock()
@@ -144,9 +128,7 @@ class TestVectorStoreHybridSearch:
         call_kwargs = mock_collection.query.call_args[1]
         assert "query_texts" not in call_kwargs
 
-    @patch(
-        "src.infrastructure.vector_store.chroma_store.chromadb.PersistentClient"
-    )
+    @patch("src.infrastructure.vector_store.chroma_store.chromadb.PersistentClient")
     def test_chroma_hybrid_search_missing_collection_returns_empty(
         self, mock_client_cls
     ):
@@ -163,9 +145,7 @@ class TestVectorStoreHybridSearch:
         )
         assert result == []
 
-    @patch(
-        "src.infrastructure.vector_store.chroma_store.chromadb.PersistentClient"
-    )
+    @patch("src.infrastructure.vector_store.chroma_store.chromadb.PersistentClient")
     def test_chroma_hybrid_search_multiple_results(self, mock_client_cls):
         """hybrid_search returns multiple chunks with correct structure."""
         from src.infrastructure.vector_store.chroma_store import ChromaStore
@@ -203,9 +183,7 @@ class TestVectorStoreHybridSearch:
         assert result[0].metadata["score"] == pytest.approx(0.8)
         assert result[1].metadata["score"] == pytest.approx(0.5)
 
-    @patch(
-        "src.infrastructure.vector_store.chroma_store.chromadb.PersistentClient"
-    )
+    @patch("src.infrastructure.vector_store.chroma_store.chromadb.PersistentClient")
     def test_chroma_hybrid_search_empty_query_results(self, mock_client_cls):
         """hybrid_search returns [] when query returns no ids."""
         from src.infrastructure.vector_store.chroma_store import ChromaStore
@@ -228,4 +206,3 @@ class TestVectorStoreHybridSearch:
             query_embedding=[0.1], query_text="q", k=3, collection_name="c"
         )
         assert result == []
-

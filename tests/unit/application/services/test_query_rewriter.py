@@ -240,9 +240,7 @@ class TestRRFFusion:
 
 
 class TestQueryRewriterFactory:
-    @patch(
-        "src.infrastructure.llm.query_rewriter_factory.get_settings"
-    )
+    @patch("src.infrastructure.llm.query_rewriter_factory.get_settings")
     def test_factory_returns_none_when_disabled(self, mock_get_settings):
         from src.infrastructure.llm.query_rewriter_factory import (
             create_query_rewriter,
@@ -251,17 +249,11 @@ class TestQueryRewriterFactory:
         mock_settings = MagicMock()
         mock_settings.ENABLE_QUERY_REWRITING = False
         mock_get_settings.return_value = mock_settings
-        result = create_query_rewriter(
-            AsyncMock(), AsyncMock(), AsyncMock()
-        )
+        result = create_query_rewriter(AsyncMock(), AsyncMock(), AsyncMock())
         assert result is None
 
-    @patch(
-        "src.application.services.query_rewriter.QueryRewriterService"
-    )
-    @patch(
-        "src.infrastructure.llm.query_rewriter_factory.get_settings"
-    )
+    @patch("src.application.services.query_rewriter.QueryRewriterService")
+    @patch("src.infrastructure.llm.query_rewriter_factory.get_settings")
     def test_factory_returns_service_when_enabled(
         self, mock_get_settings, mock_svc_cls
     ):

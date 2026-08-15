@@ -27,9 +27,7 @@ class TestListConversations:
     """ListConversationsUseCase.execute filters and delegates to the repo."""
 
     @pytest.mark.asyncio
-    async def test_execute_filters_empty_conversations(
-        self, mock_conversation_repo
-    ):
+    async def test_execute_filters_empty_conversations(self, mock_conversation_repo):
         empty = Conversation(id=uuid4(), title="Empty placeholder")
         non_empty = Conversation(
             id=uuid4(),
@@ -73,9 +71,7 @@ class TestGetConversation:
         assert result == messages
 
     @pytest.mark.asyncio
-    async def test_execute_maps_key_error_to_not_found(
-        self, mock_conversation_repo
-    ):
+    async def test_execute_maps_key_error_to_not_found(self, mock_conversation_repo):
         mock_conversation_repo.get_messages.side_effect = KeyError("missing")
 
         use_case = GetConversationUseCase(mock_conversation_repo)

@@ -64,12 +64,8 @@ def _is_list_item(line: str, prev_line: str, next_line: str) -> bool:
     """
     if not _NUMBERED_HEADING_RE.match(line.strip()):
         return False
-    prev_is_numbered = bool(
-        prev_line and _NUMBERED_HEADING_RE.match(prev_line.strip())
-    )
-    next_is_numbered = bool(
-        next_line and _NUMBERED_HEADING_RE.match(next_line.strip())
-    )
+    prev_is_numbered = bool(prev_line and _NUMBERED_HEADING_RE.match(prev_line.strip()))
+    next_is_numbered = bool(next_line and _NUMBERED_HEADING_RE.match(next_line.strip()))
     return prev_is_numbered or next_is_numbered
 
 
@@ -108,19 +104,13 @@ def _extract_keywords(text: str, max_keywords: int = 10) -> list[str]:
     # Candidate keywords: capitalized words (proper nouns/technical terms),
     # excluding stopwords that are usually capitalized sentence starts.
     candidates = [
-        w
-        for w in words
-        if w[0].isupper() and len(w) > 2 and w not in _STOPWORDS
+        w for w in words if w[0].isupper() and len(w) > 2 and w not in _STOPWORDS
     ]
     # Fall back to frequency-based
     if len(candidates) < 3:
-        counter = Counter(
-            w.lower() for w in words if len(w) > 3
-        )
+        counter = Counter(w.lower() for w in words if len(w) > 3)
         candidates = [
-            w
-            for w, _ in counter.most_common(10)
-            if w not in _STOPWORDS_LOWER
+            w for w, _ in counter.most_common(10) if w not in _STOPWORDS_LOWER
         ]
 
     # Deduplicate case-insensitively, keep order

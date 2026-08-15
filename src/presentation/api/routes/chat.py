@@ -69,8 +69,7 @@ def get_conversation_list_use_case() -> ListConversationsUseCase:
         raise HTTPException(
             status_code=503,
             detail=(
-                "Conversation list service not initialised. "
-                "Check server configuration."
+                "Conversation list service not initialised. Check server configuration."
             ),
         )
     return _conversation_list_use_case
@@ -91,8 +90,7 @@ def get_conversation_get_use_case() -> GetConversationUseCase:
         raise HTTPException(
             status_code=503,
             detail=(
-                "Conversation get service not initialised. "
-                "Check server configuration."
+                "Conversation get service not initialised. Check server configuration."
             ),
         )
     return _conversation_get_use_case

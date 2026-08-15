@@ -29,26 +29,20 @@ class TestMarkerParser:
         assert ".pdf" in p.get_supported_extensions()
 
     @patch(
-        "src.infrastructure.document_processing.marker_parser"
-        "._marker_available",
+        "src.infrastructure.document_processing.marker_parser._marker_available",
         True,
     )
     @patch(
-        "src.infrastructure.document_processing.marker_parser"
-        ".create_model_dict",
+        "src.infrastructure.document_processing.marker_parser.create_model_dict",
         return_value={},
     )
     @patch(
-        "src.infrastructure.document_processing.marker_parser"
-        ".ConfigParser",
+        "src.infrastructure.document_processing.marker_parser.ConfigParser",
     )
     @patch(
-        "src.infrastructure.document_processing.marker_parser"
-        ".convert_single_pdf",
+        "src.infrastructure.document_processing.marker_parser.convert_single_pdf",
     )
-    def test_marker_parser_extracts_text(
-        self, mock_convert, mock_config, mock_models
-    ):
+    def test_marker_parser_extracts_text(self, mock_convert, mock_config, mock_models):
         """MarkerParser returns extracted text from marker."""
         from src.infrastructure.document_processing.marker_parser import (
             MarkerParser,
@@ -56,8 +50,7 @@ class TestMarkerParser:
 
         mock_convert.return_value = MagicMock(
             markdown=(
-                "# Title\n\nSome content\n\n"
-                "| Col1 | Col2 |\n|---|---|\n| a | b |"
+                "# Title\n\nSome content\n\n| Col1 | Col2 |\n|---|---|\n| a | b |"
             )
         )
 
@@ -68,22 +61,18 @@ class TestMarkerParser:
         assert "Some content" in result
 
     @patch(
-        "src.infrastructure.document_processing.marker_parser"
-        "._marker_available",
+        "src.infrastructure.document_processing.marker_parser._marker_available",
         True,
     )
     @patch(
-        "src.infrastructure.document_processing.marker_parser"
-        ".create_model_dict",
+        "src.infrastructure.document_processing.marker_parser.create_model_dict",
         return_value={},
     )
     @patch(
-        "src.infrastructure.document_processing.marker_parser"
-        ".ConfigParser",
+        "src.infrastructure.document_processing.marker_parser.ConfigParser",
     )
     @patch(
-        "src.infrastructure.document_processing.marker_parser"
-        ".convert_single_pdf",
+        "src.infrastructure.document_processing.marker_parser.convert_single_pdf",
     )
     def test_marker_parser_handles_tables_as_markdown(
         self, mock_convert, mock_config, mock_models
@@ -104,8 +93,7 @@ class TestMarkerParser:
         assert "| Alice | 95 |" in result
 
     @patch(
-        "src.infrastructure.document_processing.marker_parser"
-        "._marker_available",
+        "src.infrastructure.document_processing.marker_parser._marker_available",
         False,
     )
     def test_marker_parser_raises_when_marker_not_installed(self):
@@ -123,8 +111,7 @@ class TestPDFParserPyMuPDF:
     """Tests for the updated PDFParser using PyMuPDF."""
 
     @patch(
-        "src.infrastructure.document_processing.pdf_parser"
-        "._pymupdf_available",
+        "src.infrastructure.document_processing.pdf_parser._pymupdf_available",
         True,
     )
     @patch(
@@ -152,13 +139,11 @@ class TestPDFParserPyMuPDF:
         assert "Extracted text from page" in result
 
     @patch(
-        "src.infrastructure.document_processing.pdf_parser"
-        "._pymupdf_available",
+        "src.infrastructure.document_processing.pdf_parser._pymupdf_available",
         False,
     )
     @patch(
-        "src.infrastructure.document_processing.pdf_parser"
-        "._pypdf2_available",
+        "src.infrastructure.document_processing.pdf_parser._pypdf2_available",
         False,
     )
     def test_no_pdf_library_raises(self):
@@ -186,12 +171,15 @@ class TestParserFactory:
             create_parser,
         )
 
-        with patch(
-            "src.infrastructure.document_processing.marker_parser._marker_available",
-            True,
-        ), patch(
-            "src.infrastructure.document_processing.marker_parser.MarkerParser",
-            MarkerParser,
+        with (
+            patch(
+                "src.infrastructure.document_processing.marker_parser._marker_available",
+                True,
+            ),
+            patch(
+                "src.infrastructure.document_processing.marker_parser.MarkerParser",
+                MarkerParser,
+            ),
         ):
             parser = create_parser(".pdf")
             assert isinstance(parser, MarkerParser)

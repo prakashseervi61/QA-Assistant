@@ -13,7 +13,7 @@ class QueryRequest(BaseModel):
     )
     metadata_filter: dict[str, object] | None = Field(
         default=None,
-        description="Optional metadata filter (e.g. {\"document_id\": \"abc\"})",
+        description='Optional metadata filter (e.g. {"document_id": "abc"})',
     )
 
     @field_validator("metadata_filter")
@@ -26,9 +26,7 @@ class QueryRequest(BaseModel):
         allowed_types = (str, int, float, bool)
         for key, value in v.items():
             if not isinstance(key, str):
-                raise ValueError(
-                    f"Filter key must be str, got {type(key).__name__}"
-                )
+                raise ValueError(f"Filter key must be str, got {type(key).__name__}")
             if not isinstance(value, allowed_types):
                 raise ValueError(
                     f"Filter value for '{key}' must be one of {allowed_types}, "

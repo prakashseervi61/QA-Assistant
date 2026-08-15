@@ -69,7 +69,5 @@ class GetConversationUseCase:
                 f"Conversation not found: {conversation_id}"
             )
 
-        logger.debug(
-            "Loaded %d messages for conversation %s", len(messages), conv_uuid
-        )
+        logger.debug("Loaded %d messages for conversation %s", len(messages), conv_uuid)
         return messages

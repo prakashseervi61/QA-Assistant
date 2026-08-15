@@ -199,8 +199,6 @@ async def delete_document(document_id: str) -> dict:
         logger.error(
             "Failed to delete document %s: %s", document_id, exc, exc_info=True
         )
-        raise HTTPException(
-            status_code=500, detail=f"Failed to delete document: {exc}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to delete document: {exc}")
 
     return {"message": f"Document {document_id} deleted successfully."}

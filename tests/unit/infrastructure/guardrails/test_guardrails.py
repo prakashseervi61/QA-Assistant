@@ -136,9 +136,7 @@ class TestGuardrailManager:
         result = mgr.check_output("The moon is made of cheese.", ["RAG is retrieval."])
         assert result["flagged"] is True
         assert result["groundedness"] < 0.5
-        assert any(
-            i["type"] == "low_groundedness" for i in result["issues"]
-        )
+        assert any(i["type"] == "low_groundedness" for i in result["issues"])
 
     def test_output_passes_grounded_answer(self):
         mgr = GuardrailManager(

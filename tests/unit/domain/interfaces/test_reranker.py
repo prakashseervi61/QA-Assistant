@@ -107,9 +107,7 @@ class TestBEReranker:
         mock_model.predict.return_value = [-5.0, 0.0, 5.0]
         mock_cross_encoder_cls.return_value = mock_model
 
-        chunks = [
-            Chunk(content=f"c{i}", metadata={}, chunk_index=i) for i in range(3)
-        ]
+        chunks = [Chunk(content=f"c{i}", metadata={}, chunk_index=i) for i in range(3)]
         r = BEReranker(model_name="test-model")
         result = r.rerank("q", chunks, top_k=3)
 

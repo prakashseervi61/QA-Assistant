@@ -80,9 +80,7 @@ class GuardrailManager:
     # Output checks (post-generation)
     # ------------------------------------------------------------------
 
-    def check_output(
-        self, answer: str, contexts: list[str]
-    ) -> dict[str, object]:
+    def check_output(self, answer: str, contexts: list[str]) -> dict[str, object]:
         """Check the generated answer for groundedness and PII leaks.
 
         Args:

@@ -1,4 +1,5 @@
 """Tests for semantic chunking strategy."""
+
 from uuid import uuid4
 
 import numpy as np

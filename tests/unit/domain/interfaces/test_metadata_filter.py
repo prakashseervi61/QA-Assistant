@@ -33,12 +33,8 @@ class TestVectorStoreMetadataFilter:
 class TestChromaStoreMetadataFilter:
     """Tests for ChromaStore metadata filtering."""
 
-    @patch(
-        "src.infrastructure.vector_store.chroma_store.chromadb.PersistentClient"
-    )
-    def test_similarity_search_passes_filter_to_chromadb(
-        self, mock_client_cls
-    ):
+    @patch("src.infrastructure.vector_store.chroma_store.chromadb.PersistentClient")
+    def test_similarity_search_passes_filter_to_chromadb(self, mock_client_cls):
         """similarity_search passes 'where' to ChromaDB query."""
         from src.infrastructure.vector_store.chroma_store import ChromaStore
 
@@ -48,15 +44,11 @@ class TestChromaStoreMetadataFilter:
             "ids": [[_UUID1]],
             "documents": [["doc1"]],
             "embeddings": [[[0.1]]],
-            "metadatas": [
-                [{"document_id": _DOC_UUID, "chunk_index": 0}]
-            ],
+            "metadatas": [[{"document_id": _DOC_UUID, "chunk_index": 0}]],
             "distances": [[0.2]],
         }
         mock_client = MagicMock()
-        mock_client.get_collection.return_value = (
-            mock_collection
-        )
+        mock_client.get_collection.return_value = mock_collection
         mock_client_cls.return_value = mock_client
 
         store = ChromaStore(persist_directory="/tmp/test")
@@ -71,12 +63,8 @@ class TestChromaStoreMetadataFilter:
         assert "where" in call_kwargs
         assert call_kwargs["where"] == {"document_id": "abc-123"}
 
-    @patch(
-        "src.infrastructure.vector_store.chroma_store.chromadb.PersistentClient"
-    )
-    def test_similarity_search_no_filter_omits_where(
-        self, mock_client_cls
-    ):
+    @patch("src.infrastructure.vector_store.chroma_store.chromadb.PersistentClient")
+    def test_similarity_search_no_filter_omits_where(self, mock_client_cls):
         """similarity_search omits 'where' when no filter is provided."""
         from src.infrastructure.vector_store.chroma_store import ChromaStore
 
@@ -86,15 +74,11 @@ class TestChromaStoreMetadataFilter:
             "ids": [[_UUID1]],
             "documents": [["doc1"]],
             "embeddings": [[[0.1]]],
-            "metadatas": [
-                [{"document_id": _DOC_UUID, "chunk_index": 0}]
-            ],
+            "metadatas": [[{"document_id": _DOC_UUID, "chunk_index": 0}]],
             "distances": [[0.2]],
         }
         mock_client = MagicMock()
-        mock_client.get_collection.return_value = (
-            mock_collection
-        )
+        mock_client.get_collection.return_value = mock_collection
         mock_client_cls.return_value = mock_client
 
         store = ChromaStore(persist_directory="/tmp/test")
@@ -108,12 +92,8 @@ class TestChromaStoreMetadataFilter:
         call_kwargs = mock_collection.query.call_args[1]
         assert "where" not in call_kwargs
 
-    @patch(
-        "src.infrastructure.vector_store.chroma_store.chromadb.PersistentClient"
-    )
-    def test_hybrid_search_passes_filter_to_chromadb(
-        self, mock_client_cls
-    ):
+    @patch("src.infrastructure.vector_store.chroma_store.chromadb.PersistentClient")
+    def test_hybrid_search_passes_filter_to_chromadb(self, mock_client_cls):
         """hybrid_search passes 'where' to ChromaDB query."""
         from src.infrastructure.vector_store.chroma_store import ChromaStore
 
@@ -123,15 +103,11 @@ class TestChromaStoreMetadataFilter:
             "ids": [[_UUID1]],
             "documents": [["doc1"]],
             "embeddings": [[[0.1]]],
-            "metadatas": [
-                [{"document_id": _DOC_UUID, "chunk_index": 0}]
-            ],
+            "metadatas": [[{"document_id": _DOC_UUID, "chunk_index": 0}]],
             "distances": [[0.2]],
         }
         mock_client = MagicMock()
-        mock_client.get_collection.return_value = (
-            mock_collection
-        )
+        mock_client.get_collection.return_value = mock_collection
         mock_client_cls.return_value = mock_client
 
         store = ChromaStore(persist_directory="/tmp/test")

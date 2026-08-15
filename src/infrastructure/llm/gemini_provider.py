@@ -84,9 +84,7 @@ class GeminiProvider(LLMProvider):
             "completion_tokens": getattr(usage_metadata, "candidates_token_count", 0),
         }
 
-    async def generate_json(
-        self, prompt: str, system_prompt: str | None = None
-    ) -> str:
+    async def generate_json(self, prompt: str, system_prompt: str | None = None) -> str:
         """Generate a response with JSON mode enforced by the model API.
 
         Uses ``response_mime_type="application/json"`` (supported by
@@ -99,9 +97,7 @@ class GeminiProvider(LLMProvider):
             kwargs = {}
             if system_prompt:
                 kwargs["system_instruction"] = system_prompt
-            config = genai.types.GenerationConfig(
-                response_mime_type="application/json"
-            )
+            config = genai.types.GenerationConfig(response_mime_type="application/json")
             return self._client.generate_content(
                 prompt, generation_config=config, **kwargs
             )

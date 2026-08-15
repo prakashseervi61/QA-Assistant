@@ -66,13 +66,9 @@ class QueryRewriterService(QueryRewriter):
         # Clamp to at least 1 — with num_queries=0 the original query
         # alone is returned (avoids the off-by-one `variants[:-1]`).
         num_queries = max(1, num_queries)
-        prompt = self.MULTI_QUERY_PROMPT.format(
-            num_queries=num_queries, query=query
-        )
+        prompt = self.MULTI_QUERY_PROMPT.format(num_queries=num_queries, query=query)
         response = await self._llm.generate(prompt)
-        variants = [
-            q.strip() for q in response.strip().split("\n") if q.strip()
-        ]
+        variants = [q.strip() for q in response.strip().split("\n") if q.strip()]
         # Include original + up to (num_queries - 1) variants
         queries = [query] + variants[: num_queries - 1]
         logger.debug(

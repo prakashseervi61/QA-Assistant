@@ -55,9 +55,7 @@ class MarkerParser(DocumentParser):
 
         content = file.read()
 
-        with tempfile.NamedTemporaryFile(
-            suffix=".pdf", delete=False
-        ) as tmp:
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
             tmp.write(content)
             tmp_path = tmp.name
 

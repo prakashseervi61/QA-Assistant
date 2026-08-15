@@ -173,9 +173,7 @@ class ChromaStore(VectorStore):
             )
         except Exception as exc:
             logger.error("ChromaDB similarity search failed: %s", exc)
-            raise RuntimeError(
-                f"ChromaDB similarity search failed: {exc}"
-            ) from exc
+            raise RuntimeError(f"ChromaDB similarity search failed: {exc}") from exc
 
     def _query_sync(
         self,
@@ -232,34 +230,24 @@ class ChromaStore(VectorStore):
         num_ids = len(ids)
 
         for idx in range(num_ids):
-            metadata = (
-                dict(metadatas[idx]) if len(metadatas) > idx else {}
-            )
+            metadata = dict(metadatas[idx]) if len(metadatas) > idx else {}
             document_id_str = metadata.pop("document_id", None)
             chunk_index = int(metadata.pop("chunk_index", 0))
 
             # Convert cosine distance to similarity score
             if len(distances) > idx:
-                metadata["score"] = round(
-                    1.0 - float(distances[idx]), 4
-                )
+                metadata["score"] = round(1.0 - float(distances[idx]), 4)
 
             from uuid import UUID
 
-            embedding_list = (
-                list(embeddings[idx])
-                if len(embeddings) > idx
-                else None
-            )
+            embedding_list = list(embeddings[idx]) if len(embeddings) > idx else None
 
             chunk = Chunk(
                 id=UUID(ids[idx]),
                 document_id=UUID(document_id_str)  # type: ignore[arg-type]
                 if document_id_str
                 else None,
-                content=documents[idx]
-                if len(documents) > idx
-                else "",
+                content=documents[idx] if len(documents) > idx else "",
                 embedding=embedding_list,
                 metadata=metadata,
                 chunk_index=chunk_index,
@@ -310,9 +298,7 @@ class ChromaStore(VectorStore):
             )
         except Exception as exc:
             logger.error("ChromaDB hybrid search failed: %s", exc)
-            raise RuntimeError(
-                f"ChromaDB hybrid search failed: {exc}"
-            ) from exc
+            raise RuntimeError(f"ChromaDB hybrid search failed: {exc}") from exc
 
     def _hybrid_search_sync(
         self,
@@ -376,23 +362,17 @@ class ChromaStore(VectorStore):
         distances = results.get("distances", [[]])[0]
 
         for idx in range(len(ids)):
-            metadata = (
-                dict(metadatas[idx]) if len(metadatas) > idx else {}
-            )
+            metadata = dict(metadatas[idx]) if len(metadatas) > idx else {}
             document_id_str = metadata.pop("document_id", None)
             chunk_index = int(metadata.pop("chunk_index", 0))
 
             if len(distances) > idx:
-                metadata["score"] = round(
-                    1.0 - float(distances[idx]), 4
-                )
+                metadata["score"] = round(1.0 - float(distances[idx]), 4)
 
             from uuid import UUID
 
             embedding_list = (
-                list(embeddings_list[idx])
-                if len(embeddings_list) > idx
-                else None
+                list(embeddings_list[idx]) if len(embeddings_list) > idx else None
             )
 
             chunk = Chunk(
@@ -450,9 +430,7 @@ class ChromaStore(VectorStore):
 
             for idx, chunk_id in enumerate(results["ids"]):
                 metadata = (
-                    dict(results["metadatas"][idx])
-                    if results.get("metadatas")
-                    else {}
+                    dict(results["metadatas"][idx]) if results.get("metadatas") else {}
                 )
                 document_id_str = metadata.pop("document_id", None)
                 chunk_index = int(metadata.pop("chunk_index", 0))
@@ -467,9 +445,7 @@ class ChromaStore(VectorStore):
                 chunks.append(
                     Chunk(
                         id=_UUID(chunk_id),
-                        document_id=_UUID(document_id_str)
-                        if document_id_str
-                        else None,  # type: ignore[arg-type]
+                        document_id=_UUID(document_id_str) if document_id_str else None,  # type: ignore[arg-type]
                         content=(
                             results["documents"][idx]
                             if results.get("documents")
@@ -486,12 +462,8 @@ class ChromaStore(VectorStore):
         try:
             return await asyncio.to_thread(_get)
         except Exception as exc:
-            logger.error(
-                "ChromaDB get_documents_by_ids failed: %s", exc
-            )
-            raise RuntimeError(
-                f"ChromaDB get_documents_by_ids failed: {exc}"
-            ) from exc
+            logger.error("ChromaDB get_documents_by_ids failed: %s", exc)
+            raise RuntimeError(f"ChromaDB get_documents_by_ids failed: {exc}") from exc
 
     async def get_by_metadata(
         self,
@@ -542,9 +514,7 @@ class ChromaStore(VectorStore):
             embeddings = results.get("embeddings")
 
             for idx, chunk_id in enumerate(chunk_ids):
-                metadata = (
-                    dict(metadatas[idx]) if len(metadatas) > idx else {}
-                )
+                metadata = dict(metadatas[idx]) if len(metadatas) > idx else {}
                 document_id_str = metadata.pop("document_id", None)
                 chunk_index = int(metadata.pop("chunk_index", 0))
                 embedding_list = (
@@ -558,9 +528,7 @@ class ChromaStore(VectorStore):
                 chunks.append(
                     Chunk(
                         id=_UUID(chunk_id),
-                        document_id=_UUID(document_id_str)
-                        if document_id_str
-                        else None,  # type: ignore[arg-type]
+                        document_id=_UUID(document_id_str) if document_id_str else None,  # type: ignore[arg-type]
                         content=documents[idx] if len(documents) > idx else "",
                         embedding=embedding_list,
                         metadata=metadata,

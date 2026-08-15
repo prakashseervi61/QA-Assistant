@@ -166,9 +166,7 @@ class TestGeminiProviderJsonMode:
         assert kwargs["generation_config"] is not None
 
     @pytest.mark.asyncio
-    async def test_generate_json_raises_quota_exceeded_on_429(
-        self, mock_genai_client
-    ):
+    async def test_generate_json_raises_quota_exceeded_on_429(self, mock_genai_client):
         mock_genai_client.generate_content.side_effect = Exception(
             "429 You exceeded your current quota."
         )

@@ -161,9 +161,7 @@ class ParentChildSplitter:
                 # Guard against pathological overlap (>= chunk size):
                 # always advance by at least one character.
                 start = (
-                    max(end - self.child_overlap, end - 1)
-                    if end < len(text)
-                    else end
+                    max(end - self.child_overlap, end - 1) if end < len(text) else end
                 )
 
         return children

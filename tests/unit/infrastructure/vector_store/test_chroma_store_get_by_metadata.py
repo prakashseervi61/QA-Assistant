@@ -39,9 +39,7 @@ class TestChromaStoreGetByMetadata:
 
         await store.add_documents(chunks, "documents")
 
-        results = await store.get_by_metadata(
-            {"content_hash": "abc123"}, "documents"
-        )
+        results = await store.get_by_metadata({"content_hash": "abc123"}, "documents")
 
         assert len(results) == 1
         assert results[0].content == "first"
@@ -63,16 +61,12 @@ class TestChromaStoreGetByMetadata:
             "documents",
         )
 
-        results = await store.get_by_metadata(
-            {"content_hash": "nope"}, "documents"
-        )
+        results = await store.get_by_metadata({"content_hash": "nope"}, "documents")
 
         assert results == []
 
     @pytest.mark.asyncio
     async def test_missing_collection_returns_empty(self, store):
         """A collection that does not exist yields no matches."""
-        results = await store.get_by_metadata(
-            {"content_hash": "abc123"}, "documents"
-        )
+        results = await store.get_by_metadata({"content_hash": "abc123"}, "documents")
         assert results == []

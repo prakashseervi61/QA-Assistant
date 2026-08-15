@@ -25,15 +25,12 @@ def _chunks() -> list[Chunk]:
 
 def _context_block() -> str:
     return (
-        "[Source 1: doc.pdf (page 3)]\n"
-        "RAG stands for retrieval augmented generation."
+        "[Source 1: doc.pdf (page 3)]\nRAG stands for retrieval augmented generation."
     )
 
 
 def _expected_prompt(version: str) -> str:
-    return PROMPT_VERSIONS[version].format(
-        context=_context_block(), question=QUESTION
-    )
+    return PROMPT_VERSIONS[version].format(context=_context_block(), question=QUESTION)
 
 
 @pytest.fixture
