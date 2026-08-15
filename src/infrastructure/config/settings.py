@@ -46,17 +46,6 @@ class Settings(BaseSettings):
     # Vector Store
     CHROMA_PERSIST_DIR: str = "./data/chroma"
     CHROMA_COLLECTION_NAME: str = "documents"
-    # Backend selection: "chroma" (default, local ChromaDB) or "qdrant"
-    # (remote Qdrant server; requires the optional [qdrant] extra).
-    VECTOR_STORE_BACKEND: str = "chroma"
-    QDRANT_URL: str = "http://localhost:6333"
-    QDRANT_API_KEY: str = ""
-    # Vector dimensionality used when creating a Qdrant collection (Qdrant
-    # fixes it at collection creation time and cannot change it later).
-    # Must match the configured embedding model: gemini text-embedding-004
-    # = 768 (the default provider/model), openai text-embedding-3-small =
-    # 1536, huggingface all-MiniLM-L6-v2 = 384.
-    EMBEDDING_DIM: int = 768
 
     # Database (optional)
     # When set, conversations persist in PostgreSQL; otherwise the app keeps
@@ -161,25 +150,6 @@ class Settings(BaseSettings):
     # src/infrastructure/llm/prompt_registry.py). Unknown versions fall
     # back to the v1 template with a logged warning.
     PROMPT_VERSION: str = "v1"
-    # When ENABLE_PROMPT_AB_TESTING is true, each question is
-    # deterministically bucketed (SHA-256 of the question) and served
-    # PROMPT_AB_VERSION when its bucket is below PROMPT_AB_PERCENTAGE,
-    # otherwise PROMPT_VERSION. Bucketing is stable, so the same question
-    # always receives the same version (stable A/B cohorts).
-    ENABLE_PROMPT_AB_TESTING: bool = False
-    PROMPT_AB_VERSION: str = "v2"
-    # Fraction of queries (0.0–1.0) served the A/B version.
-    PROMPT_AB_PERCENTAGE: float = 0.5
-
-    @field_validator("PROMPT_AB_PERCENTAGE")
-    @classmethod
-    def validate_prompt_ab_percentage(cls, v: float) -> float:
-        """PROMPT_AB_PERCENTAGE must be a fraction in [0.0, 1.0]."""
-        if not 0.0 <= v <= 1.0:
-            raise ValueError(
-                "PROMPT_AB_PERCENTAGE must be between 0.0 and 1.0"
-            )
-        return v
 
 
 @lru_cache

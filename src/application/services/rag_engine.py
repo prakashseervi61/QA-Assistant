@@ -5,7 +5,6 @@ Orchestrates the full RAG pipeline:
 """
 
 import asyncio
-import hashlib
 import logging
 from collections.abc import AsyncIterator
 from contextlib import nullcontext
@@ -20,7 +19,7 @@ from src.infrastructure.config.settings import get_settings
 from src.infrastructure.llm.prompt_registry import (
     DEFAULT_PROMPT_VERSION,
     PROMPT_VERSIONS,
-    create_prompt_registry,
+    get_prompt,
 )
 from src.infrastructure.llm.structured_output import (
     StructuredOutputError,
@@ -103,7 +102,6 @@ class RAGEngine:
         self._tracer = tracer
         self._guardrail_manager = guardrail_manager
         self._settings = get_settings()
-        self._prompt_registry = create_prompt_registry(self._settings)
 
     def _span(self, name: str) -> object:
         """Return a span context manager when tracing is enabled, else a no-op.
@@ -828,11 +826,7 @@ class RAGEngine:
     def _select_prompt_version(self, question: str) -> str:
         """Pick the system-prompt version for a question from settings.
 
-        Returns ``PROMPT_VERSION`` by default. When
-        ``ENABLE_PROMPT_AB_TESTING`` is on, the question is hashed into a
-        stable [0.0, 1.0) bucket; buckets below ``PROMPT_AB_PERCENTAGE``
-        are served ``PROMPT_AB_VERSION`` instead. The same question always
-        selects the same version, so A/B cohorts are stable per query.
+        Returns ``PROMPT_VERSION`` by default.
 
         Args:
             question: The user's question.
@@ -841,37 +835,10 @@ class RAGEngine:
             The selected prompt version id (e.g. ``"v1"``).
         """
         settings = self._settings
-        if getattr(settings, "ENABLE_PROMPT_AB_TESTING", False) is True:
-            percentage = getattr(settings, "PROMPT_AB_PERCENTAGE", 0.5)
-            if (
-                isinstance(percentage, (int, float))
-                and float(percentage) > 0.0
-                and self._ab_bucket(question) < float(percentage)
-            ):
-                variant = getattr(settings, "PROMPT_AB_VERSION", "v2")
-                if isinstance(variant, str) and variant:
-                    return variant
         version = getattr(settings, "PROMPT_VERSION", DEFAULT_PROMPT_VERSION)
         if not isinstance(version, str) or not version:
             version = DEFAULT_PROMPT_VERSION
         return version
-
-    @staticmethod
-    def _ab_bucket(question: str) -> float:
-        """Map a question to a stable bucket in [0.0, 1.0).
-
-        Uses the first 8 bytes of the SHA-256 digest of the question as a
-        big-endian integer, normalized by 2**64. Deterministic: the same
-        question always lands in the same bucket.
-
-        Args:
-            question: The user's question.
-
-        Returns:
-            A float in [0.0, 1.0).
-        """
-        digest = hashlib.sha256(question.encode("utf-8")).digest()
-        return int.from_bytes(digest[:8], "big") / float(2**64)
 
     def _build_prompt(
         self, question: str, chunks: list, prompt_version: str | None = None
@@ -903,7 +870,7 @@ class RAGEngine:
 
         if prompt_version is None:
             prompt_version = self._select_prompt_version(question)
-        template = self._prompt_registry.get_prompt(prompt_version)
+        template = get_prompt(prompt_version)
         return template.format(
             context=context,
             question=question,

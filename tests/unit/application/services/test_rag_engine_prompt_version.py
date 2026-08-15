@@ -1,4 +1,4 @@
-"""Tests for prompt version selection and A/B testing in RAGEngine."""
+"""Tests for prompt version selection in RAGEngine."""
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -177,75 +177,3 @@ class TestPromptVersionSelection:
         # pipeline falls back to the v1 template.
         assert result["metadata"]["prompt_version"] == "does-not-exist"
         assert "answer" in result
-
-
-@pytest.mark.asyncio
-class TestPromptABTesting:
-    """A/B knob behaviour."""
-
-    async def test_ab_percentage_zero_always_v1(
-        self, llm_provider, embedding_provider, vector_store
-    ):
-        engine = _make_engine(
-            llm_provider,
-            embedding_provider,
-            vector_store,
-            ENABLE_PROMPT_AB_TESTING=True,
-            PROMPT_AB_PERCENTAGE=0.0,
-        )
-        for _ in range(2):
-            result = await engine.query(QUESTION)
-            assert result["metadata"]["prompt_version"] == "v1"
-        prompt = llm_provider.generate.call_args.args[0]
-        assert prompt == _expected_prompt("v1")
-
-    async def test_ab_percentage_one_always_v2(
-        self, llm_provider, embedding_provider, vector_store
-    ):
-        engine = _make_engine(
-            llm_provider,
-            embedding_provider,
-            vector_store,
-            ENABLE_PROMPT_AB_TESTING=True,
-            PROMPT_AB_PERCENTAGE=1.0,
-        )
-        for _ in range(2):
-            result = await engine.query(QUESTION)
-            assert result["metadata"]["prompt_version"] == "v2"
-        prompt = llm_provider.generate.call_args.args[0]
-        assert prompt == _expected_prompt("v2")
-
-    async def test_ab_half_is_deterministic_per_question(
-        self, llm_provider, embedding_provider, vector_store
-    ):
-        engine = _make_engine(
-            llm_provider,
-            embedding_provider,
-            vector_store,
-            ENABLE_PROMPT_AB_TESTING=True,
-            PROMPT_AB_PERCENTAGE=0.5,
-        )
-        first = await engine.query(QUESTION)
-        second = await engine.query(QUESTION)
-        assert first["metadata"]["prompt_version"] in ("v1", "v2")
-        # Same question twice -> same version (stable cohort per query).
-        assert second["metadata"]["prompt_version"] == (
-            first["metadata"]["prompt_version"]
-        )
-        # The prompt sent to the LLM matches the reported version.
-        prompt = llm_provider.generate.call_args.args[0]
-        assert prompt == _expected_prompt(first["metadata"]["prompt_version"])
-
-    async def test_ab_version_honours_prompt_ab_version_setting(
-        self, llm_provider, embedding_provider, vector_store
-    ):
-        engine = _make_engine(
-            llm_provider,
-            embedding_provider,
-            vector_store,
-            ENABLE_PROMPT_AB_TESTING=True,
-            PROMPT_AB_PERCENTAGE=1.0,
-            PROMPT_AB_VERSION="v1",
-        )
-        result = await engine.query(QUESTION)
-        assert result["metadata"]["prompt_version"] == "v1"

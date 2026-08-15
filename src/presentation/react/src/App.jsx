@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import {
   FiBookmark,
-  FiClock,
   FiDatabase,
   FiFileText,
   FiMenu,
@@ -15,6 +14,7 @@ import Sidebar from './components/Sidebar';
 import DocumentList from './components/DocumentList';
 import ChatWidget from './components/ChatWidget';
 import EmptyState from './components/EmptyState';
+import RecentView from './components/RecentView';
 import './App.css'; // optional custom styles
 
 const VIEW_LABELS = {
@@ -96,6 +96,11 @@ export default function App() {
     setSidebarOpen(false);
   }
 
+  function handleOpenRecentConversation(id) {
+    window.dispatchEvent(new CustomEvent('open-conversation', { detail: id }));
+    setChatOpen(true);
+  }
+
   function renderView() {
     switch (activeView) {
       case 'documents':
@@ -110,13 +115,7 @@ export default function App() {
           />
         );
       case 'recent':
-        return (
-          <EmptyState
-            icon={FiClock}
-            title="Nothing recent yet"
-            description="Documents you open and conversations you have will show up here for quick access."
-          />
-        );
+        return <RecentView onOpen={handleOpenRecentConversation} />;
       case 'bookmarks':
         return (
           <EmptyState

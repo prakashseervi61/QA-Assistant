@@ -147,6 +147,7 @@ export default function DocumentList() {
         >
           <input
             id="doc-file"
+            name="file-upload"
             ref={fileInputRef}
             type="file"
             accept={ACCEPTED_TYPES}

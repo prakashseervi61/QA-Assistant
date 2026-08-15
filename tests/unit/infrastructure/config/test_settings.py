@@ -180,64 +180,13 @@ class TestSecretKeyValidation:
 
 
 class TestPromptVersioningSettings:
-    """Prompt versioning defaults and the A/B percentage validation."""
+    """Prompt versioning defaults."""
 
     def test_prompt_version_default_v1(self):
         assert Settings().PROMPT_VERSION == "v1"
 
-    def test_enable_prompt_ab_testing_default_false(self):
-        assert Settings().ENABLE_PROMPT_AB_TESTING is False
-
-    def test_prompt_ab_version_default_v2(self):
-        assert Settings().PROMPT_AB_VERSION == "v2"
-
-    def test_prompt_ab_percentage_default_half(self):
-        assert Settings().PROMPT_AB_PERCENTAGE == 0.5
-
-    @pytest.mark.parametrize("value", [0.0, 0.5, 1.0])
-    def test_prompt_ab_percentage_valid_range(self, value):
-        assert Settings(PROMPT_AB_PERCENTAGE=value).PROMPT_AB_PERCENTAGE == value
-
-    @pytest.mark.parametrize("value", [-0.1, 1.5])
-    def test_prompt_ab_percentage_out_of_range_raises(self, value):
-        with pytest.raises(ValueError):
-            Settings(PROMPT_AB_PERCENTAGE=value)
-
     def test_custom_prompt_version_accepted(self):
         assert Settings(PROMPT_VERSION="v2").PROMPT_VERSION == "v2"
-
-
-class TestVectorStoreSettings:
-    """Vector store backend defaults (ChromaDB remains the default)."""
-
-    def test_vector_store_backend_default_chroma(self):
-        assert Settings().VECTOR_STORE_BACKEND == "chroma"
-
-    def test_qdrant_url_default(self):
-        assert Settings().QDRANT_URL == "http://localhost:6333"
-
-    def test_qdrant_api_key_default_empty(self):
-        assert Settings().QDRANT_API_KEY == ""
-
-    def test_embedding_dim_default_matches_gemini_model(self):
-        """768 matches the default Gemini text-embedding-004 dimension."""
-        assert Settings().EMBEDDING_DIM == 768
-
-    def test_custom_vector_store_backend(self):
-        assert (
-            Settings(VECTOR_STORE_BACKEND="qdrant").VECTOR_STORE_BACKEND == "qdrant"
-        )
-
-    def test_custom_qdrant_settings(self):
-        s = Settings(
-            QDRANT_URL="https://qdrant.example.com:6333",
-            QDRANT_API_KEY="secret",
-        )
-        assert s.QDRANT_URL == "https://qdrant.example.com:6333"
-        assert s.QDRANT_API_KEY == "secret"
-
-    def test_custom_embedding_dim(self):
-        assert Settings(EMBEDDING_DIM=384).EMBEDDING_DIM == 384
 
 
 class TestSettingsValidation:

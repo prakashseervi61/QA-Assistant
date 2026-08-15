@@ -43,6 +43,7 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
   const abortRef = useRef(null); // AbortController for the in-flight stream
+  const switchConversationRef = useRef(null); // latest switchConversation, for the Recent-view event listener
 
   const LAST_CONVERSATION_KEY = 'qa-assistant.lastConversationId';
 
@@ -114,6 +115,16 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
     return () => abortRef.current?.abort();
   }, []);
 
+  // Open a conversation selected from the Recent view (cross-component event).
+  useEffect(() => {
+    function handleOpenConversation(e) {
+      const id = e.detail;
+      if (id) switchConversationRef.current?.(id);
+    }
+    window.addEventListener('open-conversation', handleOpenConversation);
+    return () => window.removeEventListener('open-conversation', handleOpenConversation);
+  }, []);
+
   function resetTextareaHeight() {
     const el = textareaRef.current;
     if (el) el.style.height = 'auto';
@@ -141,7 +152,12 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
 
   /** Silently refresh the conversation list (used after query/switch). */
   function refreshConversations() {
-    fetchJSON('/conversations').then(setConversations).catch(() => {});
+    fetchJSON('/conversations')
+      .then(list => {
+        setConversations(list);
+        window.dispatchEvent(new CustomEvent('conversations-changed'));
+      })
+      .catch(() => {});
   }
 
   /** Load a different conversation into the panel, or reset to a fresh chat when id is empty. */
@@ -167,6 +183,8 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
       refreshConversations();
     }
   }
+
+  switchConversationRef.current = switchConversation;
 
   /** Immutably patch the message at `index` in the message list. */
   function updateMessageAt(index, updater) {
@@ -286,6 +304,8 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
       {conversations.length > 0 && (
         <div className="border-b border-slate-200 bg-white px-3 py-2">
           <select
+            id="conversation-select"
+            name="conversation"
             aria-label="Previous chats"
             value={conversationId ?? ''}
             onChange={e => switchConversation(e.target.value)}

@@ -198,7 +198,7 @@ class ChromaStore(VectorStore):
         """
         try:
             collection = self._client.get_collection(collection_name)
-        except ValueError:
+        except (ValueError, NotFoundError):
             return []
 
         if collection.count() == 0:
@@ -342,7 +342,7 @@ class ChromaStore(VectorStore):
         """
         try:
             collection = self._client.get_collection(collection_name)
-        except ValueError:
+        except (ValueError, NotFoundError):
             return []
 
         if collection.count() == 0:
@@ -433,7 +433,7 @@ class ChromaStore(VectorStore):
         def _get() -> list[Chunk]:
             try:
                 collection = self._client.get_collection(collection_name)
-            except ValueError:
+            except (ValueError, NotFoundError):
                 return []
 
             if not ids:
@@ -598,7 +598,7 @@ class ChromaStore(VectorStore):
         def _list() -> list[dict]:
             try:
                 collection = self._client.get_collection(collection_name)
-            except ValueError:
+            except (ValueError, NotFoundError):
                 return []
 
             if collection.count() == 0:
@@ -649,7 +649,7 @@ class ChromaStore(VectorStore):
         def _delete() -> None:
             try:
                 collection = self._client.get_collection(collection_name)
-            except ValueError:
+            except (ValueError, NotFoundError):
                 logger.debug(
                     "Collection '%s' does not exist — nothing to delete",
                     collection_name,
@@ -690,7 +690,7 @@ class ChromaStore(VectorStore):
             try:
                 collection = self._client.get_collection(collection_name)
                 return collection.count()
-            except ValueError:
+            except (ValueError, NotFoundError):
                 return 0
 
         try:
