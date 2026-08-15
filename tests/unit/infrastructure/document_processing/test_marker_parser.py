@@ -116,6 +116,7 @@ class TestPDFParserPyMuPDF:
     )
     @patch(
         "src.infrastructure.document_processing.pdf_parser.pymupdf",
+        create=True,
     )
     def test_pymupdf_extracts_text(self, mock_pymupdf):
         """PDFParser uses PyMuPDF when available."""

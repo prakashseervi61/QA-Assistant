@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     DEEPSEEK_MODEL: str = "deepseek-v4-flash"
 
     # Embedding Provider
-    EMBEDDING_PROVIDER: Literal["gemini", "openai", "huggingface"] = "gemini"
+    EMBEDDING_PROVIDER: Literal["gemini", "openai", "huggingface"] = "huggingface"
     GEMINI_EMBEDDING_MODEL: str = "text-embedding-004"
     OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"
     HUGGINGFACE_MODEL: str = "all-MiniLM-L6-v2"
