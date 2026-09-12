@@ -16,9 +16,7 @@ def _content_only(events):
     raw text chunks. Tests that assert on answer content filter them out;
     the stage lifecycle is asserted explicitly in its own test.
     """
-    return [
-        e for e in events if not (isinstance(e, dict) and e.get("type") == "stage")
-    ]
+    return [e for e in events if not (isinstance(e, dict) and e.get("type") == "stage")]
 
 
 # Fixtures

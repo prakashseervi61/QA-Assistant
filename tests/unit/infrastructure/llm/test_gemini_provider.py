@@ -1,7 +1,7 @@
 """Unit tests for the Gemini LLM provider quota/rate-limit handling."""
 
 import sys
-from unittest.mock import MagicMock, PropertyMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -108,9 +108,7 @@ class TestGeminiProviderQuotaError:
         assert collected == ["partial"]
 
     @pytest.mark.asyncio
-    async def test_generate_stream_skips_part_less_final_chunk(
-        self, mock_genai_client
-    ):
+    async def test_generate_stream_skips_part_less_final_chunk(self, mock_genai_client):
         class PartLessChunk:
             @property
             def text(self):
