@@ -38,7 +38,7 @@ class TestSettingsDefaults:
         assert Settings().API_PORT == 8000
 
     def test_app_name_default(self):
-        assert Settings().APP_NAME == "QA Assistant"
+        assert Settings().APP_NAME == "Marginalia"
 
     def test_debug_default_false(self):
         assert Settings().DEBUG is False

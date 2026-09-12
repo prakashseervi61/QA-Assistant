@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { FiChevronDown, FiFileText, FiLoader, FiMessageSquare, FiMic, FiPaperclip, FiSend, FiSquare } from 'react-icons/fi';
+import { FiCheck, FiChevronDown, FiFileText, FiLoader, FiMessageSquare, FiMic, FiPaperclip, FiSend, FiSquare } from 'react-icons/fi';
 import { fetchJSON, postFormData, streamChat } from '../api';
 
 const SUGGESTIONS = [
@@ -77,6 +77,7 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
   const [uploadError, setUploadError] = useState(null);
   const [listening, setListening] = useState(false);
   const [voiceError, setVoiceError] = useState(null);
+  const [stages, setStages] = useState([]); // live RAG pipeline trace from `stage` stream events
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
   const chatFileInputRef = useRef(null); // hidden input for in-chat uploads
@@ -351,6 +352,7 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
 
     setInput('');
     resetTextareaHeight();
+    setStages([]);
 
     const userMsg = {
       id: generateMessageId(),
@@ -412,6 +414,12 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
               blockedEvent = event;
               controller.abort();
               break;
+            case 'stage':
+              // Live retrieval-trace event, e.g. "rewriting", "retrieving",
+              // "reranking", "generating". Append so the assistant bubble can
+              // show which pipeline step is running before text arrives.
+              setStages(prev => [...prev, { stage: event.stage, detail: event.detail }]);
+              break;
             default:
               break;
           }
@@ -437,6 +445,7 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
     } finally {
       abortRef.current = null;
       setLoading(false);
+      setStages([]);
       isSendingRef.current = false;
     }
   }
@@ -532,16 +541,42 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
                     }`}
                   >
                     {!isUser && msg.content === '' && loading ? (
-                      <div className="flex items-center gap-1.5 py-1">
-                        {[0, 1, 2].map(i => (
-                          <span
-                            key={i}
-                            className="h-2 w-2 animate-bounce rounded-full bg-brand-500"
-                            style={{ animationDelay: `${i * 150}ms` }}
-                          />
-                        ))}
-                        <span className="sr-only">Assistant is thinking…</span>
-                      </div>
+                      stages.length > 0 ? (
+                        <div className="space-y-1.5 py-1">
+                          {stages.map((s, i) => {
+                            const isActive = i === stages.length - 1;
+                            return (
+                              <div key={`${msg.id}-${s.stage}-${i}`} className="flex items-center gap-2 text-xs">
+                                {isActive ? (
+                                  <FiLoader
+                                    className="h-3.5 w-3.5 shrink-0 animate-spin text-brand-600"
+                                    aria-hidden="true"
+                                  />
+                                ) : (
+                                  <FiCheck
+                                    className="h-3.5 w-3.5 shrink-0 text-brand-500"
+                                    aria-hidden="true"
+                                  />
+                                )}
+                                <span className={isActive ? 'font-medium text-ink' : 'text-ink-muted'}>
+                                  {s.detail}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5 py-1">
+                          {[0, 1, 2].map(i => (
+                            <span
+                              key={i}
+                              className="h-2 w-2 animate-bounce rounded-full bg-brand-500"
+                              style={{ animationDelay: `${i * 150}ms` }}
+                            />
+                          ))}
+                          <span className="sr-only">Assistant is thinking…</span>
+                        </div>
+                      )
                     ) : (
                       <p className="whitespace-pre-wrap">{msg.content}</p>
                     )}

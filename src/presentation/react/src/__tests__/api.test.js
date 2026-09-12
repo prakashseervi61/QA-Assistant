@@ -50,6 +50,15 @@ describe('parseSSEEvent', () => {
     });
   });
 
+  it('passes RAG stage trace events through on their type', () => {
+    expect(
+      parseSSEEvent(['data: {"type":"stage","stage":"retrieving","detail":"Searching documents"}']),
+    ).toEqual({
+      type: 'stage',
+      data: { type: 'stage', stage: 'retrieving', detail: 'Searching documents' },
+    });
+  });
+
   it('falls back to type "json" when there is no type field', () => {
     expect(parseSSEEvent(['data: {"answer":"hi"}'])).toEqual({
       type: 'json',

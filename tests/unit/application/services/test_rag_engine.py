@@ -8,6 +8,19 @@ from src.application.services.rag_engine import RAGEngine, RAGQueryError
 from src.domain.interfaces.llm_provider import LLMQuotaExceededError
 from src.domain.value_objects.chunk import Chunk
 
+
+def _content_only(events):
+    """Drop additive ``stage`` trace events, leaving payload events only.
+
+    ``query_stream`` now interleaves ``{"type": "stage", ...}`` events with
+    raw text chunks. Tests that assert on answer content filter them out;
+    the stage lifecycle is asserted explicitly in its own test.
+    """
+    return [
+        e for e in events if not (isinstance(e, dict) and e.get("type") == "stage")
+    ]
+
+
 # Fixtures
 
 
@@ -449,7 +462,7 @@ class TestRAGEngineQueryStream:
         async for chunk in rag_engine.query_stream("test"):
             collected.append(chunk)
 
-        assert collected == ["Hello ", "world"]
+        assert _content_only(collected) == ["Hello ", "world"]
 
     async def test_stream_calls_embed(self, rag_engine, mock_embedding_provider):
         async def fake_stream(prompt):
@@ -502,7 +515,7 @@ class TestRAGEngineQueryStream:
         collected = []
         async for chunk in rag_engine.query_stream("test"):
             collected.append(chunk)
-        assert collected == [rag_engine.NO_DOCUMENTS_MESSAGE]
+        assert _content_only(collected) == [rag_engine.NO_DOCUMENTS_MESSAGE]
         mock_llm_provider.generate_stream.assert_not_called()
 
     async def test_stream_no_relevant_context_yields_hint(
@@ -513,7 +526,7 @@ class TestRAGEngineQueryStream:
         collected = []
         async for chunk in rag_engine.query_stream("test"):
             collected.append(chunk)
-        assert collected == [rag_engine.NO_RELEVANT_CONTEXT_MESSAGE]
+        assert _content_only(collected) == [rag_engine.NO_RELEVANT_CONTEXT_MESSAGE]
         mock_llm_provider.generate_stream.assert_not_called()
 
     async def test_stream_embedding_error_wrapped(
@@ -563,7 +576,7 @@ class TestRAGEngineQueryStream:
         async for chunk in rag_engine.query_stream("What is AI?"):
             collected.append(chunk)
 
-        assert collected == ["streamed answer"]
+        assert _content_only(collected) == ["streamed answer"]
         mock_rewriter.rewrite.assert_awaited_once()
         assert mock_vector_store.similarity_search.await_count == 2
 
@@ -589,7 +602,7 @@ class TestRAGEngineQueryStream:
         async for chunk in rag_engine.query_stream("What is AI?"):
             collected.append(chunk)
 
-        assert collected == ["streamed answer"]
+        assert _content_only(collected) == ["streamed answer"]
         mock_embedding_provider.embed.assert_awaited_once_with("What is AI?")
         assert mock_vector_store.similarity_search.await_count == 1
 
@@ -644,10 +657,48 @@ class TestRAGEngineQueryStream:
         async for chunk in rag_engine.query_stream("What is ML?"):
             collected.append(chunk)
 
-        assert collected == ["streamed answer"]
+        assert _content_only(collected) == ["streamed answer"]
         call_kwargs = mock_vector_store.similarity_search.call_args
         assert call_kwargs.kwargs["collection_name"] == "documents_child"
         mock_vector_store.get_documents_by_ids.assert_awaited_once()
+
+    async def test_stream_emits_stage_events_in_order(
+        self, rag_engine, mock_vector_store, sample_chunks
+    ):
+        """Stage events announce each pipeline step that runs, in order."""
+        rag_engine._settings.ENABLE_QUERY_REWRITING = True
+        rag_engine._settings.ENABLE_HYBRID_SEARCH = False
+
+        mock_rewriter = AsyncMock()
+        mock_rewriter.rewrite = AsyncMock(return_value=["original", "variant"])
+        rag_engine._query_rewriter = mock_rewriter
+
+        mock_reranker = MagicMock()
+        mock_reranker.rerank.return_value = sample_chunks
+        rag_engine._reranker = mock_reranker
+
+        mock_vector_store.similarity_search = AsyncMock(return_value=sample_chunks)
+
+        async def fake_stream(prompt):
+            yield "ok"
+
+        rag_engine._llm.generate_stream = fake_stream
+
+        collected = []
+        async for chunk in rag_engine.query_stream("What is AI?"):
+            collected.append(chunk)
+
+        stage_events = [
+            e for e in collected if isinstance(e, dict) and e.get("type") == "stage"
+        ]
+        assert [e["stage"] for e in stage_events] == [
+            "rewriting",
+            "retrieving",
+            "reranking",
+            "generating",
+        ]
+        assert all("detail" in e for e in stage_events)
+        mock_reranker.rerank.assert_called_once()
 
 
 # RAGEngine._build_prompt Tests

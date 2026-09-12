@@ -151,6 +151,8 @@ class QueryDocumentUseCase:
                         if event_type == "done":
                             stream_guardrails = event.get("guardrails")
                             continue
+                        if event_type == "stage":
+                            yield event
                     else:
                         full_answer_parts.append(event)
                         yield {"type": "chunk", "content": event}

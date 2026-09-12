@@ -187,8 +187,14 @@ class TestRAGEngineGuardrailsStream:
         mock_llm_provider.generate_stream.assert_not_called()
         mock_llm_provider.generate.assert_not_called()
 
-        assert len(events) == 1
-        blocked = events[0]
+        # The guardrails stage announces the check, then the blocked event
+        # ends the stream — no other payload events are emitted.
+        stage_events = [
+            e for e in events if isinstance(e, dict) and e.get("type") == "stage"
+        ]
+        assert [e["stage"] for e in stage_events] == ["guardrails"]
+        assert events[-1]["type"] == "blocked"
+        blocked = events[-1]
         assert isinstance(blocked, dict)
         assert blocked["type"] == "blocked"
         assert blocked["message"] == "Your request was blocked by safety filters."

@@ -116,6 +116,23 @@ class RAGEngine:
             return self._tracer.start_as_current_span(name)
         return nullcontext()
 
+    @staticmethod
+    def _stage_event(stage: str, detail: str) -> dict[str, str]:
+        """Build a streaming ``stage`` event announcing a pipeline step.
+
+        Stage events are additive to the streaming contract: clients that
+        only expect raw text chunks keep working, while clients that render
+        a retrieval trace can show which pipeline step is running.
+
+        Args:
+            stage:  Stable identifier, e.g. ``"retrieving"``.
+            detail: Short human-readable description of the step.
+
+        Returns:
+            A dict with ``type``, ``stage`` and ``detail`` keys.
+        """
+        return {"type": "stage", "stage": stage, "detail": detail}
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -385,12 +402,16 @@ class RAGEngine:
             top_k:    Number of context chunks to retrieve.
 
         Yields:
-            Raw answer text chunks as they arrive. When a guardrail manager
-            is wired in, the stream additionally ends with a
-            ``{"type": "done", "answer": ..., "guardrails": {"input": ...,
-            "output": ...}}`` event, or — when the input check blocks the
-            question — a ``{"type": "blocked", "message": ...,
-            "reason": ...}`` event with no LLM call.
+            Raw answer text chunks as they arrive, interleaved with
+            ``{"type": "stage", "stage": <name>, "detail": <text>}`` events
+            that announce each retrieval step that actually runs
+            (``guardrails``, ``rewriting``, ``retrieving``, ``reranking``,
+            ``generating``) so clients can render a live progress trace.
+            When a guardrail manager is wired in, the stream additionally
+            ends with a ``{"type": "done", "answer": ..., "guardrails":
+            {"input": ..., "output": ...}}`` event, or — when the input
+            check blocks the question — a ``{"type": "blocked",
+            "message": ..., "reason": ...}`` event with no LLM call.
 
         Raises:
             RAGQueryError: On any failure during the pipeline.
@@ -403,6 +424,11 @@ class RAGEngine:
 
             # 0. Guardrails: input check (pre-retrieval, optional). Never
             # crashes the pipeline — on any failure we log and pass through.
+            if self._guardrail_manager is not None:
+                yield self._stage_event(
+                    "guardrails",
+                    "Checking your question for safety",
+                )
             input_check = self._check_input(question)
             if input_check.get("blocked", False):
                 logger.info("Stream query blocked by input guardrails")
@@ -433,8 +459,17 @@ class RAGEngine:
                     num_variants = getattr(
                         self._settings, "QUERY_REWRITING_VARIANTS", 3
                     )
+                    yield self._stage_event(
+                        "rewriting",
+                        "Rewriting your question for better retrieval",
+                    )
                     queries = await rewriter.rewrite(question, num_queries=num_variants)
+                    logger.debug("Multi-query retrieval: %d variants", len(queries))
 
+                    yield self._stage_event(
+                        "retrieving",
+                        "Searching your documents for relevant passages",
+                    )
                     all_result_lists: list[list] = []
                     for q in queries:
                         q_emb = await self._embedding.embed(q)
@@ -468,6 +503,10 @@ class RAGEngine:
                     chunks = None
 
             if chunks is None:
+                yield self._stage_event(
+                    "retrieving",
+                    "Searching your documents for relevant passages",
+                )
                 query_embedding = await self._embedding.embed(question)
                 if getattr(self._settings, "ENABLE_HYBRID_SEARCH", False):
                     chunks = await self._vector_store.hybrid_search(
@@ -495,6 +534,10 @@ class RAGEngine:
 
             # rerank
             if self._reranker is not None and chunks:
+                yield self._stage_event(
+                    "reranking",
+                    "Reranking results by relevance",
+                )
                 chunks = await asyncio.to_thread(
                     self._reranker.rerank, question, chunks, k
                 )
@@ -526,6 +569,10 @@ class RAGEngine:
 
             # 4. Stream answer (accumulated for the post-generation check)
             answer_parts: list[str] = []
+            yield self._stage_event(
+                "generating",
+                "Drafting the answer from the retrieved context",
+            )
             async for chunk in self._llm.generate_stream(prompt):
                 answer_parts.append(chunk)
                 yield chunk
