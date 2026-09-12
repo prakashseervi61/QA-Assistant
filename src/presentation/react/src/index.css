@@ -1,3 +1,82 @@
+@import './styles/design-tokens.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  html {
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    background-color: var(--bg-paper);
+    color: var(--ink-primary);
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+
+  /* Editorial serif typography class */
+  .font-editorial {
+    font-family: 'Newsreader', Georgia, Cambria, 'Times New Roman', serif;
+  }
+
+  /* Tabular numbers for clean alignment in tables, sizes, and timestamps */
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Tactile selection styling */
+  ::selection {
+    background-color: #f2dac9;
+    color: #1c1917;
+  }
+
+  /* Refined, low-profile warm scrollbars */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background-color: #d7d2c7;
+    border-radius: 9999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: #a8a29e;
+  }
+}
+
+@layer utilities {
+  /* Editorial card styling with 1px tactile warm border */
+  .card-warm {
+    background-color: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    box-shadow: var(--shadow-card);
+  }
+
+  .card-warm-subtle {
+    background-color: var(--bg-subtle);
+    border: 1px solid var(--border-subtle);
+  }
+
+  /* Tactile focus ring */
+  .ring-tactile {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--bg-paper), 0 0 0 4px rgba(177, 85, 42, 0.35);
+  }
+
+  /* Smooth layout panel transitions */
+  .transition-panel {
+    transition: width 220ms cubic-bezier(0.4, 0, 0.2, 1),
+                transform 220ms cubic-bezier(0.4, 0, 0.2, 1),
+                opacity 180ms ease-in-out;
+  }
+}

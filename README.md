@@ -1,4 +1,4 @@
-# QA Assistant
+# Marginalia
 
 A production-grade **Retrieval-Augmented Generation (RAG)** question-answering app. Upload PDF, DOCX, or TXT documents, ask questions in natural language, and get grounded answers with source citations and a confidence score.
 
@@ -174,7 +174,7 @@ All settings load from `.env` or environment variables via `pydantic-settings` (
 
 | Variable | Default | Description |
 |---|---|---|
-| `APP_NAME` | `QA Assistant` | FastAPI app title |
+| `APP_NAME` | `Marginalia` | FastAPI app title |
 | `DEBUG` | `false` | Reserved — enable debug mode |
 | `LOG_LEVEL` | `INFO` | Reserved — logging level |
 | `LLM_PROVIDER` | `gemini` | `gemini`, `openai`, `anthropic`, `deepseek` |

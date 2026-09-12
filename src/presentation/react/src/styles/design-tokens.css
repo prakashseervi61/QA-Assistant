@@ -1,0 +1,127 @@
+/**
+ * Design Tokens — Marginalia
+ * Human-centered, editorial, warm paper & rich ink design system.
+ * Sits on a single CSS-variable token layer so the whole app flips
+ * between light and dark via `[data-theme="dark"]` — no per-component
+ * overrides. Purges saturated neon SaaS indigo/purple and replaces it
+ * with tactile warmth and burnt terracotta.
+ */
+
+:root {
+  /* Paper & Canvas Foundations */
+  --bg-paper-50: #fdfdfc;
+  --bg-paper-100: #fbfaf8;
+  --bg-paper: #fbfaf8;
+  --bg-surface: #ffffff;
+  --bg-subtle: #f5f3ef;
+  --bg-muted: #eeebe3;
+  --bg-dark-sidebar: #1c1917; /* Warm carbon ink */
+  --bg-dark-sidebar-subtle: #292524;
+  --bg-dark-sidebar-hover: #35302c;
+
+  /* Ink & Typography Hierarchy */
+  --ink-primary: #1c1917;    /* Stone 900 */
+  --ink-secondary: #44403c;  /* Stone 700 */
+  --ink-muted: #78716c;      /* Stone 500 */
+  --ink-faint: #a8a29e;      /* Stone 400 */
+  --ink-inverse: #fafaf9;
+
+  /* Human Accent: Terracotta & Burnt Amber */
+  --accent-brand-50: #fdf8f4;
+  --accent-brand-100: #f9eee5;
+  --accent-brand-200: #f2dac9;
+  --accent-brand-300: #e7bca2;
+  --accent-brand-400: #d89472;
+  --accent-brand-500: #c56e43;
+  --accent-brand-600: #b1552a; /* Primary Action */
+  --accent-brand-700: #944120;
+  --accent-brand-800: #79361e;
+  --accent-brand-900: #642e1d;
+  --accent-brand-950: #37160c;
+
+  /* Functional Indicators (Muted & Warm) */
+  --color-success-bg: #f0fdf4;
+  --color-success-text: #166534;
+  --color-success-border: #bbf7d0;
+  --color-success-dot: #22c55e;
+
+  --color-error-bg: #fef2f2;
+  --color-error-text: #991b1b;
+  --color-error-border: #fecaca;
+  --color-error-dot: #ef4444;
+
+  /* Borders & Dividers */
+  --border-subtle: #edeae4;
+  --border-default: #e7e4dc;
+  --border-strong: #d7d2c7;
+  --border-dark: #35302c;
+
+  /* Shadows (Tactile & Soft, no unnatural neon glows) */
+  --shadow-subtle: 0 1px 2px 0 rgba(28, 25, 23, 0.04);
+  --shadow-card: 0 1px 3px 0 rgba(28, 25, 23, 0.04), 0 1px 2px -1px rgba(28, 25, 23, 0.03);
+  --shadow-hover: 0 4px 12px -2px rgba(28, 25, 23, 0.06), 0 2px 4px -2px rgba(28, 25, 23, 0.04);
+  --shadow-float: 0 12px 28px -4px rgba(28, 25, 23, 0.08), 0 4px 8px -2px rgba(28, 25, 23, 0.04);
+
+  /* Radii */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-pill: 9999px;
+}
+
+/* ---------------------------------------------------------------------------
+ * Dark theme — warm carbon, not inverted grays.
+ * Paper, ink, borders, shadows and status tints shift to warm near-blacks;
+ * the accent keeps its terracotta identity. The always-dark sidebar relies on
+ * brand-400/500/600, so those stay fixed; the tint end (50-300, used only on
+ * ambient surfaces) and the dark text shade (700) get warm dark values so
+ * pills, chips and embossed icons stay subtle and legible on carbon.
+ * ------------------------------------------------------------------------- */
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg-paper-50: #1b1814;
+  --bg-paper-100: #191612;
+  --bg-paper: #16130f;
+  --bg-surface: #1e1a15;
+  --bg-subtle: #231e19;
+  --bg-muted: #2a241e;
+  --bg-dark-sidebar: #14110d;
+  --bg-dark-sidebar-subtle: #201b16;
+  --bg-dark-sidebar-hover: #2a241e;
+
+  --ink-primary: #ece6dd;
+  --ink-secondary: #c6beb0;
+  --ink-muted: #9b9488;
+  --ink-faint: #6f6a60;
+  --ink-inverse: #16130f;
+
+  /* Warm terracotta tints (surface fills & borders) */
+  --accent-brand-50: #282019;
+  --accent-brand-100: #302620;
+  --accent-brand-200: #3b2f27;
+  --accent-brand-300: #4a382e;
+  /* 400 / 500 / 600 stay fixed (always-dark sidebar + primary action) */
+  --accent-brand-700: #c56e43; /* text on dark fills */
+
+  --color-success-bg: #101d14;
+  --color-success-text: #86efac;
+  --color-success-border: #1f5635;
+  --color-success-dot: #4ade80;
+
+  --color-error-bg: #2a1414;
+  --color-error-text: #fca5a5;
+  --color-error-border: #6b2424;
+  --color-error-dot: #f87171;
+
+  --border-subtle: #221d18;
+  --border-default: #2a241e;
+  --border-strong: #3a332a;
+  --border-dark: #35302c;
+
+  --shadow-subtle: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+  --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.35), 0 1px 2px -1px rgba(0, 0, 0, 0.3);
+  --shadow-hover: 0 4px 12px -2px rgba(0, 0, 0, 0.45), 0 2px 4px -2px rgba(0, 0, 0, 0.35);
+  --shadow-float: 0 12px 28px -4px rgba(0, 0, 0, 0.55), 0 4px 8px -2px rgba(0, 0, 0, 0.4);
+}

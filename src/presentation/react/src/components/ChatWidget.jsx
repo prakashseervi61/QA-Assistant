@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
-import { FiChevronDown, FiFileText, FiLoader, FiMessageSquare, FiSend, FiSquare, FiUploadCloud } from 'react-icons/fi';
-import { fetchJSON, streamChat } from '../api';
+import { FiChevronDown, FiFileText, FiLoader, FiMessageSquare, FiMic, FiPaperclip, FiSend, FiSquare } from 'react-icons/fi';
+import { fetchJSON, postFormData, streamChat } from '../api';
 
 const SUGGESTIONS = [
   'Summarize the key points of my documents',
   'What are the main topics covered?',
   'How does this relate to the uploaded content?',
 ];
+
+const ACCEPTED_TYPES = '.pdf,.docx,.txt';
 
 const MAX_TEXTAREA_HEIGHT = 160; // px
 
@@ -20,10 +22,41 @@ function getSourceTitle(source, index) {
   return meta.filename || meta.source || meta.title || `Source ${index + 1}`;
 }
 
+/** Generates a unique client-side message ID. */
+function generateMessageId() {
+  return `msg-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+}
+
+// Storage access can throw in some contexts (Safari private mode, lockdowns);
+// degrade gracefully instead of crashing the chat.
+function safeGetItem(key) {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeSetItem(key, value) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    /* storage unavailable — fail silently */
+  }
+}
+
+function safeRemoveItem(key) {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    /* storage unavailable — fail silently */
+  }
+}
+
 /** Maps a server-side message (snake_case timestamps) to the local message shape. */
 function toLocalMessage(m) {
   return {
-    id: m.id,
+    id: m.id || generateMessageId(),
     role: m.role,
     content: m.content,
     sources: m.sources || [],
@@ -40,12 +73,22 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
   const [hasDocuments, setHasDocuments] = useState(null); // null = still checking
   const [conversations, setConversations] = useState([]); // from GET /conversations
   const [restoring, setRestoring] = useState(true); // gates empty-state flash
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState(null);
+  const [listening, setListening] = useState(false);
+  const [voiceError, setVoiceError] = useState(null);
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
+  const chatFileInputRef = useRef(null); // hidden input for in-chat uploads
+  const recognitionRef = useRef(null); // SpeechRecognition instance
   const abortRef = useRef(null); // AbortController for the in-flight stream
   const switchConversationRef = useRef(null); // latest switchConversation, for the Recent-view event listener
+  const isSendingRef = useRef(false); // Execution lock preventing rapid double-send
 
   const LAST_CONVERSATION_KEY = 'qa-assistant.lastConversationId';
+  const lastConversationId = () => safeGetItem(LAST_CONVERSATION_KEY);
+  const saveLastConversationId = id => safeSetItem(LAST_CONVERSATION_KEY, id);
+  const clearLastConversationId = () => safeRemoveItem(LAST_CONVERSATION_KEY);
 
   // Check whether any documents are available to query.
   useEffect(() => {
@@ -75,7 +118,7 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
       .then(list => {
         if (cancelled) return undefined;
         setConversations(list);
-        const savedId = localStorage.getItem(LAST_CONVERSATION_KEY);
+        const savedId = lastConversationId();
         const target =
           savedId && list.some(conversation => conversation.id === savedId)
             ? savedId
@@ -85,12 +128,12 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
           if (cancelled) return;
           setMessages(msgs.map(toLocalMessage));
           setConversationId(target);
-          localStorage.setItem(LAST_CONVERSATION_KEY, target);
+          saveLastConversationId(target);
         });
       })
       .catch(() => {
         // Never lock the chat out; start fresh if restore fails.
-        if (!cancelled) localStorage.removeItem(LAST_CONVERSATION_KEY);
+        if (!cancelled) clearLastConversationId();
       })
       .finally(() => {
         if (!cancelled) setRestoring(false);
@@ -102,7 +145,7 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
 
   // Remember the active conversation across page reloads.
   useEffect(() => {
-    if (conversationId) localStorage.setItem(LAST_CONVERSATION_KEY, conversationId);
+    if (conversationId) saveLastConversationId(conversationId);
   }, [conversationId]);
 
   // Scroll to the newest message when the conversation changes.
@@ -125,6 +168,11 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
     return () => window.removeEventListener('open-conversation', handleOpenConversation);
   }, []);
 
+  // Stop any in-flight speech recognition if the widget unmounts.
+  useEffect(() => {
+    return () => recognitionRef.current?.stop();
+  }, []);
+
   function resetTextareaHeight() {
     const el = textareaRef.current;
     if (el) el.style.height = 'auto';
@@ -140,7 +188,9 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
   }
 
   function handleKeyDown(e) {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    // Enter submits, unless Shift (newline) or an IME composition is active
+    // (composing languages like CJK would otherwise send mid-conversion).
+    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && e.keyCode !== 229) {
       e.preventDefault();
       sendMessage();
     }
@@ -162,12 +212,15 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
 
   /** Load a different conversation into the panel, or reset to a fresh chat when id is empty. */
   async function switchConversation(id) {
-    if (restoring || loading || id === conversationId) return;
+    if (restoring || id === conversationId) return;
+    // Stop any in-flight stream first so tokens can't bleed into the
+    // conversation we're switching to.
+    abortRef.current?.abort();
     if (!id) {
       setMessages([]);
       setConversationId(null);
       setExpandedSources({});
-      localStorage.removeItem(LAST_CONVERSATION_KEY);
+      clearLastConversationId();
       return;
     }
     setRestoring(true);
@@ -186,19 +239,19 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
 
   switchConversationRef.current = switchConversation;
 
-  /** Immutably patch the message at `index` in the message list. */
-  function updateMessageAt(index, updater) {
-    setMessages(prev => prev.map((msg, i) => (i === index ? updater(msg) : msg)));
+  /** Immutably patch the message with the given `id` in the message list. */
+  function updateMessageById(id, updater) {
+    setMessages(prev => prev.map(msg => (msg.id === id ? updater(msg) : msg)));
   }
 
-  /** Append streamed text to the assistant message at `index`. */
-  function appendStreamText(index, text) {
-    updateMessageAt(index, msg => ({ ...msg, content: msg.content + text }));
+  /** Append streamed text to the assistant message with `id`. */
+  function appendStreamText(id, text) {
+    updateMessageById(id, msg => ({ ...msg, content: msg.content + text }));
   }
 
-  /** Flag the assistant message at `index` as failed, preserving partial content. */
-  function markStreamError(index, message) {
-    updateMessageAt(index, msg => {
+  /** Flag the assistant message with `id` as failed, preserving partial content. */
+  function markStreamError(id, message) {
+    updateMessageById(id, msg => {
       const note = `Something went wrong: ${message}`;
       return {
         ...msg,
@@ -213,20 +266,111 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
     abortRef.current?.abort();
   }
 
+  /** Upload a document picked from the chat composer. */
+  async function handleChatUpload(e) {
+    const selected = e.target.files?.[0];
+    if (!selected || uploading) return;
+    setUploading(true);
+    setUploadError(null);
+    const formData = new FormData();
+    formData.append('file', selected);
+    try {
+      await postFormData('/documents/upload', formData);
+      setHasDocuments(true);
+      window.dispatchEvent(new CustomEvent('documents-changed'));
+    } catch (err) {
+      setUploadError(err.message);
+    } finally {
+      setUploading(false);
+      if (chatFileInputRef.current) chatFileInputRef.current.value = '';
+    }
+  }
+
+  /** Toggle voice-to-text dictation into the composer. */
+  function toggleVoice() {
+    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!Recognition) {
+      setVoiceError('Voice input is not supported in this browser');
+      return;
+    }
+    if (listening) {
+      recognitionRef.current?.stop();
+      setListening(false);
+      return;
+    }
+    setVoiceError(null);
+    const recognition = new Recognition();
+    recognition.lang = 'en-US';
+    recognition.interimResults = true;
+    recognition.continuous = true;
+
+    let finalTranscript = '';
+
+    recognition.onstart = () => {
+      setListening(true);
+      textareaRef.current?.focus();
+    };
+
+    recognition.onresult = event => {
+      let interimTranscript = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const result = event.results[i][0];
+        if (event.results[i].isFinal) finalTranscript += result.transcript;
+        else interimTranscript += result.transcript;
+      }
+      setInput(finalTranscript + interimTranscript);
+      const el = textareaRef.current;
+      if (el) {
+        el.style.height = 'auto';
+        el.style.height = `${el.scrollHeight}px`;
+      }
+    };
+
+    recognition.onend = () => setListening(false);
+
+    recognition.onerror = event => {
+      setListening(false);
+      if (event.error && event.error !== 'aborted' && event.error !== 'no-speech') {
+        setVoiceError(
+          event.error === 'not-allowed'
+            ? 'Microphone access was denied — allow the microphone and try again'
+            : `Voice input error: ${event.error}`
+        );
+      }
+    };
+
+    recognitionRef.current = recognition;
+    setListening(true);
+    recognition.start();
+  }
+
   async function sendMessage(textOverride) {
     const text = (textOverride ?? input).trim();
-    if (!text || loading || hasDocuments === false || restoring) return;
+    if (!text || loading || hasDocuments === false || restoring || isSendingRef.current) return;
+    isSendingRef.current = true;
 
     setInput('');
     resetTextareaHeight();
 
-    const userMsg = { role: 'user', content: text, createdAt: new Date() };
+    const userMsg = {
+      id: generateMessageId(),
+      role: 'user',
+      content: text,
+      createdAt: new Date(),
+    };
     setMessages(prev => [...prev, userMsg]);
     setLoading(true);
 
     // Append the assistant bubble once; streamed chunks fill it in incrementally.
-    const botIndex = messages.length + 1; // index right after the user message
-    setMessages(prev => [...prev, { role: 'assistant', content: '', sources: [], createdAt: new Date() }]);
+    const botId = generateMessageId();
+    const botMsg = {
+      id: botId,
+      role: 'assistant',
+      content: '',
+      sources: [],
+      createdAt: new Date(),
+    };
+    setMessages(prev => [...prev, botMsg]);
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -246,7 +390,7 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
         onEvent(event) {
           switch (event.type) {
             case 'chunk':
-              appendStreamText(botIndex, event.content ?? '');
+              appendStreamText(botId, event.content ?? '');
               break;
             case 'done':
               doneEvent = event;
@@ -255,7 +399,7 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
                 refreshConversations();
               }
               if (event.sources?.length > 0) {
-                updateMessageAt(botIndex, msg => ({ ...msg, sources: event.sources }));
+                updateMessageById(botId, msg => ({ ...msg, sources: event.sources }));
               }
               break;
             case 'error':
@@ -274,35 +418,34 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
         },
       });
 
-      if (blockedEvent) {
-        markStreamError(botIndex, blockedEvent.message || 'Your question was blocked');
-      } else if (streamError) {
-        markStreamError(botIndex, streamError);
+      if (streamError) {
+        markStreamError(botId, streamError);
       } else if (controller.signal.aborted) {
         // User pressed stop — keep the partial answer as-is.
       } else if (doneEvent) {
         // Stream completed cleanly; never leave a visually empty bubble.
-        updateMessageAt(botIndex, msg => (msg.content ? msg : { ...msg, content: 'No response' }));
+        updateMessageById(botId, msg => (msg.content ? msg : { ...msg, content: 'No response' }));
       } else {
-        markStreamError(botIndex, 'Stream ended before a complete response');
+        markStreamError(botId, 'Stream ended before a complete response');
       }
     } catch (err) {
       if (blockedEvent) {
-        markStreamError(botIndex, blockedEvent.message || 'Your question was blocked');
+        markStreamError(botId, blockedEvent.message || 'Your question was blocked');
       } else if (!controller.signal.aborted) {
-        markStreamError(botIndex, err.message || 'Unknown error');
+        markStreamError(botId, err.message || 'Unknown error');
       }
     } finally {
       abortRef.current = null;
       setLoading(false);
+      isSendingRef.current = false;
     }
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-slate-50">
-      {/* Previous chats switcher */}
+    <div className="flex min-h-0 flex-1 flex-col bg-paper">
+      {/* Header */}
       {conversations.length > 0 && (
-        <div className="border-b border-slate-200 bg-white px-3 py-2">
+        <header className="flex shrink-0 items-center justify-end gap-3 border-b border-border bg-surface px-4 py-2.5 sm:px-6">
           <select
             id="conversation-select"
             name="conversation"
@@ -310,7 +453,7 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
             value={conversationId ?? ''}
             onChange={e => switchConversation(e.target.value)}
             disabled={restoring || loading}
-            className="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-700 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+            className="w-auto min-w-0 rounded-lg border border-border bg-surface px-2.5 py-1.5 text-xs font-medium text-ink shadow-subtle focus:border-brand-600 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-60 sm:max-w-xs"
           >
             <option value="">New chat</option>
             {conversations.map(conversation => (
@@ -319,11 +462,11 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
               </option>
             ))}
           </select>
-        </div>
+        </header>
       )}
 
       {/* Messages */}
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+      <div className="min-h-0 flex-1 overflow-y-auto">
         {messages.length === 0 && restoring ? (
           <div className="flex h-full flex-col items-center justify-center">
             <FiLoader className="h-6 w-6 animate-spin text-brand-600" aria-hidden="true" />
@@ -332,24 +475,24 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
         ) : messages.length === 0 && !loading ? (
           hasDocuments === false ? (
             <div className="flex h-full flex-col items-center justify-center px-4 text-center">
-              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-100 text-brand-600">
-                <FiUploadCloud className="h-7 w-7" />
+              <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-border bg-paper-200 text-stone-700">
+                <FiPaperclip className="h-6 w-6" />
               </div>
-              <h3 className="mt-4 text-base font-semibold text-slate-900">
+              <h3 className="font-editorial text-lg font-medium text-ink">
                 Upload a document to continue
               </h3>
-              <p className="mt-1 max-w-xs text-sm text-slate-500">
-                No documents are available yet. Upload a PDF, DOCX or TXT file from the
-                Documents view, then come back here to ask questions.
+              <p className="mt-1 max-w-xs text-sm leading-relaxed text-ink-muted">
+                No documents are available yet. Upload a PDF, DOCX or TXT using the
+                button below, or from the Documents view.
               </p>
             </div>
           ) : (
             <div className="flex h-full flex-col items-center justify-center px-4 text-center">
-              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-100 text-brand-600">
-                <FiMessageSquare className="h-7 w-7" />
+              <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-brand-100 bg-brand-50 text-brand-600 shadow-subtle">
+                <FiMessageSquare className="h-6 w-6" />
               </div>
-              <h3 className="mt-4 text-base font-semibold text-slate-900">Ask a question…</h3>
-              <p className="mt-1 max-w-xs text-sm text-slate-500">
+              <h3 className="font-editorial text-lg font-medium text-ink">Ask a question…</h3>
+              <p className="mt-1 max-w-xs text-sm leading-relaxed text-ink-muted">
                 Get answers grounded in your uploaded documents.
               </p>
               {hasDocuments === true && (
@@ -359,7 +502,7 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
                       key={suggestion}
                       type="button"
                       onClick={() => sendMessage(suggestion)}
-                      className="rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:border-brand-300 hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                      className="rounded-full border border-border bg-surface px-3.5 py-1.5 text-xs font-medium text-ink-secondary shadow-subtle transition-colors hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
                     >
                       {suggestion}
                     </button>
@@ -369,23 +512,23 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
             </div>
           )
         ) : (
-          <div role="log" aria-live="polite" className="space-y-4">
+          <div role="log" aria-live="polite" className="mx-auto w-full max-w-4xl space-y-5 px-4 py-6 sm:px-8">
             {messages.map((msg, msgIndex) => {
               const isUser = msg.role === 'user';
               return (
-                <div key={msgIndex} className={`flex items-end gap-2 ${isUser ? 'justify-end' : 'justify-start'}`}>
+                <div key={msg.id} className={`flex items-start gap-2.5 ${isUser ? 'justify-end' : 'justify-start'}`}>
                   {!isUser && (
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-100 text-brand-700">
-                      <FiMessageSquare className="h-4 w-4" />
+                    <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-brand-200 bg-brand-100 font-serif text-xs font-bold text-brand-700">
+                      Q
                     </div>
                   )}
                   <div
-                    className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed shadow-sm ${
+                    className={`${
                       isUser
-                        ? 'rounded-br-md bg-brand-600 text-white'
+                        ? 'max-w-[85%] rounded-2xl rounded-br-sm bg-stone-900 px-4 py-3 text-sm leading-relaxed text-[#fcfbf9] shadow-card'
                         : msg.error
-                          ? 'rounded-bl-md border border-red-200 bg-red-50 text-red-700'
-                          : 'rounded-bl-md border border-slate-200 bg-white text-slate-800'
+                          ? 'max-w-[88%] rounded-2xl rounded-tl-sm border border-red-200 bg-red-50/90 px-4 py-3.5 text-sm leading-relaxed text-red-800 shadow-card'
+                          : 'max-w-[88%] rounded-2xl rounded-tl-sm border border-border bg-surface px-4 py-3.5 text-sm leading-relaxed text-ink shadow-card'
                     }`}
                   >
                     {!isUser && msg.content === '' && loading ? (
@@ -393,7 +536,7 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
                         {[0, 1, 2].map(i => (
                           <span
                             key={i}
-                            className="h-2 w-2 animate-bounce rounded-full bg-brand-400"
+                            className="h-2 w-2 animate-bounce rounded-full bg-brand-500"
                             style={{ animationDelay: `${i * 150}ms` }}
                           />
                         ))}
@@ -404,13 +547,13 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
                     )}
 
                     {!isUser && msg.sources?.length > 0 && (
-                      <div className="mt-3 border-t border-slate-100 pt-2.5">
-                        <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-slate-400">
-                          Sources
+                      <div className="mt-3 border-t border-border pt-2.5">
+                        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-ink-muted">
+                          Referenced Sources
                         </p>
                         <div className="flex flex-wrap gap-1.5">
                           {msg.sources.map((source, i) => {
-                            const key = `${msgIndex}-${i}`;
+                            const key = `${msg.id}-${i}`;
                             const expanded = Boolean(expandedSources[key]);
                             const score =
                               typeof source.score === 'number' ? Math.round(source.score * 100) : null;
@@ -420,16 +563,18 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
                                 type="button"
                                 onClick={() => toggleSource(key)}
                                 aria-expanded={expanded}
-                                className={`inline-flex max-w-full items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
+                                className={`inline-flex max-w-full items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
                                   expanded
                                     ? 'border-brand-300 bg-brand-50 text-brand-700'
-                                    : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-brand-300 hover:text-brand-700'
+                                    : 'border-border bg-paper-200 text-ink-secondary hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700'
                                 }`}
                               >
                                 <FiFileText className="h-3 w-3 shrink-0" />
                                 <span className="truncate">{getSourceTitle(source, i)}</span>
                                 {score != null && (
-                                  <span className="shrink-0 text-slate-400">{score}%</span>
+                                  <span className="shrink-0 font-mono text-[11px] tabular-nums text-ink-muted">
+                                    {score}%
+                                  </span>
                                 )}
                                 <FiChevronDown
                                   className={`h-3 w-3 shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`}
@@ -442,14 +587,14 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
                         {/* Expanded source previews */}
                         <div className="mt-2 space-y-2">
                           {msg.sources.map((source, i) => {
-                            const key = `${msgIndex}-${i}`;
+                            const key = `${msg.id}-${i}`;
                             if (!expandedSources[key]) return null;
                             return (
                               <div
                                 key={`${key}-preview`}
-                                className="rounded-lg border border-brand-200 bg-brand-50/60 p-3 text-xs text-slate-600"
+                                className="rounded-lg border border-border bg-paper-200/80 p-3 text-xs leading-relaxed text-ink-secondary shadow-subtle"
                               >
-                                <p className="mb-1 font-medium text-brand-700">
+                                <p className="mb-1 font-semibold text-ink">
                                   {getSourceTitle(source, i)}
                                 </p>
                                 <p className="line-clamp-4 whitespace-pre-wrap">{source.content}</p>
@@ -461,7 +606,13 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
                     )}
 
                     <p
-                      className={`mt-1.5 text-[11px] ${isUser ? 'text-brand-100' : msg.error ? 'text-red-400' : 'text-slate-400'}`}
+                      className={`mt-2 font-mono text-[10px] ${
+                        isUser
+                          ? 'text-right text-stone-400'
+                          : msg.error
+                            ? 'text-red-700'
+                            : 'text-ink-muted'
+                      }`}
                     >
                       {formatTime(msg.createdAt)}
                     </p>
@@ -474,13 +625,38 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Composer */}
-      <div className="border-t border-slate-200 bg-white p-3">
+      {/* Composer — floating card over the messages area */}
+      <div className="shrink-0 px-4 pb-4 pt-2 sm:px-8">
+        <div className="mx-auto w-full max-w-4xl">
         <div
-          className={`flex items-end gap-2 rounded-xl border bg-white px-3 py-2 transition-colors focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-500/20 ${
-            loading || hasDocuments === false ? 'border-slate-200 opacity-60' : 'border-slate-300'
+          className={`flex items-end gap-2 rounded-2xl border border-border bg-surface px-3.5 py-2.5 shadow-lg shadow-stone-900/5 transition-all focus-within:border-brand-600 focus-within:ring-2 focus-within:ring-brand-500 ${
+            loading || hasDocuments === false ? 'opacity-60' : ''
           }`}
         >
+          <button
+            type="button"
+            onClick={() => chatFileInputRef.current?.click()}
+            disabled={uploading}
+            aria-label="Upload a document"
+            title="Upload a PDF, DOCX or TXT document"
+            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-ink-muted transition-colors hover:bg-brand-50 hover:text-brand-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:cursor-not-allowed ${
+              uploading ? 'cursor-wait text-brand-600' : ''
+            }`}
+          >
+            {uploading ? (
+              <FiLoader className="h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <FiPaperclip className="h-4 w-4" aria-hidden="true" />
+            )}
+          </button>
+          <input
+            ref={chatFileInputRef}
+            type="file"
+            accept={ACCEPTED_TYPES}
+            onChange={handleChatUpload}
+            tabIndex={-1}
+            className="sr-only"
+          />
           <textarea
             ref={textareaRef}
             rows={1}
@@ -493,15 +669,31 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
             disabled={loading || hasDocuments === false}
             aria-label="Your question"
             name="question"
-            className="max-h-40 min-h-0 flex-1 resize-none bg-transparent py-1 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none disabled:cursor-not-allowed"
+            className="max-h-40 min-h-0 flex-1 resize-none bg-transparent py-1 text-sm text-ink placeholder:text-ink-faint focus:outline-none disabled:cursor-not-allowed"
           />
+          <button
+            type="button"
+            onClick={toggleVoice}
+            disabled={loading}
+            aria-label={listening ? 'Stop voice input' : 'Start voice input'}
+            title={listening ? 'Stop voice input' : 'Voice input'}
+            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-50 ${
+              listening ? 'bg-red-700 text-white hover:bg-red-800' : 'text-ink-muted hover:bg-brand-50 hover:text-brand-600'
+            }`}
+          >
+            {listening ? (
+              <FiMic className="h-4 w-4 animate-pulse" aria-hidden="true" />
+            ) : (
+              <FiMic className="h-4 w-4" aria-hidden="true" />
+            )}
+          </button>
           {loading ? (
             <button
               type="button"
               onClick={stopStreaming}
               aria-label="Stop generating"
               title="Stop generating"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-red-600 text-white transition-colors hover:bg-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-1"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-red-700 text-white shadow-subtle transition-colors hover:bg-red-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-1"
             >
               <FiSquare className="h-4 w-4" aria-hidden="true" />
             </button>
@@ -511,17 +703,25 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
               onClick={() => sendMessage()}
               disabled={!input.trim() || hasDocuments === false}
               aria-label="Send message"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-600 text-white transition-colors hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:bg-slate-300"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-600 text-white shadow-subtle transition-colors hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:bg-stone-200 disabled:text-stone-400"
             >
               <FiSend className="h-4 w-4" aria-hidden="true" />
             </button>
           )}
         </div>
-        <p className="mt-1.5 text-center text-[11px] text-slate-400">
-          {hasDocuments === false
-            ? 'Upload a document to start asking questions'
-            : 'Enter to send · Shift+Enter for a new line'}
+        {hasDocuments === false && (
+          <p className="mt-2 text-center font-mono text-[11px] text-ink-muted">
+            Upload a document to start asking questions
+          </p>
+        )}
+        <p className="mt-2 min-h-[2px]">
+          {(uploadError || voiceError) && (
+            <span className="block text-center font-mono text-[11px] text-red-600">
+              {uploadError || voiceError}
+            </span>
+          )}
         </p>
+        </div>
       </div>
     </div>
   );

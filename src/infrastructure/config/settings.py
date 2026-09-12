@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     )
 
     # Application
-    APP_NAME: str = "QA Assistant"
+    APP_NAME: str = "Marginalia"
     DEBUG: bool = False
     LOG_LEVEL: str = "INFO"
 

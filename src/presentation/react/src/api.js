@@ -1,6 +1,32 @@
-export const API_BASE_URL = '/api'; // proxied by Vite
+export const API_BASE_URL = import.meta.env?.VITE_API_BASE_URL || '/api'; // proxied by Vite; override with VITE_API_BASE_URL
 
 const AUTH_TOKEN_KEY = 'qa_assistant_token';
+
+// Storage access can throw (Safari private mode, sandboxed iframes, enterprise
+// lockdowns). Fail silently so auth/UX flows never crash over storage.
+export function safeGetItem(key) {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+export function safeSetItem(key, value) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    /* storage unavailable — fail silently */
+  }
+}
+
+function safeRemoveItem(key) {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    /* storage unavailable — fail silently */
+  }
+}
 
 /**
  * Store (or clear, when passed null/undefined) the bearer token used for
@@ -8,15 +34,15 @@ const AUTH_TOKEN_KEY = 'qa_assistant_token';
  */
 export function setAuthToken(token) {
   if (token == null) {
-    localStorage.removeItem(AUTH_TOKEN_KEY);
+    safeRemoveItem(AUTH_TOKEN_KEY);
   } else {
-    localStorage.setItem(AUTH_TOKEN_KEY, token);
+    safeSetItem(AUTH_TOKEN_KEY, token);
   }
 }
 
 /** Return the stored bearer token, or null when none has been set. */
 export function getAuthToken() {
-  return localStorage.getItem(AUTH_TOKEN_KEY);
+  return safeGetItem(AUTH_TOKEN_KEY);
 }
 
 /**
