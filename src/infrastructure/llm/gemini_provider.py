@@ -125,8 +125,12 @@ class GeminiProvider(LLMProvider):
         try:
             response = await asyncio.to_thread(_stream)
             for chunk in response:
-                if chunk.text:
-                    yield chunk.text
+                try:
+                    text = chunk.text
+                except Exception:
+                    continue
+                if text:
+                    yield text
         except Exception as exc:
             if _is_quota_error(exc):
                 raise LLMQuotaExceededError(

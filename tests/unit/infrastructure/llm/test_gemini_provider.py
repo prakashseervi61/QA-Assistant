@@ -1,7 +1,7 @@
 """Unit tests for the Gemini LLM provider quota/rate-limit handling."""
 
 import sys
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
 
@@ -106,6 +106,43 @@ class TestGeminiProviderQuotaError:
 
         # The token yielded before the quota failure is still delivered.
         assert collected == ["partial"]
+
+    @pytest.mark.asyncio
+    async def test_generate_stream_skips_part_less_final_chunk(
+        self, mock_genai_client
+    ):
+        class PartLessChunk:
+            @property
+            def text(self):
+                raise Exception(
+                    "Invalid operation: The `response.text` quick accessor "
+                    "requires the response to contain a valid `Part`, but none "
+                    "were returned. The candidate's finish_reason is 1."
+                )
+
+        text_chunk = MagicMock()
+        text_chunk.text = "full answer"
+        mock_genai_client.generate_content.return_value = iter(
+            [text_chunk, PartLessChunk()]
+        )
+        provider = GeminiProvider(api_key="test-key", model="gemini-2.5-flash")
+
+        collected = [piece async for piece in provider.generate_stream("prompt")]
+        assert collected == ["full answer"]
+
+    @pytest.mark.asyncio
+    async def test_generate_stream_skips_empty_chunks(self, mock_genai_client):
+        first = MagicMock()
+        first.text = "hello "
+        empty = MagicMock()
+        empty.text = ""
+        last = MagicMock()
+        last.text = "world"
+        mock_genai_client.generate_content.return_value = iter([first, empty, last])
+
+        provider = GeminiProvider(api_key="test-key", model="gemini-2.5-flash")
+        collected = [piece async for piece in provider.generate_stream("prompt")]
+        assert collected == ["hello ", "world"]
 
 
 class TestGeminiProviderUsage:
