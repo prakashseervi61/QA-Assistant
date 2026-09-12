@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { FiCheck, FiChevronDown, FiFileText, FiLoader, FiMessageSquare, FiMic, FiPaperclip, FiSend, FiSquare } from 'react-icons/fi';
 import { fetchJSON, postFormData, streamChat } from '../api';
+import Markdown from './Markdown';
 
 const SUGGESTIONS = [
   'Summarize the key points of my documents',
@@ -78,7 +79,9 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
   const [listening, setListening] = useState(false);
   const [voiceError, setVoiceError] = useState(null);
   const [stages, setStages] = useState([]); // live RAG pipeline trace from `stage` stream events
-  const messagesEndRef = useRef(null);
+  const [showJumpToLatest, setShowJumpToLatest] = useState(false); // scrolled-up affordance
+  const messagesContainerRef = useRef(null);
+  const stickToBottomRef = useRef(true); // auto-follow only while the user stays at the bottom
   const textareaRef = useRef(null);
   const chatFileInputRef = useRef(null); // hidden input for in-chat uploads
   const recognitionRef = useRef(null); // SpeechRecognition instance
@@ -149,9 +152,11 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
     if (conversationId) saveLastConversationId(conversationId);
   }, [conversationId]);
 
-  // Scroll to the newest message when the conversation changes.
+  // Auto-scroll with the stream, but only while the user is near the bottom;
+  // scrolling up stops the chasing so partial answers can be read.
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const container = messagesContainerRef.current;
+    if (container && stickToBottomRef.current) container.scrollTop = container.scrollHeight;
   }, [messages, loading]);
 
   // Abort any in-flight stream if the widget unmounts (e.g. mobile drawer close).
@@ -201,6 +206,22 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
     setExpandedSources(prev => ({ ...prev, [key]: !prev[key] }));
   }
 
+  /** Track whether the user is anchored to the newest message (within 120px of bottom). */
+  function handleMessagesScroll(e) {
+    const container = e.currentTarget;
+    const nearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 120;
+    stickToBottomRef.current = nearBottom;
+    setShowJumpToLatest(current => (nearBottom ? false : true));
+  }
+
+  /** Jump to the newest message and resume auto-following. */
+  function jumpToLatest() {
+    stickToBottomRef.current = true;
+    const container = messagesContainerRef.current;
+    if (container) container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+    setShowJumpToLatest(false);
+  }
+
   /** Silently refresh the conversation list (used after query/switch). */
   function refreshConversations() {
     fetchJSON('/conversations')
@@ -221,10 +242,14 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
       setMessages([]);
       setConversationId(null);
       setExpandedSources({});
+      stickToBottomRef.current = true;
+      setShowJumpToLatest(false);
       clearLastConversationId();
       return;
     }
     setRestoring(true);
+    stickToBottomRef.current = true;
+    setShowJumpToLatest(false);
     try {
       const msgs = await fetchJSON(`/conversations/${id}`);
       setMessages(msgs.map(toLocalMessage));
@@ -349,6 +374,8 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
     const text = (textOverride ?? input).trim();
     if (!text || loading || hasDocuments === false || restoring || isSendingRef.current) return;
     isSendingRef.current = true;
+    stickToBottomRef.current = true;
+    setShowJumpToLatest(false);
 
     setInput('');
     resetTextareaHeight();
@@ -475,7 +502,11 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
       )}
 
       {/* Messages */}
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div
+        ref={messagesContainerRef}
+        onScroll={handleMessagesScroll}
+        className="relative min-h-0 flex-1 overflow-y-auto"
+      >
         {messages.length === 0 && restoring ? (
           <div className="flex h-full flex-col items-center justify-center">
             <FiLoader className="h-6 w-6 animate-spin text-brand-600" aria-hidden="true" />
@@ -578,7 +609,14 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
                         </div>
                       )
                     ) : (
-                      <p className="whitespace-pre-wrap">{msg.content}</p>
+                      msg.error ? (
+                        <p className="whitespace-pre-wrap">{msg.content}</p>
+                      ) : msg.content ? (
+                        <>
+                          <Markdown content={msg.content} />
+                          {!isUser && loading && <span className="caret" aria-hidden="true" />}
+                        </>
+                      ) : null
                     )}
 
                     {!isUser && msg.sources?.length > 0 && (
@@ -657,7 +695,16 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
             })}
           </div>
         )}
-        <div ref={messagesEndRef} />
+        {showJumpToLatest && (
+          <button
+            type="button"
+            onClick={jumpToLatest}
+            aria-label="Jump to latest message"
+            className="absolute bottom-3 right-4 flex h-9 w-9 items-center justify-center rounded-full border border-border bg-surface text-ink-secondary shadow-lg transition-colors hover:bg-paper-200 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+          >
+            <FiChevronDown className="h-4 w-4" aria-hidden="true" />
+          </button>
+        )}
       </div>
 
       {/* Composer — floating card over the messages area */}
