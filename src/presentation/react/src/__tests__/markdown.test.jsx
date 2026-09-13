@@ -37,7 +37,9 @@ describe('Markdown', () => {
   it('renders fenced code blocks with a copy control', () => {
     const out = html('```js\nconst x = 1;\n```');
     expect(out).toContain('<pre');
-    expect(out).toContain('const x = 1;');
+    expect(out).toContain('language-js');
+    expect(out).toContain('const');
+    expect(out).toContain('x = ');
     expect(out).toContain('Copy');
     expect(out).toContain('aria-label="Copy code block"');
   });

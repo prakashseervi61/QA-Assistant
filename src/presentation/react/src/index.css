@@ -61,6 +61,52 @@
     color: var(--ink-primary);
   }
 
+  /* Syntax highlighting (rehype-highlight) — bioluminescent on any theme */
+  .hljs {
+    color: inherit;
+    background: transparent;
+  }
+
+  .hljs-comment,
+  .hljs-quote {
+    color: var(--ink-faint);
+    font-style: italic;
+  }
+
+  .hljs-keyword,
+  .hljs-selector-tag,
+  .hljs-literal,
+  .hljs-section,
+  .hljs-link {
+    color: var(--accent-violet-bright);
+  }
+
+  .hljs-string,
+  .hljs-title,
+  .hljs-name,
+  .hljs-type,
+  .hljs-attr,
+  .hljs-addition {
+    color: var(--accent-cyan);
+  }
+
+  .hljs-number,
+  .hljs-symbol,
+  .hljs-bullet,
+  .hljs-regexp,
+  .hljs-meta {
+    color: var(--accent-pink);
+  }
+
+  .hljs-built_in,
+  .hljs-template-variable,
+  .hljs-variable,
+  .hljs-deletion,
+  .hljs-selector-id,
+  .hljs-selector-class {
+    color: var(--ink-secondary);
+  }
+
   /* Refined, low-profile warm scrollbars */
   ::-webkit-scrollbar {
     width: 6px;
