@@ -49,11 +49,11 @@ export default function CommandPalette({ open, onOpen, onClose, active, onNaviga
 
   const commands = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const nav = navItems.filter(item =>
-      !q ||
-      item.name.toLowerCase().includes(q) ||
-      item.description.toLowerCase().includes(q)
-    );
+    const nav = navItems.filter(item => {
+      if (!q) return true;
+      const haystack = [item.name, item.description, item.keywords || ''].join(' ').toLowerCase();
+      return q.split(/\s+/).every(term => haystack.includes(term));
+    });
     const themeMatch = !q || 'theme appearance light dark'.includes(q);
     return [
       ...nav.map(item => ({ ...item, kind: 'nav' })),

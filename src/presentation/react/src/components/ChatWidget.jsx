@@ -736,6 +736,7 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
           </button>
           <input
             ref={chatFileInputRef}
+            name="chat-upload"
             type="file"
             accept={ACCEPTED_TYPES}
             onChange={handleChatUpload}
