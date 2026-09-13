@@ -1,14 +1,14 @@
 /**
  * Design Tokens — Marginalia
- * Human-centered, editorial, warm paper & rich ink design system.
- * Sits on a single CSS-variable token layer so the whole app flips
- * between light and dark via `[data-theme="dark"]` — no per-component
- * overrides. Purges saturated neon SaaS indigo/purple and replaces it
- * with tactile warmth and burnt terracotta.
+ * Kinetic Glass & Spatial AI design system.
+ * A single CSS-variable token layer: light mode keeps the warm paper &
+ * terracotta Marginalia identity; dark mode (the default look) becomes
+ * deep zinc glass with bioluminescent Electric Violet → Cyan accents.
+ * The whole app flips via `[data-theme="dark"]` — no per-component overrides.
  */
 
 :root {
-  /* Paper & Canvas Foundations */
+  /* Paper & Canvas Foundations (warm light — Marginalia identity) */
   --bg-paper-50: #fdfdfc;
   --bg-paper-100: #fbfaf8;
   --bg-paper: #fbfaf8;
@@ -39,6 +39,12 @@
   --accent-brand-900: #642e1d;
   --accent-brand-950: #37160c;
 
+  /* Bioluminescent accent endpoints (used in gradients & glows) */
+  --accent-violet: #7c3aed;
+  --accent-violet-bright: #8b5cf6;
+  --accent-cyan: #06b6d4;
+  --accent-pink: #d946ef;
+
   /* Functional Indicators (Muted & Warm) */
   --color-success-bg: #f0fdf4;
   --color-success-text: #166534;
@@ -56,7 +62,7 @@
   --border-strong: #d7d2c7;
   --border-dark: #35302c;
 
-  /* Shadows (Tactile & Soft, no unnatural neon glows) */
+  /* Shadows (Tactile & Soft) */
   --shadow-subtle: 0 1px 2px 0 rgba(28, 25, 23, 0.04);
   --shadow-card: 0 1px 3px 0 rgba(28, 25, 23, 0.04), 0 1px 2px -1px rgba(28, 25, 23, 0.03);
   --shadow-hover: 0 4px 12px -2px rgba(28, 25, 23, 0.06), 0 2px 4px -2px rgba(28, 25, 23, 0.04);
@@ -68,60 +74,77 @@
   --radius-lg: 0.75rem;
   --radius-xl: 1rem;
   --radius-pill: 9999px;
+
+  /* Aurora mesh — soft bioluminescent gradient wash used on the canopy */
+  --aurora-mesh:
+    radial-gradient(60% 70% at 15% 10%, rgba(139, 92, 246, 0.16) 0%, transparent 60%),
+    radial-gradient(50% 60% at 85% 15%, rgba(6, 182, 212, 0.14) 0%, transparent 60%),
+    radial-gradient(70% 60% at 50% 100%, rgba(217, 70, 239, 0.08) 0%, transparent 55%);
 }
 
 /* ---------------------------------------------------------------------------
- * Dark theme — warm carbon, not inverted grays.
- * Paper, ink, borders, shadows and status tints shift to warm near-blacks;
- * the accent keeps its terracotta identity. The always-dark sidebar relies on
- * brand-400/500/600, so those stay fixed; the tint end (50-300, used only on
- * ambient surfaces) and the dark text shade (700) get warm dark values so
- * pills, chips and embossed icons stay subtle and legible on carbon.
+ * Dark theme — Kinetic Glass. Deep zinc-950 canvas, zinc-900 glass panels,
+ * and a bioluminescent Electric Violet → Cyan accent system. Warm paper
+ * tones are retained as ink tints so text stays legible on carbon; the
+ * always-dark surfaces rely on the accent dots, so those stay fixed.
  * ------------------------------------------------------------------------- */
 [data-theme="dark"] {
   color-scheme: dark;
 
-  --bg-paper-50: #1b1814;
-  --bg-paper-100: #191612;
-  --bg-paper: #16130f;
-  --bg-surface: #1e1a15;
-  --bg-subtle: #231e19;
-  --bg-muted: #2a241e;
-  --bg-dark-sidebar: #14110d;
-  --bg-dark-sidebar-subtle: #201b16;
-  --bg-dark-sidebar-hover: #2a241e;
+  --bg-paper-50: #101014;
+  --bg-paper-100: #0c0c0e;
+  --bg-paper: #09090b;
+  --bg-surface: #111114;
+  --bg-subtle: #16161a;
+  --bg-muted: #1c1c21;
+  --bg-dark-sidebar: #08080a;
+  --bg-dark-sidebar-subtle: #101014;
+  --bg-dark-sidebar-hover: #16161a;
 
-  --ink-primary: #ece6dd;
-  --ink-secondary: #c6beb0;
-  --ink-muted: #9b9488;
-  --ink-faint: #6f6a60;
-  --ink-inverse: #16130f;
+  --ink-primary: #f4f4f5;
+  --ink-secondary: #c4c4c7;
+  --ink-muted: #909096;
+  --ink-faint: #5d5d63;
+  --ink-inverse: #09090b;
 
-  /* Warm terracotta tints (surface fills & borders) */
-  --accent-brand-50: #282019;
-  --accent-brand-100: #302620;
-  --accent-brand-200: #3b2f27;
-  --accent-brand-300: #4a382e;
-  /* 400 / 500 / 600 stay fixed (always-dark sidebar + primary action) */
-  --accent-brand-700: #c56e43; /* text on dark fills */
+  /* Bioluminescent violet ramp for the dark accent (fixes 50–700 only) */
+  --accent-brand-50: #1e1b2e;
+  --accent-brand-100: #2a2450;
+  --accent-brand-200: #382f63;
+  --accent-brand-300: #4c3d8f;
+  --accent-brand-400: #7c3aed;
+  --accent-brand-500: #8b5cf6; /* Electric Violet */
+  --accent-brand-600: #7c3aed; /* Primary Action */
+  --accent-brand-700: #a78bfa;
 
-  --color-success-bg: #101d14;
+  --accent-violet: #7c3aed;
+  --accent-violet-bright: #8b5cf6;
+  --accent-cyan: #06b6d4;
+  --accent-pink: #d946ef;
+
+  --color-success-bg: #101a16;
   --color-success-text: #86efac;
   --color-success-border: #1f5635;
   --color-success-dot: #4ade80;
 
-  --color-error-bg: #2a1414;
+  --color-error-bg: #2a1014;
   --color-error-text: #fca5a5;
-  --color-error-border: #6b2424;
+  --color-error-border: #7f1d1d;
   --color-error-dot: #f87171;
 
-  --border-subtle: #221d18;
-  --border-default: #2a241e;
-  --border-strong: #3a332a;
+  --border-subtle: #1a1a1e;
+  --border-default: #24242a;
+  --border-strong: #33333a;
   --border-dark: #35302c;
 
-  --shadow-subtle: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
-  --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.35), 0 1px 2px -1px rgba(0, 0, 0, 0.3);
-  --shadow-hover: 0 4px 12px -2px rgba(0, 0, 0, 0.45), 0 2px 4px -2px rgba(0, 0, 0, 0.35);
-  --shadow-float: 0 12px 28px -4px rgba(0, 0, 0, 0.55), 0 4px 8px -2px rgba(0, 0, 0, 0.4);
+  --shadow-subtle: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+  --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.45), 0 1px 2px -1px rgba(0, 0, 0, 0.4);
+  --shadow-hover: 0 4px 12px -2px rgba(0, 0, 0, 0.5), 0 2px 4px -2px rgba(0, 0, 0, 0.45);
+  --shadow-float: 0 12px 28px -4px rgba(0, 0, 0, 0.6), 0 4px 8px -2px rgba(0, 0, 0, 0.5);
+
+  /* Aurora mesh at full strength on the dark canvas */
+  --aurora-mesh:
+    radial-gradient(60% 70% at 15% 10%, rgba(139, 92, 246, 0.22) 0%, transparent 60%),
+    radial-gradient(50% 60% at 85% 15%, rgba(6, 182, 212, 0.18) 0%, transparent 60%),
+    radial-gradient(70% 60% at 50% 100%, rgba(217, 70, 239, 0.12) 0%, transparent 55%);
 }

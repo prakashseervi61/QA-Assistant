@@ -8,7 +8,8 @@ module.exports = {
     extend: {
       fontFamily: {
         sans: [
-          '"Plus Jakarta Sans"',
+          'Inter',
+          'Geist',
           'ui-sans-serif',
           'system-ui',
           '-apple-system',
@@ -18,7 +19,8 @@ module.exports = {
           'sans-serif',
         ],
         serif: [
-          '"Newsreader"',
+          'Inter',
+          'Geist',
           'Georgia',
           'Cambria',
           '"Times New Roman"',
@@ -79,14 +81,28 @@ module.exports = {
         border: 'var(--border-default)',
         hover: 'var(--bg-subtle)',
         accent: 'var(--accent-brand-600)',
+        // Bioluminescent accent system (fixed, theme-independent)
+        bioluminescent: {
+          violet: 'var(--accent-violet-bright)',
+          'violet-deep': 'var(--accent-violet)',
+          cyan: 'var(--accent-cyan)',
+          pink: 'var(--accent-pink)',
+        },
       },
       boxShadow: {
         'subtle': 'var(--shadow-subtle)',
         'card': 'var(--shadow-card)',
         'card-hover': 'var(--shadow-hover)',
         'float': 'var(--shadow-float)',
+        'glow-violet': '0 0 24px -4px rgba(139, 92, 246, 0.5)',
+        'glow-cyan': '0 0 24px -4px rgba(6, 182, 212, 0.5)',
+        'glow-aurora': '0 0 32px -6px rgba(139, 92, 246, 0.4), 0 0 32px -6px rgba(6, 182, 212, 0.35)',
         'drawer': '-4px 0 24px -2px rgba(28, 25, 23, 0.08)',
         'drawer-left': '4px 0 24px -2px rgba(28, 25, 23, 0.08)',
+      },
+      backgroundImage: {
+        'aurora': 'var(--aurora-mesh)',
+        'bioluminescent': 'linear-gradient(135deg, #8b5cf6 0%, #06b6d4 100%)',
       },
       spacing: {
         'xs': '0.5rem',

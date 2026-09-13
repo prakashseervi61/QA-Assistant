@@ -10,9 +10,9 @@ const THEME_KEY = 'marginalia_theme';
  * browsing / sandboxed environments still work.
  */
 
-/** Return the stored theme ('dark') or the default('light'). */
+/** Return the stored theme ('light') or the default ('dark' — Kinetic Glass). */
 export function getTheme() {
-  return safeGetItem(THEME_KEY) === 'dark' ? 'dark' : 'light';
+  return safeGetItem(THEME_KEY) === 'light' ? 'light' : 'dark';
 }
 
 /** Apply a theme to the document without persisting it. */
