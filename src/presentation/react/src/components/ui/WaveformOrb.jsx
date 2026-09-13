@@ -25,7 +25,7 @@ export default function WaveformOrb({
       transition={{ type: 'spring', stiffness: 400, damping: 22 }}
       aria-label={listening ? 'Stop voice input' : label}
       aria-pressed={listening}
-      className={`relative inline-flex h-11 w-11 items-center justify-center rounded-full shadow-glow-violet focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/70 ${
+      className={`relative inline-flex h-11 w-11 items-center justify-center rounded-full shadow-glow-violet focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/70 ${
         active ? 'bg-bioluminescent' : 'glass'
       } ${className}`}
     >

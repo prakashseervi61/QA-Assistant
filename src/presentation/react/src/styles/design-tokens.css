@@ -1,49 +1,48 @@
 /**
  * Design Tokens — Marginalia
- * Kinetic Glass & Spatial AI design system.
- * A single CSS-variable token layer: light mode keeps the warm paper &
- * terracotta Marginalia identity; dark mode (the default look) becomes
- * deep zinc glass with bioluminescent Electric Violet → Cyan accents.
+ * Mineral & Manuscript design system.
+ * A single CSS-variable token layer:
+ *   ☀️ Light  "Alabaster & Ink"  — warm archival off-white, Oxford-Lapis actions, Burnt Sienna highlights.
+ *   🌙 Dark   "Obsidian & Verdigris" — OLED charcoal with a 1% blue shift, Verdigris actions, Soft Ember highlights.
  * The whole app flips via `[data-theme="dark"]` — no per-component overrides.
  */
 
 :root {
-  /* Paper & Canvas Foundations (warm light — Marginalia identity) */
-  --bg-paper-50: #fdfdfc;
-  --bg-paper-100: #fbfaf8;
-  --bg-paper: #fbfaf8;
-  --bg-surface: #ffffff;
-  --bg-subtle: #f5f3ef;
-  --bg-muted: #eeebe3;
-  --bg-dark-sidebar: #1c1917; /* Warm carbon ink */
-  --bg-dark-sidebar-subtle: #292524;
-  --bg-dark-sidebar-hover: #35302c;
+  /* Canvas & Surface Foundations (alabaster paper — never pure white for backgrounds) */
+  --bg-paper-50: #fbfaf6;
+  --bg-paper-100: #f6f5f1;  /* Canvas: warm archival off-white */
+  --bg-paper: #f6f5f1;
+  --bg-surface: #ffffff;    /* Card surface: pure white only for elevation */
+  --bg-subtle: #f1efe9;
+  --bg-muted: #e9e6de;
+  --bg-dark-sidebar: #181a1b; /* User bubble — rich charcoal ink */
+  --bg-dark-sidebar-subtle: #23272b;
+  --bg-dark-sidebar-hover: #2e3338;
 
-  /* Ink & Typography Hierarchy */
-  --ink-primary: #1c1917;    /* Stone 900 */
-  --ink-secondary: #44403c;  /* Stone 700 */
-  --ink-muted: #78716c;      /* Stone 500 */
-  --ink-faint: #a8a29e;      /* Stone 400 */
-  --ink-inverse: #fafaf9;
+  /* Ink & Typography Hierarchy (rich charcoal — never pure black) */
+  --ink-primary: #181a1b;
+  --ink-secondary: #3e4347;
+  --ink-muted: #6e757b;
+  --ink-faint: #9aa1a7;
+  --ink-inverse: #f6f5f1;
 
-  /* Human Accent: Terracotta & Burnt Amber */
-  --accent-brand-50: #fdf8f4;
-  --accent-brand-100: #f9eee5;
-  --accent-brand-200: #f2dac9;
-  --accent-brand-300: #e7bca2;
-  --accent-brand-400: #d89472;
-  --accent-brand-500: #c56e43;
-  --accent-brand-600: #b1552a; /* Primary Action */
-  --accent-brand-700: #944120;
-  --accent-brand-800: #79361e;
-  --accent-brand-900: #642e1d;
-  --accent-brand-950: #37160c;
+  /* Accent 1 — Action/Links: Lapis/Oxford Blue (deep intellectual, trustworthy) */
+  --accent-brand-50: #f3f7f9;
+  --accent-brand-100: #e4edf2;
+  --accent-brand-200: #c6dae4;
+  --accent-brand-300: #9dbdcc;
+  --accent-brand-400: #6e9aae;
+  --accent-brand-500: #487a93;
+  --accent-brand-600: #2c5270; /* Primary Action */
+  --accent-brand-700: #254862;
+  --accent-brand-800: #1f3b50;
+  --accent-brand-900: #182d3e;
+  --accent-brand-950: #0f1d2a;
 
-  /* Bioluminescent accent endpoints (used in gradients & glows) */
-  --accent-violet: #7c3aed;
-  --accent-violet-bright: #8b5cf6;
-  --accent-cyan: #06b6d4;
-  --accent-pink: #d946ef;
+  /* Mineral gradient endpoints (Accent 1 → Accent 2, theme-flipped) */
+  --accent-mineral-1: #2c5270; /* Lapis */
+  --accent-mineral-2: #b85c38; /* Burnt Sienna — the Marginalia soul, used sparingly */
+  --accent-mineral-3: #54778c; /* Secondary mineral note (deep slate-teal) */
 
   /* Functional Indicators (Muted & Warm) */
   --color-success-bg: #f0fdf4;
@@ -56,17 +55,22 @@
   --color-error-border: #fecaca;
   --color-error-dot: #ef4444;
 
-  /* Borders & Dividers */
-  --border-subtle: #edeae4;
-  --border-default: #e7e4dc;
-  --border-strong: #d7d2c7;
-  --border-dark: #35302c;
+  /* Borders & Dividers (warm parchment greys) */
+  --border-subtle: #ece9e1;
+  --border-default: #e1ded5;
+  --border-strong: #cecabf;
+  --border-dark: #3e4347;
 
   /* Shadows (Tactile & Soft) */
-  --shadow-subtle: 0 1px 2px 0 rgba(28, 25, 23, 0.04);
-  --shadow-card: 0 1px 3px 0 rgba(28, 25, 23, 0.04), 0 1px 2px -1px rgba(28, 25, 23, 0.03);
-  --shadow-hover: 0 4px 12px -2px rgba(28, 25, 23, 0.06), 0 2px 4px -2px rgba(28, 25, 23, 0.04);
-  --shadow-float: 0 12px 28px -4px rgba(28, 25, 23, 0.08), 0 4px 8px -2px rgba(28, 25, 23, 0.04);
+  --shadow-subtle: 0 1px 2px 0 rgba(24, 26, 27, 0.05);
+  --shadow-card: 0 1px 3px 0 rgba(24, 26, 27, 0.05), 0 1px 2px -1px rgba(24, 26, 27, 0.04);
+  --shadow-hover: 0 4px 12px -2px rgba(24, 26, 27, 0.08), 0 2px 4px -2px rgba(24, 26, 27, 0.05);
+  --shadow-float: 0 12px 28px -4px rgba(24, 26, 27, 0.1), 0 4px 8px -2px rgba(24, 26, 27, 0.05);
+
+  /* Mineral glows (theme-flipped) */
+  --glow-mineral: 0 0 24px -4px rgba(44, 82, 112, 0.45);
+  --glow-ember: 0 0 24px -4px rgba(184, 92, 56, 0.4);
+  --glow-aurora: 0 0 32px -6px rgba(44, 82, 112, 0.4), 0 0 32px -6px rgba(184, 92, 56, 0.3);
 
   /* Radii */
   --radius-sm: 0.375rem;
@@ -75,57 +79,56 @@
   --radius-xl: 1rem;
   --radius-pill: 9999px;
 
-  /* Aurora mesh — soft bioluminescent gradient wash used on the canopy */
+  /* Aurora mesh — soft mineral gradient wash used on the canopy */
   --aurora-mesh:
-    radial-gradient(60% 70% at 15% 10%, rgba(139, 92, 246, 0.16) 0%, transparent 60%),
-    radial-gradient(50% 60% at 85% 15%, rgba(6, 182, 212, 0.14) 0%, transparent 60%),
-    radial-gradient(70% 60% at 50% 100%, rgba(217, 70, 239, 0.08) 0%, transparent 55%);
+    radial-gradient(60% 70% at 15% 10%, rgba(44, 82, 112, 0.13) 0%, transparent 60%),
+    radial-gradient(50% 60% at 85% 15%, rgba(184, 92, 56, 0.11) 0%, transparent 60%),
+    radial-gradient(70% 60% at 50% 100%, rgba(84, 119, 140, 0.08) 0%, transparent 55%);
 
   /* Glassmorphism surfaces (warm-tinted floating panels) */
   --glass-bg: rgba(255, 255, 255, 0.66);
-  --glass-bg-strong: rgba(255, 255, 255, 0.82);
-  --glass-border: rgba(28, 25, 23, 0.08);
+  --glass-bg-strong: rgba(255, 255, 255, 0.84);
+  --glass-border: rgba(24, 26, 27, 0.08);
 }
 
 /* ---------------------------------------------------------------------------
- * Dark theme — Kinetic Glass. Deep zinc-950 canvas, zinc-900 glass panels,
- * and a bioluminescent Electric Violet → Cyan accent system. Warm paper
- * tones are retained as ink tints so text stays legible on carbon; the
- * always-dark surfaces rely on the accent dots, so those stay fixed.
+ * Dark theme — "Obsidian & Verdigris". OLED-friendly charcoal with a 1% blue
+ * shift (#131516, not a muddy brown), carbon all-surfaces, warm plaster-white
+ * ink, and Verdigris → Soft Ember accents.
  * ------------------------------------------------------------------------- */
 [data-theme="dark"] {
   color-scheme: dark;
 
-  --bg-paper-50: #101014;
-  --bg-paper-100: #0c0c0e;
-  --bg-paper: #09090b;
-  --bg-surface: #111114;
-  --bg-subtle: #16161a;
-  --bg-muted: #1c1c21;
-  --bg-dark-sidebar: #08080a;
-  --bg-dark-sidebar-subtle: #101014;
-  --bg-dark-sidebar-hover: #16161a;
+  --bg-paper-50: #101214;
+  --bg-paper-100: #131516;  /* Canvas: deep charcoal, 1% blue shift */
+  --bg-paper: #131516;
+  --bg-surface: #1c1f22;    /* Card surface: elevated dark grey */
+  --bg-subtle: #171a1c;
+  --bg-muted: #23272a;
+  --bg-dark-sidebar: #e8e6e1; /* User bubble — warm parchment (inverted for contrast) */
+  --bg-dark-sidebar-subtle: #23272b;
+  --bg-dark-sidebar-hover: #2e3338;
 
-  --ink-primary: #f4f4f5;
-  --ink-secondary: #c4c4c7;
-  --ink-muted: #909096;
-  --ink-faint: #5d5d63;
-  --ink-inverse: #09090b;
+  --ink-primary: #e8e6e1;  /* Warm plaster/parchment white — never pure white */
+  --ink-secondary: #c2c0ba;
+  --ink-muted: #8a8a86;
+  --ink-faint: #5b5d5f;
+  --ink-inverse: #131516;
 
-  /* Bioluminescent violet ramp for the dark accent (fixes 50–700 only) */
-  --accent-brand-50: #1e1b2e;
-  --accent-brand-100: #2a2450;
-  --accent-brand-200: #382f63;
-  --accent-brand-300: #4c3d8f;
-  --accent-brand-400: #7c3aed;
-  --accent-brand-500: #8b5cf6; /* Electric Violet */
-  --accent-brand-600: #7c3aed; /* Primary Action */
-  --accent-brand-700: #a78bfa;
+  /* Accent 1 — Action/Links: Verdigris/Oxidized Teal */
+  --accent-brand-50: #0e1b22;
+  --accent-brand-100: #14262f;
+  --accent-brand-200: #1b3441;
+  --accent-brand-300: #23485a;
+  --accent-brand-400: #3d6e86;
+  --accent-brand-500: #6b9ead;
+  --accent-brand-600: #7faebe;
+  --accent-brand-700: #9abec9;
 
-  --accent-violet: #7c3aed;
-  --accent-violet-bright: #8b5cf6;
-  --accent-cyan: #06b6d4;
-  --accent-pink: #d946ef;
+  /* Mineral gradient endpoints (Accent 1 → Accent 2, theme-flipped) */
+  --accent-mineral-1: #6b9ead; /* Verdigris */
+  --accent-mineral-2: #d97757; /* Soft Ember */
+  --accent-mineral-3: #a9c6cf; /* Pale oxidized teal note */
 
   --color-success-bg: #101a16;
   --color-success-text: #86efac;
@@ -137,24 +140,29 @@
   --color-error-border: #7f1d1d;
   --color-error-dot: #f87171;
 
-  --border-subtle: #1a1a1e;
-  --border-default: #24242a;
-  --border-strong: #33333a;
-  --border-dark: #35302c;
+  --border-subtle: #1a1c1f;
+  --border-default: #262a2d;
+  --border-strong: #34383c;
+  --border-dark: #34383c;
 
   --shadow-subtle: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
   --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.45), 0 1px 2px -1px rgba(0, 0, 0, 0.4);
   --shadow-hover: 0 4px 12px -2px rgba(0, 0, 0, 0.5), 0 2px 4px -2px rgba(0, 0, 0, 0.45);
   --shadow-float: 0 12px 28px -4px rgba(0, 0, 0, 0.6), 0 4px 8px -2px rgba(0, 0, 0, 0.5);
 
+  /* Mineral glows (theme-flipped) */
+  --glow-mineral: 0 0 24px -4px rgba(107, 158, 173, 0.5);
+  --glow-ember: 0 0 24px -4px rgba(217, 119, 87, 0.5);
+  --glow-aurora: 0 0 32px -6px rgba(107, 158, 173, 0.45), 0 0 32px -6px rgba(217, 119, 87, 0.35);
+
   /* Aurora mesh at full strength on the dark canvas */
   --aurora-mesh:
-    radial-gradient(60% 70% at 15% 10%, rgba(139, 92, 246, 0.22) 0%, transparent 60%),
-    radial-gradient(50% 60% at 85% 15%, rgba(6, 182, 212, 0.18) 0%, transparent 60%),
-    radial-gradient(70% 60% at 50% 100%, rgba(217, 70, 239, 0.12) 0%, transparent 55%);
+    radial-gradient(60% 70% at 15% 10%, rgba(107, 158, 173, 0.2) 0%, transparent 60%),
+    radial-gradient(50% 60% at 85% 15%, rgba(217, 119, 87, 0.16) 0%, transparent 60%),
+    radial-gradient(70% 60% at 50% 100%, rgba(169, 198, 207, 0.1) 0%, transparent 55%);
 
-  /* Glassmorphism surfaces (deep zinc-900 frosted panels) */
-  --glass-bg: rgba(17, 17, 20, 0.62);
-  --glass-bg-strong: rgba(17, 17, 20, 0.82);
-  --glass-border: rgba(255, 255, 255, 0.08);
+  /* Glassmorphism surfaces (obsidian frosted panels) */
+  --glass-bg: rgba(19, 21, 22, 0.62);
+  --glass-bg-strong: rgba(28, 31, 34, 0.84);
+  --glass-border: rgba(232, 230, 225, 0.08);
 }

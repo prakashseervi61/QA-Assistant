@@ -64,7 +64,7 @@ module.exports = {
           subtle: 'var(--bg-dark-sidebar-subtle)',
           hover: 'var(--bg-dark-sidebar-hover)',
         },
-        // Warm Terracotta / Burnt Amber signature palette (purging generic neon indigo AI slop)
+        // Mineral signature palette — Lapis/Burnt Sienna (light) or Verdigris/Soft Ember (dark)
         brand: {
           50: 'var(--accent-brand-50)',
           100: 'var(--accent-brand-100)',
@@ -87,12 +87,11 @@ module.exports = {
         border: 'var(--border-default)',
         hover: 'var(--bg-subtle)',
         accent: 'var(--accent-brand-600)',
-        // Bioluminescent accent system (fixed, theme-independent)
+        // Mineral accent system (theme-flipped via design tokens)
         bioluminescent: {
-          violet: 'var(--accent-violet-bright)',
-          'violet-deep': 'var(--accent-violet)',
-          cyan: 'var(--accent-cyan)',
-          pink: 'var(--accent-pink)',
+          mineral: 'var(--accent-mineral-1)',
+          'mineral-deep': 'var(--accent-mineral-3)',
+          ember: 'var(--accent-mineral-2)',
         },
         // Semantic status colors (theme-flipped via design tokens)
         success: {
@@ -118,15 +117,15 @@ module.exports = {
         'card': 'var(--shadow-card)',
         'card-hover': 'var(--shadow-hover)',
         'float': 'var(--shadow-float)',
-        'glow-violet': '0 0 24px -4px rgba(139, 92, 246, 0.5)',
-        'glow-cyan': '0 0 24px -4px rgba(6, 182, 212, 0.5)',
-        'glow-aurora': '0 0 32px -6px rgba(139, 92, 246, 0.4), 0 0 32px -6px rgba(6, 182, 212, 0.35)',
+        'glow-violet': 'var(--glow-mineral)',
+        'glow-cyan': 'var(--glow-ember)',
+        'glow-aurora': 'var(--glow-aurora)',
         'drawer': '-4px 0 24px -2px rgba(28, 25, 23, 0.08)',
         'drawer-left': '4px 0 24px -2px rgba(28, 25, 23, 0.08)',
       },
       backgroundImage: {
         'aurora': 'var(--aurora-mesh)',
-        'bioluminescent': 'linear-gradient(135deg, #8b5cf6 0%, #06b6d4 100%)',
+        'bioluminescent': 'linear-gradient(135deg, var(--accent-mineral-1) 0%, var(--accent-mineral-2) 100%)',
       },
       spacing: {
         'xs': '0.5rem',
