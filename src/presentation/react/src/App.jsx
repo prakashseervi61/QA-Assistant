@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import {
-  FiBookmark,
-  FiDatabase,
-  FiFileText,
-  FiMessageSquare,
-  FiSettings,
-  FiSun,
-  FiUsers,
-} from 'react-icons/fi';
+  Bookmark,
+  Database,
+  FileText,
+  MessageSquare,
+  Settings,
+  Sun,
+  Users,
+} from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import DocumentList from './components/DocumentList';
 import ChatWidget from './components/ChatWidget';
@@ -20,25 +20,25 @@ import './App.css'; // optional custom styles
 function SettingsPanel() {
   const sections = [
     {
-      icon: FiSun,
+      icon: Sun,
       title: 'Appearance',
       description: 'Warm paper light or carbon dark theme — from a single design token.',
       value: 'Light · Dark',
     },
     {
-      icon: FiMessageSquare,
+      icon: MessageSquare,
       title: 'Chat answers',
       description: 'Responses are generated from your documents and include source citations.',
       value: 'RAG',
     },
     {
-      icon: FiFileText,
+      icon: FileText,
       title: 'Supported formats',
       description: 'Upload PDF, DOCX or TXT files to make them searchable.',
       value: 'PDF · DOCX · TXT',
     },
     {
-      icon: FiDatabase,
+      icon: Database,
       title: 'Data storage',
       description: 'Embeddings and metadata are stored locally on this machine.',
       value: 'Local',
@@ -48,18 +48,20 @@ function SettingsPanel() {
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <h2 className="font-editorial flex items-center gap-2 text-2xl font-medium tracking-tight text-ink">
-        <FiSettings className="text-brand-600" />
+        <span className="bg-bioluminescent flex h-9 w-9 items-center justify-center rounded-xl text-white shadow-glow-violet">
+          <Settings className="h-4.5 w-4.5" aria-hidden="true" />
+        </span>
         Settings
       </h2>
       <p className="text-sm text-ink-muted">
         This app is configured by the server. Nothing here is editable in the UI yet.
       </p>
-      <ul className="divide-y divide-border rounded-xl border border-border bg-surface">
+      <ul className="glass divide-y divide-border overflow-hidden rounded-2xl shadow-card">
         {sections.map(section => {
           const Icon = section.icon;
           return (
             <li key={section.title} className="flex items-center gap-4 px-4 py-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-paper-100 text-brand-500">
                 <Icon className="h-5 w-5" />
               </div>
               <div className="min-w-0 flex-1">
@@ -99,7 +101,7 @@ export default function App() {
       case 'collections':
         return (
           <EmptyState
-            icon={FiUsers}
+            icon={Users}
             title="No collections yet"
             description="Group related documents so you can query them together. Collections will appear here once they are created."
             hint="Create collections from the server or future releases."
@@ -110,7 +112,7 @@ export default function App() {
       case 'bookmarks':
         return (
           <EmptyState
-            icon={FiBookmark}
+            icon={Bookmark}
             title="No bookmarks yet"
             description="Save important answers and documents to revisit them later. Bookmarks will appear here."
           />

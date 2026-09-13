@@ -88,6 +88,24 @@ module.exports = {
           cyan: 'var(--accent-cyan)',
           pink: 'var(--accent-pink)',
         },
+        // Semantic status colors (theme-flipped via design tokens)
+        success: {
+          bg: 'var(--color-success-bg)',
+          text: 'var(--color-success-text)',
+          border: 'var(--color-success-border)',
+          dot: 'var(--color-success-dot)',
+        },
+        error: {
+          bg: 'var(--color-error-bg)',
+          text: 'var(--color-error-text)',
+          border: 'var(--color-error-border)',
+          dot: 'var(--color-error-dot)',
+        },
+        glass: {
+          DEFAULT: 'var(--glass-bg)',
+          strong: 'var(--glass-bg-strong)',
+          border: 'var(--glass-border)',
+        },
       },
       boxShadow: {
         'subtle': 'var(--shadow-subtle)',
