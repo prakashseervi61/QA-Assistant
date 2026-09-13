@@ -13,6 +13,7 @@ import DocumentList from './components/DocumentList';
 import ChatWidget from './components/ChatWidget';
 import EmptyState from './components/EmptyState';
 import RecentView from './components/RecentView';
+import { Toaster } from './components/ui';
 import './App.css'; // optional custom styles
 
 /** Static settings overview — informational only, no client-side behavior. */
@@ -123,6 +124,7 @@ export default function App() {
 
 return (
     <div className="flex h-screen overflow-hidden bg-paper">
+      <Toaster />
       {/* Nav drawer backdrop (mobile only — sidebar is in-flow on desktop) */}
       {sidebarOpen && (
         <div

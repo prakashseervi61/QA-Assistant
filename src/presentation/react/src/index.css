@@ -35,6 +35,26 @@
     background-attachment: fixed;
   }
 
+  /* Glass panels — frosted, theme-flipped surface with soft saturate blur */
+  .glass {
+    background-color: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: blur(20px) saturate(1.4);
+    -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  }
+
+  .glass-strong {
+    background-color: var(--glass-bg-strong);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: blur(28px) saturate(1.6);
+    -webkit-backdrop-filter: blur(28px) saturate(1.6);
+  }
+
+  .glass-hover:hover {
+    background-color: var(--glass-bg-strong);
+    border-color: var(--glass-border);
+  }
+
   /* Tactile selection styling */
   ::selection {
     background-color: var(--accent-brand-300);
