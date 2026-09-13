@@ -125,7 +125,7 @@ export default function RecentView({ onOpen }) {
       <div className="mb-5 flex items-center gap-2.5">
         <h2 className="font-editorial flex items-center gap-2 text-2xl font-medium tracking-tight text-ink">
           <span className="bg-bioluminescent flex h-9 w-9 items-center justify-center rounded-xl text-white shadow-glow-violet">
-            <Clock className="h-4.5 w-4.5" aria-hidden="true" />
+            <Clock className="h-[18px] w-[18px]" aria-hidden="true" />
           </span>
           Recent
         </h2>
@@ -158,7 +158,7 @@ export default function RecentView({ onOpen }) {
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="bg-bioluminescent flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white shadow-glow-violet transition-transform group-hover:scale-105">
-                      <MessageSquare className="h-4.5 w-4.5" aria-hidden="true" />
+                      <MessageSquare className="h-[18px] w-[18px]" aria-hidden="true" />
                     </div>
                     <ChevronRight
                       className="mt-1.5 h-4 w-4 shrink-0 text-ink-faint transition-transform group-hover:translate-x-0.5"

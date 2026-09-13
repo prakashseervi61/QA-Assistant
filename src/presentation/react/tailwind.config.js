@@ -56,7 +56,13 @@ module.exports = {
           secondary: 'var(--ink-secondary)',
           muted: 'var(--ink-muted)',
           faint: 'var(--ink-faint)',
+          inverse: 'var(--ink-inverse)',
           line: 'var(--border-default)',
+        },
+        'dark-sidebar': {
+          DEFAULT: 'var(--bg-dark-sidebar)',
+          subtle: 'var(--bg-dark-sidebar-subtle)',
+          hover: 'var(--bg-dark-sidebar-hover)',
         },
         // Warm Terracotta / Burnt Amber signature palette (purging generic neon indigo AI slop)
         brand: {

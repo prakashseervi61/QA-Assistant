@@ -8,12 +8,15 @@ import {
   Sun,
   Users,
 } from 'lucide-react';
-import Sidebar from './components/Sidebar';
+import CommandPalette from './components/CommandPalette';
+import Dock from './components/Dock';
+import TopNav from './components/TopNav';
 import DocumentList from './components/DocumentList';
 import ChatWidget from './components/ChatWidget';
 import EmptyState from './components/EmptyState';
 import RecentView from './components/RecentView';
 import { Toaster } from './components/ui';
+import { getTheme, setTheme } from './theme';
 import './App.css'; // optional custom styles
 
 /** Static settings overview — informational only, no client-side behavior. */
@@ -49,7 +52,7 @@ function SettingsPanel() {
     <div className="mx-auto max-w-3xl space-y-6">
       <h2 className="font-editorial flex items-center gap-2 text-2xl font-medium tracking-tight text-ink">
         <span className="bg-bioluminescent flex h-9 w-9 items-center justify-center rounded-xl text-white shadow-glow-violet">
-          <Settings className="h-4.5 w-4.5" aria-hidden="true" />
+          <Settings className="h-[18px] w-[18px]" aria-hidden="true" />
         </span>
         Settings
       </h2>
@@ -81,12 +84,19 @@ function SettingsPanel() {
 
 export default function App() {
   const [activeView, setActiveView] = useState('chat');
-  const [sidebarOpen, setSidebarOpen] = useState(
-    () => window.matchMedia('(min-width: 1024px)').matches
-  );
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [isDark, setIsDark] = useState(() => getTheme() === 'dark');
 
   function handleNavigate(key) {
     setActiveView(key);
+  }
+
+  function handleToggleTheme() {
+    setIsDark(prev => {
+      const next = prev ? 'light' : 'dark';
+      setTheme(next);
+      return next === 'dark';
+    });
   }
 
   function handleOpenRecentConversation(id) {
@@ -124,34 +134,35 @@ export default function App() {
     }
   }
 
-return (
-    <div className="flex h-screen overflow-hidden bg-paper">
+  return (
+    <div className="flex h-screen flex-col overflow-hidden bg-paper">
       <Toaster />
-      {/* Nav drawer backdrop (mobile only — sidebar is in-flow on desktop) */}
-      {sidebarOpen && (
-        <div
-          className="fixed inset-0 z-20 bg-black/40 lg:hidden"
-          onClick={() => setSidebarOpen(false)}
-          aria-hidden="true"
-        />
-      )}
 
-      <Sidebar
-        active={activeView}
-        onNavigate={handleNavigate}
-        open={sidebarOpen}
-        onToggle={() => setSidebarOpen(prev => !prev)}
-        onClose={() => setSidebarOpen(false)}
+      <TopNav
+        isDark={isDark}
+        onToggleTheme={handleToggleTheme}
+        onOpenPalette={() => setPaletteOpen(true)}
       />
 
       {/* Main column — Chat is the primary view */}
-      <main className="flex min-h-0 flex-1 flex-col">
+      <main className="relative flex min-h-0 flex-1 flex-col">
+        <Dock active={activeView} onNavigate={handleNavigate} />
         {activeView === 'chat' ? (
           <ChatWidget />
         ) : (
-          <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">{renderView()}</div>
+          <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6 lg:px-24 lg:py-8">{renderView()}</div>
         )}
       </main>
+
+      <CommandPalette
+        open={paletteOpen}
+        onOpen={() => setPaletteOpen(true)}
+        onClose={() => setPaletteOpen(false)}
+        active={activeView}
+        onNavigate={handleNavigate}
+        isDark={isDark}
+        onToggleTheme={handleToggleTheme}
+      />
     </div>
   );
 }

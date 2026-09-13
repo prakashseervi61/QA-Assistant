@@ -190,7 +190,7 @@ export default function DocumentList() {
       <div className="flex items-center justify-between">
         <h2 className="font-editorial flex items-center gap-2.5 text-2xl font-medium tracking-tight text-ink">
           <span className="bg-bioluminescent flex h-9 w-9 items-center justify-center rounded-xl text-white shadow-glow-violet">
-            <FileText className="h-4.5 w-4.5" aria-hidden="true" />
+            <FileText className="h-[18px] w-[18px]" aria-hidden="true" />
           </span>
           Documents
           {documents.length > 0 && (

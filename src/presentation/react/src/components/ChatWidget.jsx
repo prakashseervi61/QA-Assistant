@@ -567,7 +567,7 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
                   <div
                     className={`${
                       isUser
-                        ? 'max-w-[85%] rounded-2xl rounded-br-sm bg-stone-900 px-4 py-3 text-sm leading-relaxed text-[#fcfbf9] shadow-card'
+                        ? 'max-w-[85%] rounded-2xl rounded-br-sm bg-dark-sidebar px-4 py-3 text-sm leading-relaxed text-ink-inverse shadow-card'
                         : msg.error
                           ? 'max-w-[88%] rounded-2xl rounded-tl-sm border border-error-border bg-error bg-opacity-30 px-4 py-3.5 text-sm leading-relaxed text-error-text shadow-card'
                           : 'glass max-w-[88%] rounded-2xl rounded-tl-sm rounded-bl-none px-4 py-3.5 text-sm leading-relaxed text-ink shadow-card'
@@ -684,7 +684,7 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
                     <p
                       className={`mt-2 font-mono text-[10px] ${
                         isUser
-                          ? 'text-right text-stone-400'
+                          ? 'text-right text-ink-faint'
                           : msg.error
                             ? 'text-error-text'
                             : 'text-ink-muted'
