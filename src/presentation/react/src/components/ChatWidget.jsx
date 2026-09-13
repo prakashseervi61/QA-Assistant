@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { FiCheck, FiChevronDown, FiFileText, FiLoader, FiMessageSquare, FiMic, FiPaperclip, FiSend, FiSquare } from 'react-icons/fi';
+import { Check, ChevronDown, FileText, Loader2, MessageSquare, Paperclip, Send, Sparkles, Square } from 'lucide-react';
 import { fetchJSON, postFormData, streamChat } from '../api';
 import Markdown from './Markdown';
+import { WaveformOrb } from './ui';
 
 const SUGGESTIONS = [
   'Summarize the key points of my documents',
@@ -481,7 +482,7 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
     <div className="flex min-h-0 flex-1 flex-col bg-paper">
       {/* Header */}
       {conversations.length > 0 && (
-        <header className="flex shrink-0 items-center justify-end gap-3 border-b border-border bg-surface px-4 py-2.5 sm:px-6">
+        <header className="flex shrink-0 items-center justify-end gap-3 border-b border-border bg-surface/60 px-4 py-2.5 backdrop-blur-xl sm:px-6">
           <select
             id="conversation-select"
             name="conversation"
@@ -489,7 +490,7 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
             value={conversationId ?? ''}
             onChange={e => switchConversation(e.target.value)}
             disabled={restoring || loading}
-            className="w-auto min-w-0 rounded-lg border border-border bg-surface px-2.5 py-1.5 text-xs font-medium text-ink shadow-subtle focus:border-brand-600 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-60 sm:max-w-xs"
+            className="w-auto min-w-0 cursor-pointer rounded-lg border border-border bg-paper-100/60 px-2.5 py-1.5 text-xs font-medium text-ink shadow-subtle focus:border-brand-600 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-60 sm:max-w-xs"
           >
             <option value="">New chat</option>
             {conversations.map(conversation => (
@@ -509,14 +510,14 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
       >
         {messages.length === 0 && restoring ? (
           <div className="flex h-full flex-col items-center justify-center">
-            <FiLoader className="h-6 w-6 animate-spin text-brand-600" aria-hidden="true" />
+            <Loader2 className="h-6 w-6 animate-spin text-brand-600" aria-hidden="true" />
             <span className="sr-only">Loading conversation…</span>
           </div>
         ) : messages.length === 0 && !loading ? (
           hasDocuments === false ? (
             <div className="flex h-full flex-col items-center justify-center px-4 text-center">
-              <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-border bg-paper-200 text-stone-700">
-                <FiPaperclip className="h-6 w-6" />
+              <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-border bg-paper-200 text-brand-600">
+                <Paperclip className="h-6 w-6" aria-hidden="true" />
               </div>
               <h3 className="font-editorial text-lg font-medium text-ink">
                 Upload a document to continue
@@ -528,8 +529,8 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
             </div>
           ) : (
             <div className="flex h-full flex-col items-center justify-center px-4 text-center">
-              <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-brand-100 bg-brand-50 text-brand-600 shadow-subtle">
-                <FiMessageSquare className="h-6 w-6" />
+              <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-brand-100 bg-brand-50 text-brand-600 shadow-glow-violet">
+                <MessageSquare className="h-6 w-6" aria-hidden="true" />
               </div>
               <h3 className="font-editorial text-lg font-medium text-ink">Ask a question…</h3>
               <p className="mt-1 max-w-xs text-sm leading-relaxed text-ink-muted">
@@ -542,7 +543,7 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
                       key={suggestion}
                       type="button"
                       onClick={() => sendMessage(suggestion)}
-                      className="rounded-full border border-border bg-surface px-3.5 py-1.5 text-xs font-medium text-ink-secondary shadow-subtle transition-colors hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                      className="glass rounded-full px-3.5 py-1.5 text-xs font-medium text-ink-secondary shadow-subtle transition-colors hover:border-brand-300 hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
                     >
                       {suggestion}
                     </button>
@@ -555,11 +556,12 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
           <div role="log" aria-live="polite" className="mx-auto w-full max-w-4xl space-y-5 px-4 py-6 sm:px-8">
             {messages.map((msg, msgIndex) => {
               const isUser = msg.role === 'user';
+              const showInlineSources = !isUser && msg.sources?.length > 0 && !loading;
               return (
                 <div key={msg.id} className={`flex items-start gap-2.5 ${isUser ? 'justify-end' : 'justify-start'}`}>
                   {!isUser && (
-                    <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-brand-200 bg-brand-100 font-serif text-xs font-bold text-brand-700">
-                      Q
+                    <div className="bg-bioluminescent mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white shadow-glow-violet">
+                      <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
                     </div>
                   )}
                   <div
@@ -567,8 +569,8 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
                       isUser
                         ? 'max-w-[85%] rounded-2xl rounded-br-sm bg-stone-900 px-4 py-3 text-sm leading-relaxed text-[#fcfbf9] shadow-card'
                         : msg.error
-                          ? 'max-w-[88%] rounded-2xl rounded-tl-sm border border-red-200 bg-red-50/90 px-4 py-3.5 text-sm leading-relaxed text-red-800 shadow-card'
-                          : 'max-w-[88%] rounded-2xl rounded-tl-sm border border-border bg-surface px-4 py-3.5 text-sm leading-relaxed text-ink shadow-card'
+                          ? 'max-w-[88%] rounded-2xl rounded-tl-sm border border-error-border bg-error bg-opacity-30 px-4 py-3.5 text-sm leading-relaxed text-error-text shadow-card'
+                          : 'glass max-w-[88%] rounded-2xl rounded-tl-sm rounded-bl-none px-4 py-3.5 text-sm leading-relaxed text-ink shadow-card'
                     }`}
                   >
                     {!isUser && msg.content === '' && loading ? (
@@ -579,13 +581,13 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
                             return (
                               <div key={`${msg.id}-${s.stage}-${i}`} className="flex items-center gap-2 text-xs">
                                 {isActive ? (
-                                  <FiLoader
+                                  <Loader2
                                     className="h-3.5 w-3.5 shrink-0 animate-spin text-brand-600"
                                     aria-hidden="true"
                                   />
                                 ) : (
-                                  <FiCheck
-                                    className="h-3.5 w-3.5 shrink-0 text-brand-500"
+                                  <Check
+                                    className="h-3.5 w-3.5 shrink-0 text-success"
                                     aria-hidden="true"
                                   />
                                 )}
@@ -619,8 +621,8 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
                       ) : null
                     )}
 
-                    {!isUser && msg.sources?.length > 0 && (
-                      <div className="mt-3 border-t border-border pt-2.5">
+                    {showInlineSources && (
+                      <div className="mt-3 border-t border-border-strong pt-2.5">
                         <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-ink-muted">
                           Referenced Sources
                         </p>
@@ -642,15 +644,16 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
                                     : 'border-border bg-paper-200 text-ink-secondary hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700'
                                 }`}
                               >
-                                <FiFileText className="h-3 w-3 shrink-0" />
+                                <FileText className="h-3 w-3 shrink-0" aria-hidden="true" />
                                 <span className="truncate">{getSourceTitle(source, i)}</span>
                                 {score != null && (
                                   <span className="shrink-0 font-mono text-[11px] tabular-nums text-ink-muted">
                                     {score}%
                                   </span>
                                 )}
-                                <FiChevronDown
+                                <ChevronDown
                                   className={`h-3 w-3 shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`}
+                                  aria-hidden="true"
                                 />
                               </button>
                             );
@@ -683,7 +686,7 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
                         isUser
                           ? 'text-right text-stone-400'
                           : msg.error
-                            ? 'text-red-700'
+                            ? 'text-error-text'
                             : 'text-ink-muted'
                       }`}
                     >
@@ -702,16 +705,16 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
             aria-label="Jump to latest message"
             className="absolute bottom-3 right-4 flex h-9 w-9 items-center justify-center rounded-full border border-border bg-surface text-ink-secondary shadow-lg transition-colors hover:bg-paper-200 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
           >
-            <FiChevronDown className="h-4 w-4" aria-hidden="true" />
+            <ChevronDown className="h-4 w-4" aria-hidden="true" />
           </button>
         )}
       </div>
 
-      {/* Composer — floating card over the messages area */}
+      {/* Composer — floating glass card over the messages area */}
       <div className="shrink-0 px-4 pb-4 pt-2 sm:px-8">
         <div className="mx-auto w-full max-w-4xl">
         <div
-          className={`flex items-end gap-2 rounded-2xl border border-border bg-surface px-3.5 py-2.5 shadow-lg shadow-stone-900/5 transition-all focus-within:border-brand-600 focus-within:ring-2 focus-within:ring-brand-500 ${
+          className={`glass flex items-end gap-2 rounded-2xl px-3.5 py-2.5 shadow-float transition-all focus-within:shadow-glow-violet ${
             loading || hasDocuments === false ? 'opacity-60' : ''
           }`}
         >
@@ -726,9 +729,9 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
             }`}
           >
             {uploading ? (
-              <FiLoader className="h-4 w-4 animate-spin" aria-hidden="true" />
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
             ) : (
-              <FiPaperclip className="h-4 w-4" aria-hidden="true" />
+              <Paperclip className="h-4 w-4" aria-hidden="true" />
             )}
           </button>
           <input
@@ -753,22 +756,13 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
             name="question"
             className="max-h-40 min-h-0 flex-1 resize-none bg-transparent py-1 text-sm text-ink placeholder:text-ink-faint focus:outline-none disabled:cursor-not-allowed"
           />
-          <button
-            type="button"
+          <WaveformOrb
+            active={listening}
+            listening={listening}
             onClick={toggleVoice}
-            disabled={loading}
-            aria-label={listening ? 'Stop voice input' : 'Start voice input'}
-            title={listening ? 'Stop voice input' : 'Voice input'}
-            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-50 ${
-              listening ? 'bg-red-700 text-white hover:bg-red-800' : 'text-ink-muted hover:bg-brand-50 hover:text-brand-600'
-            }`}
-          >
-            {listening ? (
-              <FiMic className="h-4 w-4 animate-pulse" aria-hidden="true" />
-            ) : (
-              <FiMic className="h-4 w-4" aria-hidden="true" />
-            )}
-          </button>
+            label="Voice input"
+            className="h-9 w-9"
+          />
           {loading ? (
             <button
               type="button"
@@ -777,7 +771,7 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
               title="Stop generating"
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-red-700 text-white shadow-subtle transition-colors hover:bg-red-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-1"
             >
-              <FiSquare className="h-4 w-4" aria-hidden="true" />
+              <Square className="h-4 w-4" aria-hidden="true" />
             </button>
           ) : (
             <button
@@ -785,9 +779,9 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
               onClick={() => sendMessage()}
               disabled={!input.trim() || hasDocuments === false}
               aria-label="Send message"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-600 text-white shadow-subtle transition-colors hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:bg-stone-200 disabled:text-stone-400"
+              className="bg-bioluminescent flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white shadow-glow-violet transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:shadow-none disabled:opacity-40"
             >
-              <FiSend className="h-4 w-4" aria-hidden="true" />
+              <Send className="h-4 w-4" aria-hidden="true" />
             </button>
           )}
         </div>
@@ -798,7 +792,7 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
         )}
         <p className="mt-2 min-h-[2px]">
           {(uploadError || voiceError) && (
-            <span className="block text-center font-mono text-[11px] text-red-600">
+            <span className="block text-center font-mono text-[11px] text-error-text">
               {uploadError || voiceError}
             </span>
           )}
