@@ -12,19 +12,78 @@ from src.infrastructure.repositories.memory_conversation_repository import (
 from src.infrastructure.repositories.postgres_conversation_repository import (
     PostgresConversationRepository,
 )
+from src.infrastructure.repositories.sqlite_conversation_repository import (
+    SQLiteConversationRepository,
+)
 
 DB_URL = "postgresql+asyncpg://user:pass@localhost:5432/db"
 
 
+def _settings(database_url=None, history_path="./data/history.db"):
+    """Build a settings stub with the attributes the factory reads.
+
+    ``history_path`` must always be a real string. A bare MagicMock would hand
+    the real SQLite repository a mock's repr as its path and create a
+    directory named after it.
+    """
+    assert history_path is None or isinstance(history_path, str), (
+        "history_path must be a str or None, got "
+        f"{type(history_path).__name__}"
+    )
+    settings = MagicMock()
+    settings.DATABASE_URL = database_url
+    settings.HISTORY_DB_PATH = history_path
+    return settings
+
+
 class TestConversationRepositoryFactory:
-    def test_factory_returns_in_memory_when_no_db_url(self):
-        """No DATABASE_URL -> in-memory repository."""
+    def test_factory_returns_sqlite_when_no_db_url(self, tmp_path):
+        """No DATABASE_URL -> SQLite, so history survives a restart."""
         with patch(
             "src.infrastructure.repositories.conversation_repository_factory.get_settings"
         ) as mock_settings:
-            settings = MagicMock()
-            settings.DATABASE_URL = None
-            mock_settings.return_value = settings
+            mock_settings.return_value = _settings(
+                history_path=str(tmp_path / "history.db")
+            )
+
+            repo = create_conversation_repository()
+            assert isinstance(repo, SQLiteConversationRepository)
+
+    def test_factory_uses_configured_history_path(self, tmp_path):
+        """HISTORY_DB_PATH is honoured, including its parent directory."""
+        db = tmp_path / "nested" / "custom.db"
+        with patch(
+            "src.infrastructure.repositories.conversation_repository_factory.get_settings"
+        ) as mock_settings:
+            mock_settings.return_value = _settings(history_path=str(db))
+
+            repo = create_conversation_repository()
+
+        assert isinstance(repo, SQLiteConversationRepository)
+        assert db.parent.is_dir()
+
+    def test_factory_falls_back_to_memory_when_history_path_unusable(self):
+        """A history path that cannot be opened degrades to in-memory."""
+        with (
+            patch(
+                "src.infrastructure.repositories.conversation_repository_factory.get_settings"
+            ) as mock_settings,
+            patch(
+                "src.infrastructure.repositories.conversation_repository_factory.SQLiteConversationRepository",
+                side_effect=OSError("read-only file system"),
+            ),
+        ):
+            mock_settings.return_value = _settings()
+
+            repo = create_conversation_repository()
+            assert isinstance(repo, MemoryConversationRepository)
+
+    def test_factory_returns_memory_when_no_history_path_configured(self):
+        """An empty HISTORY_DB_PATH skips SQLite entirely."""
+        with patch(
+            "src.infrastructure.repositories.conversation_repository_factory.get_settings"
+        ) as mock_settings:
+            mock_settings.return_value = _settings(history_path=None)
 
             repo = create_conversation_repository()
             assert isinstance(repo, MemoryConversationRepository)
@@ -43,8 +102,7 @@ class TestConversationRepositoryFactory:
                 return_value=True,
             ),
         ):
-            settings = MagicMock()
-            settings.DATABASE_URL = DB_URL
+            settings = _settings(database_url=DB_URL)
             mock_settings.return_value = settings
             mock_postgres.return_value = MagicMock()
 
@@ -52,8 +110,8 @@ class TestConversationRepositoryFactory:
             mock_postgres.assert_called_once_with(settings.DATABASE_URL)
             assert repo is mock_postgres.return_value
 
-    def test_factory_falls_back_when_postgres_unreachable(self):
-        """DATABASE_URL set but probe fails -> in-memory fallback."""
+    def test_factory_falls_back_to_sqlite_when_postgres_unreachable(self, tmp_path):
+        """DATABASE_URL set but probe fails -> SQLite history instead."""
         with (
             patch(
                 "src.infrastructure.repositories.conversation_repository_factory.get_settings"
@@ -66,16 +124,16 @@ class TestConversationRepositoryFactory:
                 return_value=False,
             ),
         ):
-            settings = MagicMock()
-            settings.DATABASE_URL = DB_URL
-            mock_settings.return_value = settings
+            mock_settings.return_value = _settings(
+                database_url=DB_URL, history_path=str(tmp_path / "history.db")
+            )
             mock_postgres.return_value = MagicMock()
 
             repo = create_conversation_repository()
-            assert isinstance(repo, MemoryConversationRepository)
+            assert isinstance(repo, SQLiteConversationRepository)
 
-    def test_factory_falls_back_on_postgres_error(self):
-        """Postgres construction failure -> in-memory fallback, no crash."""
+    def test_factory_falls_back_to_sqlite_on_postgres_error(self, tmp_path):
+        """Postgres construction failure -> SQLite history, no crash."""
         with (
             patch(
                 "src.infrastructure.repositories.conversation_repository_factory.get_settings"
@@ -85,12 +143,12 @@ class TestConversationRepositoryFactory:
                 side_effect=ImportError("no sqlalchemy"),
             ),
         ):
-            settings = MagicMock()
-            settings.DATABASE_URL = DB_URL
-            mock_settings.return_value = settings
+            mock_settings.return_value = _settings(
+                database_url=DB_URL, history_path=str(tmp_path / "history.db")
+            )
 
             repo = create_conversation_repository()
-            assert isinstance(repo, MemoryConversationRepository)
+            assert isinstance(repo, SQLiteConversationRepository)
 
 
 class TestPostgresConnectivityProbe:

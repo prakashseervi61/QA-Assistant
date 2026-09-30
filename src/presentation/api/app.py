@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from src.application.services.rag_engine import RAGEngine
 from src.application.use_cases.conversation import (
+    DeleteConversationUseCase,
     GetConversationUseCase,
     ListConversationsUseCase,
 )
@@ -81,10 +82,12 @@ def _wire_dependencies(settings: Settings) -> TokenTracker:
 
     conversation_list_use_case = ListConversationsUseCase(conversation_repository)
     conversation_get_use_case = GetConversationUseCase(conversation_repository)
+    conversation_delete_use_case = DeleteConversationUseCase(conversation_repository)
 
     chat.set_query_use_case(query_use_case)
     chat.set_conversation_list_use_case(conversation_list_use_case)
     chat.set_conversation_get_use_case(conversation_get_use_case)
+    chat.set_conversation_delete_use_case(conversation_delete_use_case)
     documents.configure(
         vector_store=vector_store,
         embedding_provider=embedding_provider,

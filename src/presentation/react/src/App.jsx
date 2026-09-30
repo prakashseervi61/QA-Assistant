@@ -14,7 +14,7 @@ import TopNav from './components/TopNav';
 import DocumentList from './components/DocumentList';
 import ChatWidget from './components/ChatWidget';
 import EmptyState from './components/EmptyState';
-import RecentView from './components/RecentView';
+import HistoryView from './components/HistoryView';
 import { Toaster } from './components/ui';
 import { getTheme, setTheme } from './theme';
 import './App.css'; // optional custom styles
@@ -43,7 +43,7 @@ function SettingsPanel() {
     {
       icon: Database,
       title: 'Data storage',
-      description: 'Embeddings and metadata are stored locally on this machine.',
+      description: 'Embeddings and saved history are stored locally on this machine.',
       value: 'Local',
     },
   ];
@@ -133,7 +133,7 @@ export default function App() {
     });
   }
 
-  function handleOpenRecentConversation(id) {
+  function handleOpenConversation(id) {
     window.dispatchEvent(new CustomEvent('open-conversation', { detail: id }));
     setActiveView('chat');
   }
@@ -175,8 +175,8 @@ export default function App() {
           />
         </PersistentView>
 
-        <PersistentView active={activeView === 'recent'} className={scrollArea}>
-          <RecentView onOpen={handleOpenRecentConversation} />
+        <PersistentView active={activeView === 'history'} className={scrollArea}>
+          <HistoryView onOpen={handleOpenConversation} />
         </PersistentView>
 
         <PersistentView active={activeView === 'bookmarks'} className={scrollArea}>

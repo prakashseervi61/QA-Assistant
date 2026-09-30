@@ -87,7 +87,7 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
   const chatFileInputRef = useRef(null); // hidden input for in-chat uploads
   const recognitionRef = useRef(null); // SpeechRecognition instance
   const abortRef = useRef(null); // AbortController for the in-flight stream
-  const switchConversationRef = useRef(null); // latest switchConversation, for the Recent-view event listener
+  const switchConversationRef = useRef(null); // latest switchConversation, for the History-view event listener
   const isSendingRef = useRef(false); // Execution lock preventing rapid double-send
   const pendingTextRef = useRef(''); // buffered stream text not yet flushed to state
   const flushRafRef = useRef(0); // requestAnimationFrame id for the pending flush
@@ -171,7 +171,7 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
     };
   }, []);
 
-  // Open a conversation selected from the Recent view (cross-component event).
+  // Open a conversation selected from the History view (cross-component event).
   useEffect(() => {
     function handleOpenConversation(e) {
       const id = e.detail;

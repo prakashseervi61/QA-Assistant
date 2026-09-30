@@ -3,7 +3,7 @@ import { Archive } from 'lucide-react';
 
 /**
  * Clean, reusable empty state used by views that have no content yet
- * (Collections, Recent, Bookmarks, ...). Purely presentational; renders on
+ * (Collections, History, Bookmarks, ...). Purely presentational; renders on
  * the glass surface so it fits the bento/spatial system in both themes.
  *
  * `icon` is any component that accepts the lucide icon props (size, className).

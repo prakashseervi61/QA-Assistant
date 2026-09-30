@@ -5,7 +5,7 @@ import logging
 from collections.abc import AsyncIterator
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
 from src.application.dto.requests import QueryRequest
@@ -16,6 +16,7 @@ from src.application.dto.responses import (
     SourceChunk,
 )
 from src.application.use_cases.conversation import (
+    DeleteConversationUseCase,
     GetConversationUseCase,
     ListConversationsUseCase,
 )
@@ -94,6 +95,28 @@ def get_conversation_get_use_case() -> GetConversationUseCase:
             ),
         )
     return _conversation_get_use_case
+
+
+_conversation_delete_use_case: DeleteConversationUseCase | None = None
+
+
+def set_conversation_delete_use_case(use_case: DeleteConversationUseCase) -> None:
+    """Register the DeleteConversationUseCase dependency at startup."""
+    global _conversation_delete_use_case
+    _conversation_delete_use_case = use_case
+
+
+def get_conversation_delete_use_case() -> DeleteConversationUseCase:
+    """FastAPI dependency that returns the injected use case."""
+    if _conversation_delete_use_case is None:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Conversation delete service not initialised. "
+                "Check server configuration."
+            ),
+        )
+    return _conversation_delete_use_case
 
 
 def _to_source_chunks(sources: list[dict]) -> list[SourceChunk]:
@@ -225,13 +248,20 @@ async def query_documents_stream(
 
 @router.get("/conversations", response_model=list[ConversationResponse])
 async def list_conversations(
+    limit: int = Query(
+        default=200,
+        ge=1,
+        le=1000,
+        description="Maximum conversations to return.",
+    ),
     use_case: ListConversationsUseCase = Depends(get_conversation_list_use_case),
 ) -> list[ConversationResponse]:
-    """Return the most recent conversations (newest first).
+    """Return conversations, newest first.
 
     Conversations without any messages are filtered out by the use case.
+    The History view asks for a generous limit so the whole log is visible.
     """
-    conversations = await use_case.execute(limit=10)
+    conversations = await use_case.execute(limit=limit)
     return [
         ConversationResponse(
             id=str(c.id),
@@ -279,3 +309,33 @@ async def get_conversation(
         )
         for m in messages
     ]
+
+
+# ---------------------------------------------------------------------------
+# DELETE /conversations/{conversation_id} — remove a conversation from history
+# ---------------------------------------------------------------------------
+
+
+@router.delete("/conversations/{conversation_id}")
+async def delete_conversation(
+    conversation_id: str,
+    use_case: DeleteConversationUseCase = Depends(get_conversation_delete_use_case),
+) -> dict:
+    """Permanently delete a conversation and all of its messages.
+
+    Returns a small JSON body rather than 204 so the client's DELETE helper,
+    which always parses JSON, keeps working.
+
+    Raises:
+        400: If conversation_id is not a valid UUID.
+        404: If no conversation with that id exists.
+    """
+    try:
+        deleted = await use_case.execute(conversation_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    if not deleted:
+        raise HTTPException(
+            status_code=404, detail=f"Conversation not found: {conversation_id}"
+        )
+    return {"deleted": True, "id": conversation_id}

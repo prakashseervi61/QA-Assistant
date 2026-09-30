@@ -36,9 +36,11 @@ class MemoryConversationRepository(ConversationRepository):
             raise KeyError(f"Conversation not found: {conversation_id}")
         return conversation
 
-    async def list_conversations(self, limit: int = 10) -> list[Conversation]:
+    async def list_conversations(self, limit: int | None = 10) -> list[Conversation]:
         all_conversations = list(self._conversations.values())
         all_conversations.sort(key=lambda c: c.updated_at or datetime.min, reverse=True)
+        if limit is None:
+            return all_conversations
         return all_conversations[:limit]
 
     async def add_message(self, conversation_id: UUID, message: Message) -> None:

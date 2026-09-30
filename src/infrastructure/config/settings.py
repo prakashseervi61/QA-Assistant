@@ -52,6 +52,12 @@ class Settings(BaseSettings):
     # using in-memory storage. Requires the optional deps: sqlalchemy, asyncpg.
     DATABASE_URL: str | None = None
 
+    # Conversation history storage (SQLite)
+    # Default store for chat history: a local file that survives restarts, so
+    # no database server is needed. Ignored when DATABASE_URL is set, and the
+    # app falls back to in-memory storage if the file cannot be opened.
+    HISTORY_DB_PATH: str = "./data/history.db"
+
     # Document Processing
     CHUNK_SIZE: int = 1000
     CHUNK_OVERLAP: int = 200

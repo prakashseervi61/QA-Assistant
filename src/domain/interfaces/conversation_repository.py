@@ -23,11 +23,12 @@ class ConversationRepository(ABC):
         pass
 
     @abstractmethod
-    async def list_conversations(self, limit: int = 10) -> list[Conversation]:
+    async def list_conversations(self, limit: int | None = 10) -> list[Conversation]:
         """List recent conversations, ordered by most recently updated.
 
         Args:
-            limit: Maximum number of conversations to return.
+            limit: Maximum number of conversations to return. Pass ``None``
+                to return the full history.
 
         Returns:
             List of conversations, most recently updated first.

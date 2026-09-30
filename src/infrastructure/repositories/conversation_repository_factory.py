@@ -1,4 +1,10 @@
-"""Conversation repository factory: Postgres when configured, in-memory otherwise."""
+"""Conversation repository factory.
+
+Order of preference:
+  1. Postgres  -- only when DATABASE_URL is explicitly configured
+  2. SQLite    -- local file, so history survives restarts with no server
+  3. In-memory -- last-resort fallback so the app always boots
+"""
 
 import asyncio
 import logging
@@ -10,6 +16,9 @@ from src.infrastructure.repositories.memory_conversation_repository import (
 )
 from src.infrastructure.repositories.postgres_conversation_repository import (
     PostgresConversationRepository,
+)
+from src.infrastructure.repositories.sqlite_conversation_repository import (
+    SQLiteConversationRepository,
 )
 
 logger = logging.getLogger(__name__)
@@ -46,32 +55,45 @@ def probe_postgres_connectivity(repo: PostgresConversationRepository) -> bool:
 def create_conversation_repository() -> ConversationRepository:
     """Create the appropriate conversation repository.
 
-    Returns a Postgres-backed repository when ``DATABASE_URL`` is set, the
-    optional sqlalchemy dependency is available, and the database answers
-    a connectivity probe; otherwise falls back to the in-memory
-    repository. Never raises.
+    Returns a Postgres-backed repository when ``DATABASE_URL`` is set and the
+    database answers a connectivity probe. Otherwise a local SQLite file keeps
+    history across restarts. If neither can be used the in-memory repository
+    is returned so the app still boots. Never raises.
     """
     settings = get_settings()
     database_url = getattr(settings, "DATABASE_URL", None)
-    if not database_url:
-        return MemoryConversationRepository()
 
-    try:
-        repo = PostgresConversationRepository(database_url)
-    except Exception as exc:
-        logger.warning(
-            "Postgres conversation repository unavailable (%s); "
-            "falling back to in-memory",
-            exc,
-        )
-        return MemoryConversationRepository()
+    if database_url:
+        try:
+            repo = PostgresConversationRepository(database_url)
+        except Exception as exc:
+            logger.warning(
+                "Postgres conversation repository unavailable (%s); "
+                "falling back to SQLite",
+                exc,
+            )
+        else:
+            if probe_postgres_connectivity(repo):
+                logger.info("Using Postgres conversation repository")
+                return repo
+            logger.warning(
+                "Postgres conversation repository is configured but unreachable; "
+                "falling back to SQLite history storage"
+            )
 
-    if not probe_postgres_connectivity(repo):
-        logger.warning(
-            "Postgres conversation repository is configured but unreachable; "
-            "falling back to in-memory storage"
-        )
-        return MemoryConversationRepository()
+    history_path = getattr(settings, "HISTORY_DB_PATH", None)
+    if history_path:
+        try:
+            sqlite_repo = SQLiteConversationRepository(history_path)
+        except Exception as exc:
+            logger.warning(
+                "SQLite history store unavailable (%s); falling back to in-memory", exc
+            )
+        else:
+            logger.info("Using SQLite conversation repository at %s", history_path)
+            return sqlite_repo
 
-    logger.info("Using Postgres conversation repository")
-    return repo
+    logger.warning(
+        "No durable conversation storage available; history will not survive restarts"
+    )
+    return MemoryConversationRepository()
