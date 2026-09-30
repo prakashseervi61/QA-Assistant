@@ -4,6 +4,7 @@ import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
+from google.genai import errors
 
 from src.domain.interfaces.llm_provider import LLMQuotaExceededError
 from src.infrastructure.llm.gemini_provider import GeminiProvider
@@ -11,11 +12,21 @@ from src.infrastructure.llm.gemini_provider import GeminiProvider
 
 @pytest.fixture
 def mock_genai_client():
-    """Patch google.generativeai with a fake module; yield the client mock."""
+    """Patch google.genai with a fake module; yield the client mock.
+
+    The new SDK routes every call through ``client.models``, so the yielded
+    mock exposes the ``generate_content`` / ``generate_content_stream``
+    surface the provider actually uses.
+    """
     genai_module = MagicMock()
-    client = genai_module.GenerativeModel.return_value
-    with patch.dict(sys.modules, {"google.generativeai": genai_module}):
-        yield client
+    # `from google import genai` resolves to this mock, so self-reference it
+    # to keep `genai.Client` pointing at the mock we control.
+    genai_module.genai = genai_module
+    client = genai_module.Client.return_value
+    with patch.dict(
+        sys.modules, {"google": genai_module, "google.genai": genai_module}
+    ):
+        yield client.models
 
 
 class TestGeminiProviderQuotaError:
@@ -61,10 +72,25 @@ class TestGeminiProviderQuotaError:
             await provider.generate("prompt")
 
     @pytest.mark.asyncio
+    async def test_generate_raises_quota_exceeded_from_api_error_code(
+        self, mock_genai_client
+    ):
+        """``google.genai`` raises APIError carrying the status on ``.code``."""
+        mock_genai_client.generate_content.side_effect = errors.ClientError(
+            429, {"error": {"message": "quota exceeded"}}, None
+        )
+        provider = GeminiProvider(api_key="test-key", model="gemini-2.5-flash")
+
+        with pytest.raises(LLMQuotaExceededError) as exc_info:
+            await provider.generate("prompt")
+
+        assert "gemini-2.5-flash" in str(exc_info.value)
+
+    @pytest.mark.asyncio
     async def test_generate_stream_raises_quota_exceeded_on_429(
         self, mock_genai_client
     ):
-        mock_genai_client.generate_content.side_effect = Exception(
+        mock_genai_client.generate_content_stream.side_effect = Exception(
             "429 You exceeded your current quota."
         )
         provider = GeminiProvider(api_key="test-key", model="gemini-2.5-flash")
@@ -77,7 +103,7 @@ class TestGeminiProviderQuotaError:
     async def test_generate_stream_raises_runtime_error_on_other_error(
         self, mock_genai_client
     ):
-        mock_genai_client.generate_content.side_effect = Exception(
+        mock_genai_client.generate_content_stream.side_effect = Exception(
             "Invalid argument supplied."
         )
         provider = GeminiProvider(api_key="test-key", model="gemini-2.5-flash")
@@ -96,7 +122,7 @@ class TestGeminiProviderQuotaError:
             yield chunk
             raise Exception("429 quota exceeded")
 
-        mock_genai_client.generate_content.return_value = chunks()
+        mock_genai_client.generate_content_stream.return_value = chunks()
         provider = GeminiProvider(api_key="test-key", model="gemini-2.5-flash")
 
         collected = []
@@ -120,7 +146,7 @@ class TestGeminiProviderQuotaError:
 
         text_chunk = MagicMock()
         text_chunk.text = "full answer"
-        mock_genai_client.generate_content.return_value = iter(
+        mock_genai_client.generate_content_stream.return_value = iter(
             [text_chunk, PartLessChunk()]
         )
         provider = GeminiProvider(api_key="test-key", model="gemini-2.5-flash")
@@ -136,7 +162,9 @@ class TestGeminiProviderQuotaError:
         empty.text = ""
         last = MagicMock()
         last.text = "world"
-        mock_genai_client.generate_content.return_value = iter([first, empty, last])
+        mock_genai_client.generate_content_stream.return_value = iter(
+            [first, empty, last]
+        )
 
         provider = GeminiProvider(api_key="test-key", model="gemini-2.5-flash")
         collected = [piece async for piece in provider.generate_stream("prompt")]
@@ -197,8 +225,11 @@ class TestGeminiProviderJsonMode:
 
         assert result == '{"answer": "ok"}'
         kwargs = mock_genai_client.generate_content.call_args.kwargs
-        assert "generation_config" in kwargs
-        assert kwargs["generation_config"] is not None
+        # google-genai takes a GenerateContentConfig, not the old
+        # generation_config dict, and the model is passed per call.
+        assert kwargs["config"] is not None
+        assert kwargs["model"] == "gemini-2.5-flash"
+        assert kwargs["contents"] == "prompt"
 
     @pytest.mark.asyncio
     async def test_generate_json_raises_quota_exceeded_on_429(self, mock_genai_client):

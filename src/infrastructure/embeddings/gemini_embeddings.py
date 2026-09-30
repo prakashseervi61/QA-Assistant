@@ -1,6 +1,7 @@
+import asyncio
 import logging
 
-import google.generativeai as genai
+from google import genai
 
 from src.domain.interfaces.embedding_provider import EmbeddingProvider
 
@@ -17,8 +18,8 @@ _GEMINI_DIMENSIONS: dict[str, int] = {
 class GeminiEmbeddingProvider(EmbeddingProvider):
     """Embedding provider using Google Gemini API.
 
-    Uses the ``google-generativeai`` SDK to generate embeddings via
-    Google's Gemini embedding models.
+    Uses the ``google-genai`` SDK to generate embeddings via Google's
+    Gemini embedding models.
 
     Args:
         api_key: Google AI Studio / Gemini API key.
@@ -26,12 +27,12 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
     """
 
     def __init__(self, api_key: str, model: str = "text-embedding-004") -> None:
-        self._api_key = api_key
         self._model = model
         self._dimension = _GEMINI_DIMENSIONS.get(model, 768)
 
-        # Configure the SDK with the provided key
-        genai.configure(api_key=api_key)
+        # The new SDK scopes credentials to a client instance rather than
+        # configuring the module globally.
+        self._client = genai.Client(api_key=api_key)
 
     async def embed(self, text: str) -> list[float]:
         """Generate an embedding vector for a single text.
@@ -49,11 +50,14 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
             raise ValueError("Input text for embedding must not be empty.")
 
         try:
-            result = await genai.embed_content_async(
+            # The blocking SDK call is offloaded so the event loop stays
+            # responsive while the request is in flight.
+            result = await asyncio.to_thread(
+                self._client.models.embed_content,
                 model=self._model,
-                content=text,
+                contents=text,
             )
-            return result["embedding"]
+            return list(result.embeddings[0].values)
         except Exception as exc:
             logger.error(
                 "Gemini embed failed for input of length %d: %s", len(text), exc
@@ -77,11 +81,12 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
             raise ValueError("Input text list for batch embedding must not be empty.")
 
         try:
-            results = await genai.embed_content_async(
+            result = await asyncio.to_thread(
+                self._client.models.embed_content,
                 model=self._model,
-                content=texts,
+                contents=texts,
             )
-            return results["embedding"]
+            return [list(embedding.values) for embedding in result.embeddings]
         except Exception as exc:
             logger.error("Gemini embed_batch failed for %d texts: %s", len(texts), exc)
             raise RuntimeError(f"Gemini batch embedding request failed: {exc}") from exc
