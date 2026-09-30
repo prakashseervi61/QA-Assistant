@@ -6,7 +6,7 @@ import { Archive } from 'lucide-react';
  * (Collections, Recent, Bookmarks, ...). Purely presentational; renders on
  * the glass surface so it fits the bento/spatial system in both themes.
  *
- * `icon` is any component (lucide icon preferred) — react-icons still work.
+ * `icon` is any component that accepts the lucide icon props (size, className).
  */
 export default function EmptyState({ icon: Icon = Archive, title, description, hint }) {
   return (

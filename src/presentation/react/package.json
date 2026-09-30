@@ -11,14 +11,15 @@
   },
   "dependencies": {
     "framer-motion": "^13.2.0",
+    "highlight.js": "^11.11.2",
+    "lowlight": "^3.3.0",
     "lucide-react": "^1.45.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-icons": "^4.8.0",
     "react-markdown": "^10.1.0",
-    "rehype-highlight": "^7.0.2",
     "remark-gfm": "^4.0.1",
-    "sonner": "^2.0.8"
+    "sonner": "^2.0.8",
+    "unist-util-visit": "^5.1.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.0.0",

@@ -89,6 +89,9 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
   const abortRef = useRef(null); // AbortController for the in-flight stream
   const switchConversationRef = useRef(null); // latest switchConversation, for the Recent-view event listener
   const isSendingRef = useRef(false); // Execution lock preventing rapid double-send
+  const pendingTextRef = useRef(''); // buffered stream text not yet flushed to state
+  const flushRafRef = useRef(0); // requestAnimationFrame id for the pending flush
+  const pendingIdRef = useRef(null); // message id the buffered text belongs to
 
   const LAST_CONVERSATION_KEY = 'qa-assistant.lastConversationId';
   const lastConversationId = () => safeGetItem(LAST_CONVERSATION_KEY);
@@ -162,7 +165,10 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
 
   // Abort any in-flight stream if the widget unmounts (e.g. mobile drawer close).
   useEffect(() => {
-    return () => abortRef.current?.abort();
+    return () => {
+      abortRef.current?.abort();
+      resetPendingText();
+    };
   }, []);
 
   // Open a conversation selected from the Recent view (cross-component event).
@@ -271,9 +277,50 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
     setMessages(prev => prev.map(msg => (msg.id === id ? updater(msg) : msg)));
   }
 
-  /** Append streamed text to the assistant message with `id`. */
+  /** Commit whatever stream text is buffered, then clear the buffer. */
+  function flushPendingText() {
+    if (flushRafRef.current) {
+      cancelAnimationFrame(flushRafRef.current);
+      flushRafRef.current = 0;
+    }
+    const id = pendingIdRef.current;
+    const text = pendingTextRef.current;
+    pendingTextRef.current = '';
+    pendingIdRef.current = null;
+    if (id && text) {
+      updateMessageById(id, msg => ({ ...msg, content: msg.content + text }));
+    }
+  }
+
+  /**
+   * Append streamed text to the assistant message with `id`.
+   *
+   * The provider streams many small chunks per second; committing each one
+   * to state would re-render the whole message list that often. Buffer the
+   * text and flush it once per animation frame instead — the rendered
+   * result is identical, but the commit rate is capped at the display rate.
+   */
   function appendStreamText(id, text) {
-    updateMessageById(id, msg => ({ ...msg, content: msg.content + text }));
+    // No requestAnimationFrame (non-DOM context): commit immediately.
+    if (typeof requestAnimationFrame !== 'function') {
+      updateMessageById(id, msg => ({ ...msg, content: msg.content + text }));
+      return;
+    }
+    pendingIdRef.current = id;
+    pendingTextRef.current += text;
+    if (!flushRafRef.current) {
+      flushRafRef.current = requestAnimationFrame(flushPendingText);
+    }
+  }
+
+  /** Drop any buffered text without committing it (e.g. on abort/teardown). */
+  function resetPendingText() {
+    if (flushRafRef.current && typeof cancelAnimationFrame === 'function') {
+      cancelAnimationFrame(flushRafRef.current);
+      flushRafRef.current = 0;
+    }
+    pendingTextRef.current = '';
+    pendingIdRef.current = null;
   }
 
   /** Flag the assistant message with `id` as failed, preserving partial content. */
@@ -423,6 +470,9 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
               appendStreamText(botId, event.content ?? '');
               break;
             case 'done':
+              // The last chunks may still be buffered; commit them before
+              // attaching sources so the bubble shows the full answer.
+              flushPendingText();
               doneEvent = event;
               if (event.conversation_id) {
                 setConversationId(event.conversation_id);
@@ -471,6 +521,9 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
         markStreamError(botId, err.message || 'Unknown error');
       }
     } finally {
+      // Commit any last buffered text (clean finish or error), then clear
+      // the buffer so a stale frame can never write into a new message.
+      flushPendingText();
       abortRef.current = null;
       setLoading(false);
       setStages([]);

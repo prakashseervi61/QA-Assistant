@@ -1,7 +1,7 @@
 import { memo, useState } from 'react';
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import rehypeHighlight from 'rehype-highlight';
+import rehypeHighlightSubset from '../plugins/rehypeHighlightSubset';
 import { Check, Copy } from 'lucide-react';
 
 /** Flatten a React node tree into its literal text (for copy buttons). */
@@ -79,7 +79,7 @@ export default memo(function Markdown({ content }) {
     <div className="space-y-2.5">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
-        rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }]]}
+        rehypePlugins={[rehypeHighlightSubset]}
         urlTransform={defaultUrlTransform}
         components={{
           a({ node, href, children, ...props }) {

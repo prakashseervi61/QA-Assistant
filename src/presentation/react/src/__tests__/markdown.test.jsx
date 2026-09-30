@@ -44,6 +44,20 @@ describe('Markdown', () => {
     expect(out).toContain('aria-label="Copy code block"');
   });
 
+  it('syntax-highlights a supported language', () => {
+    // The hljs class on <code> plus hljs-* token classes is what the
+    // theme in index.css styles.
+    const out = html('```js\nconst x = 1;\n```');
+    expect(out).toContain('hljs');
+    expect(out).toMatch(/class="hljs-[a-z_]+"/);
+  });
+
+  it('leaves unsupported languages unhighlighted but intact', () => {
+    const out = html('```brainfuck\n+++++\n```');
+    expect(out).toContain('+++++');
+    expect(out).toContain('language-brainfuck');
+  });
+
   it('renders ordered and unordered lists', () => {
     const ul = html('- one\n- two');
     expect(ul).toContain('<ul');
