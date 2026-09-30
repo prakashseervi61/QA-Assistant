@@ -10,13 +10,18 @@ from src.domain.value_objects.chunk import Chunk
 
 
 def _content_only(events):
-    """Drop additive ``stage`` trace events, leaving payload events only.
+    """Drop additive trace events, leaving the answer text chunks only.
 
-    ``query_stream`` now interleaves ``{"type": "stage", ...}`` events with
-    raw text chunks. Tests that assert on answer content filter them out;
-    the stage lifecycle is asserted explicitly in its own test.
+    ``query_stream`` interleaves ``{"type": "stage", ...}`` trace events with
+    the raw text chunks and always terminates with a ``{"type": "done", ...}``
+    summary. Tests that assert on answer content filter both out; the stage
+    lifecycle and the done payload are asserted explicitly in their own tests.
     """
-    return [e for e in events if not (isinstance(e, dict) and e.get("type") == "stage")]
+    return [
+        e
+        for e in events
+        if not (isinstance(e, dict) and e.get("type") in {"stage", "done"})
+    ]
 
 
 # Fixtures
@@ -461,6 +466,53 @@ class TestRAGEngineQueryStream:
             collected.append(chunk)
 
         assert _content_only(collected) == ["Hello ", "world"]
+
+    async def test_stream_done_event_carries_sources_and_confidence(
+        self, rag_engine, mock_llm_provider, mock_vector_store, sample_chunks
+    ):
+        """The terminal ``done`` event must carry the citations itself.
+
+        Callers use these to render sources and to persist the message, so
+        the pipeline must never need a second retrieval + generation pass.
+        """
+        mock_vector_store.similarity_search.return_value = sample_chunks
+
+        async def fake_stream(prompt):
+            yield "Hello "
+            yield "world"
+
+        mock_llm_provider.generate_stream = fake_stream
+
+        collected = []
+        async for event in rag_engine.query_stream("test"):
+            collected.append(event)
+
+        done = [e for e in collected if isinstance(e, dict) and e.get("type") == "done"]
+        assert len(done) == 1, "stream must terminate with exactly one done event"
+
+        payload = done[0]
+        assert payload["answer"] == "Hello world"
+        assert payload["confidence"] == pytest.approx(0.8)
+        assert len(payload["sources"]) == len(sample_chunks)
+        assert payload["sources"][0]["metadata"]["filename"] == "ai_guide.pdf"
+
+    async def test_stream_done_event_on_no_context_has_empty_sources(
+        self, rag_engine, mock_llm_provider, mock_vector_store
+    ):
+        """An empty retrieval still terminates with a well-formed done event."""
+        mock_vector_store.similarity_search.return_value = []
+        mock_vector_store.get_collection_count.return_value = 0
+
+        collected = []
+        async for event in rag_engine.query_stream("test"):
+            collected.append(event)
+
+        payload = [
+            e for e in collected if isinstance(e, dict) and e.get("type") == "done"
+        ][0]
+        assert payload["sources"] == []
+        assert payload["confidence"] == 0.0
+        assert payload["answer"] == rag_engine.NO_DOCUMENTS_MESSAGE
 
     async def test_stream_calls_embed(self, rag_engine, mock_embedding_provider):
         async def fake_stream(prompt):

@@ -387,15 +387,18 @@ class RAGEngine:
             ``use_structured_output=True``.
 
         Note:
+            The stream always ends with a ``{"type": "done", ...}`` event
+            carrying the ``answer``, the ``sources`` that backed it, and the
+            ``confidence`` score, so callers never need a second retrieval
+            pass just to collect citations.
+
             When a guardrail manager is wired in, the user question is
             checked (PII + prompt injection) before retrieval and the
             generated answer is checked (groundedness + PII leak) after
             generation. A blocked question ends the stream with a
             ``{"type": "blocked", ...}`` event before any LLM call; a
             successful stream ends with a ``{"type": "done", ...}`` event
-            that carries the guardrail results. Without a manager the
-            generator yields only raw answer text chunks, exactly as
-            before.
+            that also carries the guardrail results.
 
         Args:
             question: The user's natural-language question.
@@ -407,10 +410,9 @@ class RAGEngine:
             that announce each retrieval step that actually runs
             (``guardrails``, ``rewriting``, ``retrieving``, ``reranking``,
             ``generating``) so clients can render a live progress trace.
-            When a guardrail manager is wired in, the stream additionally
-            ends with a ``{"type": "done", "answer": ..., "guardrails":
-            {"input": ..., "output": ...}}`` event, or — when the input
-            check blocks the question — a ``{"type": "blocked",
+            The stream terminates with a ``{"type": "done", "answer": ...,
+            "sources": [...], "confidence": ...}`` event — or, when the input
+            guardrail check blocks the question, a ``{"type": "blocked",
             "message": ..., "reason": ...}`` event with no LLM call.
 
         Raises:
@@ -555,13 +557,19 @@ class RAGEngine:
                     count,
                 )
                 yield message
+                done_event: dict[str, object] = {
+                    "type": "done",
+                    "answer": message,
+                    "sources": [],
+                    "confidence": 0.0,
+                    "prompt_version": selected_version,
+                }
                 if self._guardrail_manager is not None:
-                    yield {
-                        "type": "done",
-                        "answer": message,
-                        "guardrails": {"input": input_check, "output": {}},
-                        "prompt_version": selected_version,
+                    done_event["guardrails"] = {
+                        "input": input_check,
+                        "output": {},
                     }
+                yield done_event
                 return
 
             # 3. Build prompt with context
@@ -577,16 +585,24 @@ class RAGEngine:
                 answer_parts.append(chunk)
                 yield chunk
 
-            # 5. Guardrails: output check (post-generation) + done event.
+            # 5. Finalise: sources + confidence come from the very chunks the
+            #    answer was generated from, so citations can never disagree
+            #    with the streamed text. Guardrails (when enabled) add an
+            #    extra output check on top.
+            answer = "".join(answer_parts)
+            done_event = {
+                "type": "done",
+                "answer": answer,
+                "sources": self._format_sources(chunks),
+                "confidence": self._compute_confidence(chunks),
+                "prompt_version": selected_version,
+            }
             if self._guardrail_manager is not None:
-                answer = "".join(answer_parts)
-                output_check = self._check_output(answer, chunks)
-                yield {
-                    "type": "done",
-                    "answer": answer,
-                    "guardrails": {"input": input_check, "output": output_check},
-                    "prompt_version": selected_version,
+                done_event["guardrails"] = {
+                    "input": input_check,
+                    "output": self._check_output(answer, chunks),
                 }
+            yield done_event
 
         except RAGQueryError:
             raise

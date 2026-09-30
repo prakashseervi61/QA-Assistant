@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from typing import TYPE_CHECKING
 
@@ -31,9 +32,10 @@ class HuggingFaceEmbeddingProvider(EmbeddingProvider):
         self._model_name = model_name
         self._model: SentenceTransformer | None = None
         self._dimension: int = _HF_DIMENSIONS.get(model_name, 384)
+        self._load_lock = asyncio.Lock()
 
     def _load_model(self) -> None:
-        """Lazy-load the sentence-transformers model.
+        """Load the sentence-transformers model synchronously (blocking).
 
         The model is downloaded from HuggingFace Hub on first use and
         cached locally for subsequent calls.
@@ -68,6 +70,18 @@ class HuggingFaceEmbeddingProvider(EmbeddingProvider):
                 f"Failed to load HuggingFace model '{self._model_name}': {exc}"
             ) from exc
 
+    async def _ensure_model(self) -> None:
+        """Load the model on first use without blocking the event loop.
+
+        The first download can take seconds; run it on a worker thread and
+        guard it with a lock so concurrent first-requests load it only once.
+        """
+        if self._model is not None:
+            return
+        async with self._load_lock:
+            if self._model is None:
+                await asyncio.to_thread(self._load_model)
+
     async def embed(self, text: str) -> list[float]:
         """Generate an embedding vector for a single text.
 
@@ -84,10 +98,12 @@ class HuggingFaceEmbeddingProvider(EmbeddingProvider):
         if not text or not text.strip():
             raise ValueError("Input text for embedding must not be empty.")
 
-        self._load_model()
+        await self._ensure_model()
 
         try:
-            embedding = self._model.encode(text)  # type: ignore[union-attr]
+            # `encode` is a CPU-bound synchronous call; run it on a worker
+            # thread so the event loop stays free for other requests.
+            embedding = await asyncio.to_thread(self._model.encode, text)  # type: ignore[union-attr]
             return embedding.tolist()
         except Exception as exc:
             logger.error(
@@ -113,10 +129,14 @@ class HuggingFaceEmbeddingProvider(EmbeddingProvider):
         if not texts:
             raise ValueError("Input text list for batch embedding must not be empty.")
 
-        self._load_model()
+        await self._ensure_model()
 
         try:
-            embeddings = self._model.encode(texts)  # type: ignore[union-attr]
+            # Batch encoding is CPU-bound; offload to a worker thread so a
+            # large ingestion batch does not stall the event loop.
+            embeddings = await asyncio.to_thread(  # type: ignore[union-attr]
+                self._model.encode, texts
+            )
             return [emb.tolist() for emb in embeddings]
         except Exception as exc:
             logger.error(

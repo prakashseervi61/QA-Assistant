@@ -137,6 +137,8 @@ class QueryDocumentUseCase:
 
             full_answer_parts: list[str] = []
             stream_guardrails: dict[str, object] | None = None
+            stream_sources: list[dict] = []
+            stream_confidence = 0.0
             try:
                 async for event in self._rag_engine.query_stream(
                     question=question,
@@ -150,6 +152,8 @@ class QueryDocumentUseCase:
                             return
                         if event_type == "done":
                             stream_guardrails = event.get("guardrails")
+                            stream_sources = event.get("sources") or []
+                            stream_confidence = event.get("confidence") or 0.0
                             continue
                         if event_type == "stage":
                             yield event
@@ -166,20 +170,11 @@ class QueryDocumentUseCase:
 
             full_answer = "".join(full_answer_parts)
 
-            try:
-                rag_result = await self._rag_engine.query(
-                    question=question,
-                    top_k=top_k,
-                    metadata_filter=metadata_filter,
-                )
-            except (LLMQuotaExceededError, Exception) as exc:
-                logger.warning(
-                    "Failed to fetch sources after stream for %s: %s", resolved_id, exc
-                )
-                rag_result = {}
-
-            sources = rag_result.get("sources", [])
-            confidence = rag_result.get("confidence", 0.0)
+            # The streamed `done` event already carried the sources and
+            # confidence computed from the same chunks that produced this
+            # answer, so no second retrieval + generation pass is needed.
+            sources = stream_sources
+            confidence = stream_confidence
 
             assistant_message = Message(
                 role="assistant", content=full_answer, sources=sources

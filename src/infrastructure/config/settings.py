@@ -64,7 +64,10 @@ class Settings(BaseSettings):
     CORS_ORIGINS: list[str] = ["http://localhost:3000"]
 
     # Reranker
-    ENABLE_RERANKING: bool = False
+    # ON by default: reranks the top-k vector hits by relevance to the
+    # question, which noticeably improves citation precision. Costs one
+    # CrossEncoder scoring pass per query (see RERANKER_MODEL).
+    ENABLE_RERANKING: bool = True
     RERANKER_MODEL: str = "BAAI/bge-reranker-v2-m3"
 
     # Hybrid Search
@@ -81,7 +84,9 @@ class Settings(BaseSettings):
     CHILD_CHUNK_OVERLAP: int = 50
 
     # Semantic Chunking
-    ENABLE_SEMANTIC_CHUNKING: bool = False
+    # ON by default: chunks split on semantic boundaries at ingestion
+    # rather than fixed-size windows, so retrieved context stays coherent.
+    ENABLE_SEMANTIC_CHUNKING: bool = True
     SEMANTIC_SIMILARITY_THRESHOLD: float = 0.5
     SEMANTIC_MIN_CHUNK_SIZE: int = 100
     SEMANTIC_MAX_CHUNK_SIZE: int = 2000
@@ -135,13 +140,13 @@ class Settings(BaseSettings):
     RATE_LIMIT_MAX_REQUESTS: int = 60
     RATE_LIMIT_WINDOW_SECONDS: int = 60
 
-    # Guardrails (optional — OFF by default)
+    # Guardrails (ON by default, non-blocking)
     # When ENABLE_GUARDRAILS is true, the RAG pipeline runs input checks
     # (PII + prompt injection) before retrieval and output checks
     # (groundedness + PII leak) after generation. Violations are flagged
     # but never block the pipeline unless GUARDRAIL_BLOCK_VIOLATIONS is
     # true (see src/infrastructure/guardrails/).
-    ENABLE_GUARDRAILS: bool = False
+    ENABLE_GUARDRAILS: bool = True
     GUARDRAIL_BLOCK_VIOLATIONS: bool = False
     GUARDRAIL_GROUNDEDNESS_THRESHOLD: float = 0.2
 

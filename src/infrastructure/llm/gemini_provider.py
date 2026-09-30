@@ -8,6 +8,9 @@ from src.domain.interfaces.llm_provider import LLMProvider, LLMQuotaExceededErro
 
 logger = logging.getLogger(__name__)
 
+# Sentinel pushed by the streaming producer thread to signal completion.
+_STREAM_DONE = object()
+
 QUOTA_ERROR_MESSAGE = (
     "Your Gemini API key is out of quota or rate-limited for model "
     "'{model}' (HTTP 429). Link a billing account in Google AI Studio "
@@ -116,27 +119,63 @@ class GeminiProvider(LLMProvider):
     async def generate_stream(
         self, prompt: str, system_prompt: str | None = None
     ) -> AsyncIterator[str]:
-        def _stream():
-            kwargs = {}
-            if system_prompt:
-                kwargs["system_instruction"] = system_prompt
-            return self._client.generate_content(prompt, stream=True, **kwargs)
+        """Stream answer chunks from Gemini without blocking the event loop.
 
+        The blocking SDK iteration runs entirely on a worker thread and
+        hands chunks back through a queue, so the server stays responsive
+        to other requests while an answer streams in.
+        """
+        loop = asyncio.get_running_loop()
+        queue: asyncio.Queue[object] = asyncio.Queue()
+
+        def _produce() -> None:
+            """Blocking producer — runs on a worker thread."""
+            try:
+                kwargs = {}
+                if system_prompt:
+                    kwargs["system_instruction"] = system_prompt
+                response = self._client.generate_content(
+                    prompt, stream=True, **kwargs
+                )
+                for chunk in response:
+                    try:
+                        text = chunk.text
+                    except Exception:
+                        continue
+                    if text:
+                        loop.call_soon_threadsafe(queue.put_nowait, text)
+
+                # Recorded for logging/diagnostics only — the API response
+                # shape is deliberately unchanged.
+                usage = getattr(response, "usage_metadata", None)
+                if usage is not None:
+                    logger.debug(
+                        "Gemini stream usage (model=%s): prompt=%s completion=%s",
+                        self._model,
+                        getattr(usage, "prompt_token_count", None),
+                        getattr(usage, "candidates_token_count", None),
+                    )
+            except Exception as exc:  # noqa: BLE001 - forwarded to consumer
+                loop.call_soon_threadsafe(queue.put_nowait, exc)
+            finally:
+                loop.call_soon_threadsafe(queue.put_nowait, _STREAM_DONE)
+
+        producer = asyncio.create_task(asyncio.to_thread(_produce))
         try:
-            response = await asyncio.to_thread(_stream)
-            for chunk in response:
-                try:
-                    text = chunk.text
-                except Exception:
-                    continue
-                if text:
-                    yield text
-        except Exception as exc:
-            if _is_quota_error(exc):
-                raise LLMQuotaExceededError(
-                    QUOTA_ERROR_MESSAGE.format(model=self._model)
-                ) from exc
-            raise RuntimeError(f"Gemini streaming error: {exc}") from exc
+            while True:
+                item = await queue.get()
+                if item is _STREAM_DONE:
+                    break
+                if isinstance(item, Exception):
+                    if _is_quota_error(item):
+                        raise LLMQuotaExceededError(
+                            QUOTA_ERROR_MESSAGE.format(model=self._model)
+                        ) from item
+                    raise RuntimeError(f"Gemini streaming error: {item}") from item
+                yield item
+        finally:
+            if not producer.done():
+                producer.cancel()
 
     def get_model_name(self) -> str:
         return self._model
