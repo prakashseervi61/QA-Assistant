@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import {
   Bookmark,
   Database,
@@ -15,7 +16,9 @@ import DocumentList from './components/DocumentList';
 import ChatWidget from './components/ChatWidget';
 import EmptyState from './components/EmptyState';
 import HistoryView from './components/HistoryView';
+import PageScroll from './components/PageScroll';
 import { Toaster } from './components/ui';
+import { navItemForKey, navKeyForPath } from './components/navItems';
 import { getTheme, setTheme } from './theme';
 import './App.css'; // optional custom styles
 
@@ -82,47 +85,19 @@ function SettingsPanel() {
   );
 }
 
-/**
- * Keeps a view mounted while it is not the active one.
- *
- * Unmounting on navigation threw away the view's scroll offset, its fetched
- * data and (for chat) any in-flight answer stream, so coming back always
- * started from the top. Hiding instead of unmounting preserves all of it.
- *
- * Inactive views are hidden with `visibility: hidden` rather than
- * `display: none`, because `display: none` collapses the scroll box and
- * resets `scrollTop` to 0 — the exact thing we are trying to preserve.
- * They are taken out of flow with absolute positioning so the hidden views
- * do not stack up and stretch the layout, and `visibility: hidden` already
- * removes them from the tab order and stops them taking clicks.
- *
- * The styles are inline on purpose: they have to beat the Tailwind display
- * and position utilities on the wrapper, and class order alone would not
- * guarantee that.
- */
-function PersistentView({ active, className, children }) {
-  return (
-    <div
-      className={className}
-      style={
-        active
-          ? undefined
-          : { position: 'absolute', inset: 0, visibility: 'hidden' }
-      }
-      aria-hidden={active ? undefined : true}
-    >
-      {children}
-    </div>
-  );
-}
-
 export default function App() {
-  const [activeView, setActiveView] = useState('chat');
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [isDark, setIsDark] = useState(() => getTheme() === 'dark');
+  const location = useLocation();
+  const navigate = useNavigate();
+  const pendingConversation = useRef(null);
+
+  // The URL is the single source of truth for which view is showing, so the
+  // dock highlight, the ⌘K palette and the browser's back/forward all agree.
+  const activeView = navKeyForPath(location.pathname);
 
   function handleNavigate(key) {
-    setActiveView(key);
+    navigate(navItemForKey(key).path);
   }
 
   function handleToggleTheme() {
@@ -133,12 +108,32 @@ export default function App() {
     });
   }
 
+  /**
+   * Open a saved conversation from the History view.
+   *
+   * ChatWidget listens for this event, but it is only mounted on `/`, so when
+   * we arrive from another page the dispatch has to wait until after the
+   * route renders. Child effects run before the parent's, so an effect here
+   * fires once ChatWidget's listener is attached.
+   */
   function handleOpenConversation(id) {
-    window.dispatchEvent(new CustomEvent('open-conversation', { detail: id }));
-    setActiveView('chat');
+    if (location.pathname === '/') {
+      window.dispatchEvent(new CustomEvent('open-conversation', { detail: id }));
+      return;
+    }
+    pendingConversation.current = id;
+    navigate('/');
   }
 
-  const scrollArea = 'min-h-0 flex-1 overflow-y-auto p-4 sm:p-6 lg:px-24 lg:py-8';
+  useEffect(() => {
+    if (location.pathname === '/' && pendingConversation.current) {
+      const id = pendingConversation.current;
+      pendingConversation.current = null;
+      window.dispatchEvent(new CustomEvent('open-conversation', { detail: id }));
+    }
+  }, [location.pathname]);
+
+  const pagePad = 'p-4 sm:p-6 lg:px-24 lg:py-8';
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-paper">
@@ -150,46 +145,70 @@ export default function App() {
         onOpenPalette={() => setPaletteOpen(true)}
       />
 
-      {/* Main column — Chat is the primary view. Every view stays mounted so
-          switching routes preserves where you were. */}
+      {/* Main column — Chat is the primary view at "/". */}
       <main className="relative flex min-h-0 flex-1 flex-col">
-        <Dock active={activeView} onNavigate={handleNavigate} />
+        <Dock active={activeView} />
 
-        <PersistentView
-          active={activeView === 'chat'}
-          className="flex min-h-0 flex-1 flex-col"
-        >
-          <ChatWidget />
-        </PersistentView>
+        <Routes>
+          <Route path="/" element={<ChatWidget />} />
 
-        <PersistentView active={activeView === 'documents'} className={scrollArea}>
-          <DocumentList />
-        </PersistentView>
-
-        <PersistentView active={activeView === 'collections'} className={scrollArea}>
-          <EmptyState
-            icon={Users}
-            title="No collections yet"
-            description="Group related documents so you can query them together. Collections will appear here once they are created."
-            hint="Create collections from the server or future releases."
+          <Route
+            path="/documents"
+            element={
+              <PageScroll className={pagePad}>
+                <DocumentList />
+              </PageScroll>
+            }
           />
-        </PersistentView>
 
-        <PersistentView active={activeView === 'history'} className={scrollArea}>
-          <HistoryView onOpen={handleOpenConversation} />
-        </PersistentView>
-
-        <PersistentView active={activeView === 'bookmarks'} className={scrollArea}>
-          <EmptyState
-            icon={Bookmark}
-            title="No bookmarks yet"
-            description="Save important answers and documents to revisit them later. Bookmarks will appear here."
+          <Route
+            path="/collections"
+            element={
+              <PageScroll className={pagePad}>
+                <EmptyState
+                  icon={Users}
+                  title="No collections yet"
+                  description="Group related documents so you can query them together. Collections will appear here once they are created."
+                  hint="Create collections from the server or future releases."
+                />
+              </PageScroll>
+            }
           />
-        </PersistentView>
 
-        <PersistentView active={activeView === 'settings'} className={scrollArea}>
-          <SettingsPanel />
-        </PersistentView>
+          <Route
+            path="/history"
+            element={
+              <PageScroll className={pagePad}>
+                <HistoryView onOpen={handleOpenConversation} />
+              </PageScroll>
+            }
+          />
+
+          <Route
+            path="/bookmarks"
+            element={
+              <PageScroll className={pagePad}>
+                <EmptyState
+                  icon={Bookmark}
+                  title="No bookmarks yet"
+                  description="Save important answers and documents to revisit them later. Bookmarks will appear here."
+                />
+              </PageScroll>
+            }
+          />
+
+          <Route
+            path="/settings"
+            element={
+              <PageScroll className={pagePad}>
+                <SettingsPanel />
+              </PageScroll>
+            }
+          />
+
+          {/* Unknown URL: send the visitor to chat rather than a blank page. */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
       </main>
 
       <CommandPalette

@@ -1,5 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 import ErrorBoundary from './components/ErrorBoundary';
 import { applyTheme, getTheme } from './theme';
@@ -10,7 +11,11 @@ applyTheme(getTheme());
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <ErrorBoundary>
-      <App />
+      {/* BrowserRouter gives every view a real URL, so pages are linkable,
+          bookmarkable and reachable with the back/forward buttons. */}
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>
     </ErrorBoundary>
   </React.StrictMode>
 );
