@@ -82,6 +82,40 @@ function SettingsPanel() {
   );
 }
 
+/**
+ * Keeps a view mounted while it is not the active one.
+ *
+ * Unmounting on navigation threw away the view's scroll offset, its fetched
+ * data and (for chat) any in-flight answer stream, so coming back always
+ * started from the top. Hiding instead of unmounting preserves all of it.
+ *
+ * Inactive views are hidden with `visibility: hidden` rather than
+ * `display: none`, because `display: none` collapses the scroll box and
+ * resets `scrollTop` to 0 — the exact thing we are trying to preserve.
+ * They are taken out of flow with absolute positioning so the hidden views
+ * do not stack up and stretch the layout, and `visibility: hidden` already
+ * removes them from the tab order and stops them taking clicks.
+ *
+ * The styles are inline on purpose: they have to beat the Tailwind display
+ * and position utilities on the wrapper, and class order alone would not
+ * guarantee that.
+ */
+function PersistentView({ active, className, children }) {
+  return (
+    <div
+      className={className}
+      style={
+        active
+          ? undefined
+          : { position: 'absolute', inset: 0, visibility: 'hidden' }
+      }
+      aria-hidden={active ? undefined : true}
+    >
+      {children}
+    </div>
+  );
+}
+
 export default function App() {
   const [activeView, setActiveView] = useState('chat');
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -104,35 +138,7 @@ export default function App() {
     setActiveView('chat');
   }
 
-  function renderView() {
-    switch (activeView) {
-      case 'documents':
-        return <DocumentList />;
-      case 'collections':
-        return (
-          <EmptyState
-            icon={Users}
-            title="No collections yet"
-            description="Group related documents so you can query them together. Collections will appear here once they are created."
-            hint="Create collections from the server or future releases."
-          />
-        );
-      case 'recent':
-        return <RecentView onOpen={handleOpenRecentConversation} />;
-      case 'bookmarks':
-        return (
-          <EmptyState
-            icon={Bookmark}
-            title="No bookmarks yet"
-            description="Save important answers and documents to revisit them later. Bookmarks will appear here."
-          />
-        );
-      case 'settings':
-        return <SettingsPanel />;
-      default:
-        return null;
-    }
-  }
+  const scrollArea = 'min-h-0 flex-1 overflow-y-auto p-4 sm:p-6 lg:px-24 lg:py-8';
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-paper">
@@ -144,14 +150,46 @@ export default function App() {
         onOpenPalette={() => setPaletteOpen(true)}
       />
 
-      {/* Main column — Chat is the primary view */}
+      {/* Main column — Chat is the primary view. Every view stays mounted so
+          switching routes preserves where you were. */}
       <main className="relative flex min-h-0 flex-1 flex-col">
         <Dock active={activeView} onNavigate={handleNavigate} />
-        {activeView === 'chat' ? (
+
+        <PersistentView
+          active={activeView === 'chat'}
+          className="flex min-h-0 flex-1 flex-col"
+        >
           <ChatWidget />
-        ) : (
-          <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6 lg:px-24 lg:py-8">{renderView()}</div>
-        )}
+        </PersistentView>
+
+        <PersistentView active={activeView === 'documents'} className={scrollArea}>
+          <DocumentList />
+        </PersistentView>
+
+        <PersistentView active={activeView === 'collections'} className={scrollArea}>
+          <EmptyState
+            icon={Users}
+            title="No collections yet"
+            description="Group related documents so you can query them together. Collections will appear here once they are created."
+            hint="Create collections from the server or future releases."
+          />
+        </PersistentView>
+
+        <PersistentView active={activeView === 'recent'} className={scrollArea}>
+          <RecentView onOpen={handleOpenRecentConversation} />
+        </PersistentView>
+
+        <PersistentView active={activeView === 'bookmarks'} className={scrollArea}>
+          <EmptyState
+            icon={Bookmark}
+            title="No bookmarks yet"
+            description="Save important answers and documents to revisit them later. Bookmarks will appear here."
+          />
+        </PersistentView>
+
+        <PersistentView active={activeView === 'settings'} className={scrollArea}>
+          <SettingsPanel />
+        </PersistentView>
       </main>
 
       <CommandPalette

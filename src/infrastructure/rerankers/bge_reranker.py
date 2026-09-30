@@ -14,10 +14,32 @@ class BEReranker(Reranker):
 
     Uses ``sentence_transformers.CrossEncoder`` to score (query, chunk)
     pairs and returns the top-k most relevant chunks.
+
+    The model is constructed on first use rather than in ``__init__``. Loading
+    the weights added tens of seconds to every application startup even when
+    no query was ever asked, because the reranker is wired in at boot.
+    Importing ``sentence_transformers`` itself is cheap — the embedding
+    provider already imports it — so only the construction is deferred.
     """
 
     def __init__(self, model_name: str = "BAAI/bge-reranker-v2-m3") -> None:
-        self._model = CrossEncoder(model_name)
+        self._model_name = model_name
+        self._model: CrossEncoder | None = None
+
+    def _load_model(self) -> None:
+        """Construct the CrossEncoder on first use.
+
+        Raises:
+            RuntimeError: If the model cannot be loaded.
+        """
+        if self._model is not None:
+            return
+        try:
+            self._model = CrossEncoder(self._model_name)
+        except Exception as exc:
+            raise RuntimeError(
+                f"Failed to load reranker model '{self._model_name}': {exc}"
+            ) from exc
 
     def rerank(
         self,
@@ -36,6 +58,8 @@ class BEReranker(Reranker):
         """
         if not chunks:
             return []
+
+        self._load_model()
 
         pairs = [(query, chunk.content) for chunk in chunks]
         scores = self._model.predict(pairs)

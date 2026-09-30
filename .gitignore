@@ -40,6 +40,12 @@ ENV/
 data/
 chroma_db/
 
+# Local dev runtime (pid files + server logs from scripts/start_all.*)
+.run/
+
+# Browser-automation scratch output
+.playwright-mcp/
+
 # OS
 .DS_Store
 Thumbs.db
