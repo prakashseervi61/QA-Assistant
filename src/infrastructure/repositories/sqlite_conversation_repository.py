@@ -27,6 +27,8 @@ _SCHEMA = """
 CREATE TABLE IF NOT EXISTS conversations (
     id            TEXT PRIMARY KEY,
     title         TEXT NOT NULL DEFAULT '',
+    -- Legacy column: no code sets document_ids any more. Kept so existing
+    -- databases keep their schema; the inserts below simply omit it.
     document_ids  TEXT NOT NULL DEFAULT '[]',
     created_at    TEXT NOT NULL,
     updated_at    TEXT
@@ -116,23 +118,20 @@ class SQLiteConversationRepository(ConversationRepository):
     # ------------------------------------------------------------------
 
     async def save_conversation(self, conversation: Conversation) -> None:
-        document_ids = json.dumps([str(d) for d in conversation.document_ids])
         updated_at = conversation.updated_at or datetime.now()
 
         def _write(conn: sqlite3.Connection) -> None:
             conn.execute(
                 """
-                INSERT INTO conversations (id, title, document_ids, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO conversations (id, title, created_at, updated_at)
+                VALUES (?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
-                    title        = excluded.title,
-                    document_ids = excluded.document_ids,
-                    updated_at   = excluded.updated_at
+                    title      = excluded.title,
+                    updated_at = excluded.updated_at
                 """,
                 (
                     str(conversation.id),
                     conversation.title,
-                    document_ids,
                     conversation.created_at.isoformat(),
                     updated_at.isoformat(),
                 ),
@@ -189,14 +188,10 @@ class SQLiteConversationRepository(ConversationRepository):
                 )
                 for r in message_rows
             ]
-            document_ids = [
-                UUID(d) for d in _loads_list(row["document_ids"]) if _is_uuid(d)
-            ]
             return Conversation(
                 id=UUID(row["id"]),
                 title=row["title"],
                 messages=messages,
-                document_ids=document_ids,
                 created_at=_from_iso(row["created_at"]) or datetime.now(),
                 updated_at=_from_iso(row["updated_at"]),
             )
@@ -230,9 +225,6 @@ class SQLiteConversationRepository(ConversationRepository):
                     "SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at",
                     (row["id"],),
                 ).fetchall()
-                document_ids = [
-                    UUID(d) for d in _loads_list(row["document_ids"]) if _is_uuid(d)
-                ]
                 result.append(
                     Conversation(
                         id=UUID(row["id"]),
@@ -247,7 +239,6 @@ class SQLiteConversationRepository(ConversationRepository):
                             )
                             for m in message_rows
                         ],
-                        document_ids=document_ids,
                         created_at=_from_iso(row["created_at"]) or datetime.now(),
                         updated_at=_from_iso(row["updated_at"]),
                     )
@@ -304,15 +295,6 @@ class SQLiteConversationRepository(ConversationRepository):
             return cursor.rowcount > 0
 
         return await self._run(_write)
-
-    async def conversation_exists(self, conversation_id: UUID) -> bool:
-        def _read(conn: sqlite3.Connection) -> bool:
-            row = conn.execute(
-                "SELECT 1 FROM conversations WHERE id = ?", (str(conversation_id),)
-            ).fetchone()
-            return row is not None
-
-        return await self._run(_read)
 
 
 def _is_uuid(value: object) -> bool:

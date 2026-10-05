@@ -3,8 +3,8 @@ import { Archive } from 'lucide-react';
 
 /**
  * Clean, reusable empty state used by views that have no content yet
- * (Collections, History, Bookmarks, ...). Purely presentational; renders on
- * the glass surface so it fits the bento/spatial system in both themes.
+ * (Collections, Bookmarks, ...). Purely presentational; sits on the
+ * hard-bordered surface so it fits the system in both themes.
  *
  * `icon` is any component that accepts the lucide icon props (size, className).
  */
@@ -14,24 +14,24 @@ export default function EmptyState({ icon: Icon = Archive, title, description, h
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ type: 'spring', stiffness: 260, damping: 24 }}
-      className="glass flex min-h-[22rem] w-full max-w-lg flex-col items-center justify-center rounded-3xl px-8 py-14 text-center shadow-card"
+      className="nb-card flex min-h-[22rem] w-full max-w-lg flex-col items-center justify-center px-8 py-14 text-center"
     >
       <motion.div
         initial={{ scale: 0.85 }}
         animate={{ scale: 1 }}
         transition={{ type: 'spring', stiffness: 300, damping: 18, delay: 0.05 }}
-        className="bg-bioluminescent mb-5 flex h-14 w-14 items-center justify-center rounded-2xl text-white shadow-glow-violet"
+        className="mb-5 flex h-16 w-16 items-center justify-center rounded border-[3px] border-nb-line bg-accent-orange shadow-brutal-sm"
       >
-        <Icon className="h-6 w-6" aria-hidden="true" />
+        <Icon className="h-7 w-7 text-ink-on-accent" aria-hidden="true" />
       </motion.div>
-      <h2 className="font-editorial text-xl font-medium tracking-tight text-ink">{title}</h2>
+      <h2 className="text-3xl font-black uppercase text-ink">{title}</h2>
       {description && (
-        <p className="mt-1.5 max-w-sm text-sm leading-relaxed text-ink-muted">
+        <p className="mt-3 max-w-sm text-base font-medium leading-relaxed text-ink-secondary">
           {description}
         </p>
       )}
       {hint && (
-        <p className="font-mono mt-3 text-xs text-ink-faint">{hint}</p>
+        <p className="nb-label mt-5">{hint}</p>
       )}
     </motion.div>
   );

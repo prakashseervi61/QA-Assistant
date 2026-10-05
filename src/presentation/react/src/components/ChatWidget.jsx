@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { Check, ChevronDown, FileText, Loader2, MessageSquare, Paperclip, Send, ShieldAlert, Sparkles, Square } from 'lucide-react';
-import { fetchJSON, postFormData, streamChat } from '../api';
+import {
+  fetchJSON,
+  postFormData,
+  safeGetItem,
+  safeRemoveItem,
+  safeSetItem,
+  streamChat,
+} from '../api';
 import Markdown from './Markdown';
 import { ConfidenceSignal, WaveformOrb } from './ui';
 import { LOW_CONFIDENCE_THRESHOLD } from './ui/ConfidenceSignal';
@@ -19,8 +26,14 @@ function formatTime(date) {
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-/** Best-effort title for a source chunk, falling back to "Source N". */
-function getSourceTitle(source, index) {
+/**
+ * Best-effort title for a source chunk, falling back to "Source N".
+ *
+ * Exported for testing: this used to live in components/utils/getSourceTitle.js
+ * with a character-identical private copy here, so only the test imported the
+ * module while the app used the copy.
+ */
+export function getSourceTitle(source, index) {
   const meta = source.metadata || {};
   return meta.filename || meta.source || meta.title || `Source ${index + 1}`;
 }
@@ -28,32 +41,6 @@ function getSourceTitle(source, index) {
 /** Generates a unique client-side message ID. */
 function generateMessageId() {
   return `msg-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-}
-
-// Storage access can throw in some contexts (Safari private mode, lockdowns);
-// degrade gracefully instead of crashing the chat.
-function safeGetItem(key) {
-  try {
-    return localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-
-function safeSetItem(key, value) {
-  try {
-    localStorage.setItem(key, value);
-  } catch {
-    /* storage unavailable — fail silently */
-  }
-}
-
-function safeRemoveItem(key) {
-  try {
-    localStorage.removeItem(key);
-  } catch {
-    /* storage unavailable — fail silently */
-  }
 }
 
 /** Maps a server-side message (snake_case timestamps) to the local message shape. */
@@ -67,11 +54,14 @@ function toLocalMessage(m) {
   };
 }
 
-export default function ChatWidget({ conversationId: initialConversationId = null }) {
+export default function ChatWidget() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [conversationId, setConversationId] = useState(initialConversationId);
+  // ponytail: this used to be a prop with a default of null, but the only
+  // mount site is <ChatWidget /> — conversations arrive solely via the
+  // 'open-conversation' window event dispatched by App.
+  const [conversationId, setConversationId] = useState(null);
   const [expandedSources, setExpandedSources] = useState({});
   const [hasDocuments, setHasDocuments] = useState(null); // null = still checking
   const [conversations, setConversations] = useState([]); // from GET /conversations
@@ -219,7 +209,7 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
     const container = e.currentTarget;
     const nearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 120;
     stickToBottomRef.current = nearBottom;
-    setShowJumpToLatest(current => (nearBottom ? false : true));
+    setShowJumpToLatest(!nearBottom);
   }
 
   /** Jump to the newest message and resume auto-following. */
@@ -545,7 +535,7 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
     <div className="flex min-h-0 flex-1 flex-col bg-paper">
       {/* Header */}
       {conversations.length > 0 && (
-        <header className="flex shrink-0 items-center justify-end gap-3 border-b border-border bg-surface/60 px-4 py-2.5 backdrop-blur-xl sm:px-6">
+        <header className="flex shrink-0 items-center justify-end gap-3 border-b-[3px] border-nb-line bg-paper-surface px-4 py-3 sm:px-6">
           <select
             id="conversation-select"
             name="conversation"
@@ -553,7 +543,7 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
             value={conversationId ?? ''}
             onChange={e => switchConversation(e.target.value)}
             disabled={restoring || loading}
-            className="w-auto min-w-0 cursor-pointer rounded-lg border border-border bg-paper-100/60 px-2.5 py-1.5 text-xs font-medium text-ink shadow-subtle focus:border-brand-600 focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-60 sm:max-w-xs"
+            className="nb-input nb-focus min-w-0 cursor-pointer px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider disabled:cursor-not-allowed sm:max-w-xs"
           >
             <option value="">New chat</option>
             {conversations.map(conversation => (
@@ -573,16 +563,16 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
       >
         {messages.length === 0 && restoring ? (
           <div className="flex h-full flex-col items-center justify-center">
-            <Loader2 className="h-6 w-6 animate-spin text-brand-600" aria-hidden="true" />
+            <Loader2 className="h-6 w-6 animate-spin text-ink" aria-hidden="true" />
             <span className="sr-only">Loading conversation…</span>
           </div>
         ) : messages.length === 0 && !loading ? (
           hasDocuments === false ? (
             <div className="flex h-full flex-col items-center justify-center px-4 text-center">
-              <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-border bg-paper-200 text-brand-600">
-                <Paperclip className="h-6 w-6" aria-hidden="true" />
+              <div className="mb-4 flex h-16 w-16 items-center justify-center rounded border-[3px] border-nb-line bg-accent-yellow shadow-brutal">
+                <Paperclip className="h-7 w-7 text-ink-on-accent" aria-hidden="true" />
               </div>
-              <h3 className="font-editorial text-lg font-medium text-ink">
+              <h3 className="text-2xl font-black uppercase text-ink">
                 Upload a document to continue
               </h3>
               <p className="mt-1 max-w-xs text-sm leading-relaxed text-ink-muted">
@@ -592,10 +582,10 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
             </div>
           ) : (
             <div className="flex h-full flex-col items-center justify-center px-4 text-center">
-              <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-brand-100 bg-brand-50 text-brand-600 shadow-glow-violet">
-                <MessageSquare className="h-6 w-6" aria-hidden="true" />
+              <div className="mb-4 flex h-16 w-16 items-center justify-center rounded border-[3px] border-nb-line bg-accent-cyan shadow-brutal">
+                <MessageSquare className="h-7 w-7 text-ink-on-accent" aria-hidden="true" />
               </div>
-              <h3 className="font-editorial text-lg font-medium text-ink">Ask a question…</h3>
+              <h3 className="text-2xl font-black uppercase text-ink">Ask a question</h3>
               <p className="mt-1 max-w-xs text-sm leading-relaxed text-ink-muted">
                 Get answers grounded in your uploaded documents.
               </p>
@@ -606,7 +596,7 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
                       key={suggestion}
                       type="button"
                       onClick={() => sendMessage(suggestion)}
-                      className="glass rounded-full px-3.5 py-1.5 text-xs font-medium text-ink-secondary shadow-subtle transition-colors hover:border-brand-300 hover:text-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                      className="nb-btn nb-focus !justify-start !gap-0 !rounded !bg-paper-surface !px-3.5 !py-1.5 !text-xs !font-bold hover:!bg-accent-yellow hover:!text-ink-on-accent"
                     >
                       {suggestion}
                     </button>
@@ -627,17 +617,17 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
               return (
                 <div key={msg.id} className={`flex items-start gap-2.5 ${isUser ? 'justify-end' : 'justify-start'}`}>
                   {!isUser && (
-                    <div className="bg-bioluminescent mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white shadow-glow-violet">
-                      <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+                    <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded border-[3px] border-nb-line bg-accent-magenta">
+                      <Sparkles className="h-4 w-4 text-ink-on-accent" aria-hidden="true" />
                     </div>
                   )}
                   <div
                     className={`${
                       isUser
-                        ? 'max-w-[85%] rounded-2xl rounded-br-sm bg-dark-sidebar px-4 py-3 text-sm leading-relaxed text-ink-inverse shadow-card'
+                        ? 'max-w-[85%] rounded border-[3px] border-nb-line bg-accent-yellow px-4 py-3 text-sm font-medium leading-relaxed text-ink-on-accent shadow-brutal'
                         : msg.error
-                          ? 'max-w-[88%] rounded-2xl rounded-tl-sm border border-error-border bg-error bg-opacity-30 px-4 py-3.5 text-sm leading-relaxed text-error-text shadow-card'
-                          : 'glass max-w-[88%] rounded-2xl rounded-tl-sm rounded-bl-none px-4 py-3.5 text-sm leading-relaxed text-ink shadow-card'
+                          ? 'max-w-[88%] rounded border-[3px] border-nb-line bg-error-bg px-4 py-3.5 text-sm font-medium leading-relaxed text-ink-on-accent shadow-brutal'
+                          : 'max-w-[88%] rounded border-[3px] border-nb-line bg-paper-surface px-4 py-3.5 text-sm font-medium leading-relaxed text-ink shadow-brutal'
                     }`}
                   >
                     {!isUser && msg.content === '' && loading ? (
@@ -649,16 +639,23 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
                               <div key={`${msg.id}-${s.stage}-${i}`} className="flex items-center gap-2 text-xs">
                                 {isActive ? (
                                   <Loader2
-                                    className="h-3.5 w-3.5 shrink-0 animate-spin text-brand-600"
+                                    className="h-3.5 w-3.5 shrink-0 animate-spin text-ink"
                                     aria-hidden="true"
                                   />
                                 ) : (
                                   <Check
-                                    className="h-3.5 w-3.5 shrink-0 text-success"
+                                    className="h-3.5 w-3.5 shrink-0 text-ink"
                                     aria-hidden="true"
+                                    strokeWidth={3}
                                   />
                                 )}
-                                <span className={isActive ? 'font-medium text-ink' : 'text-ink-muted'}>
+                                <span
+                                  className={
+                                    isActive
+                                      ? 'font-bold uppercase tracking-wider text-ink'
+                                      : 'font-bold uppercase tracking-wider text-ink-muted'
+                                  }
+                                >
                                   {s.detail}
                                 </span>
                               </div>
@@ -670,7 +667,7 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
                           {[0, 1, 2].map(i => (
                             <span
                               key={i}
-                              className="h-2 w-2 animate-bounce rounded-full bg-brand-500"
+                              className="h-2.5 w-2.5 animate-bounce bg-accent-magenta"
                               style={{ animationDelay: `${i * 150}ms` }}
                             />
                           ))}
@@ -683,8 +680,8 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
                       ) : msg.content ? (
                         <>
                           {isLowConfidence && (
-                            <p className="mb-2.5 flex items-start gap-1.5 rounded-lg border border-error-border bg-error-bg px-2.5 py-1.5 text-xs font-medium text-error-text">
-                              <ShieldAlert className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                            <p className="nb-chip mb-2.5 items-start !rounded !border-[3px] !bg-error-bg !px-2.5 !py-1.5 !text-xs">
+                              <ShieldAlert className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden="true" strokeWidth={3} />
                               <span>
                                 The cited passages only weakly match your
                                 question — check the sources before relying on
@@ -699,16 +696,14 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
                     )}
 
                     {!isUser && !loading && typeof msg.confidence === 'number' && !msg.error && (
-                      <div className="mt-2.5 flex justify-end border-t border-border-strong pt-2">
+                      <div className="mt-3 flex justify-end border-t-[3px] border-nb-line pt-2">
                         <ConfidenceSignal confidence={msg.confidence} />
                       </div>
                     )}
 
                     {showInlineSources && (
-                      <div className="mt-3 border-t border-border-strong pt-2.5">
-                        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-ink-muted">
-                          Referenced Sources
-                        </p>
+                      <div className="mt-3 border-t-[3px] border-nb-line pt-3">
+                        <p className="nb-label mb-2">Referenced Sources</p>
                         <div className="flex flex-wrap gap-1.5">
                           {msg.sources.map((source, i) => {
                             const key = `${msg.id}-${i}`;
@@ -721,16 +716,16 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
                                 type="button"
                                 onClick={() => toggleSource(key)}
                                 aria-expanded={expanded}
-                                className={`inline-flex max-w-full items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
+                                className={`inline-flex max-w-full items-center gap-1.5 rounded border-2 border-nb-line px-2.5 py-1 font-mono text-[11px] font-bold transition-colors ${
                                   expanded
-                                    ? 'border-brand-300 bg-brand-50 text-brand-700'
-                                    : 'border-border bg-paper-200 text-ink-secondary hover:border-brand-300 hover:bg-brand-50 hover:text-brand-700'
+                                    ? ' text-ink-on-accent'
+                                    : 'bg-paper-surface text-ink-secondary hover:bg-accent-yellow hover:text-ink-on-accent'
                                 }`}
                               >
                                 <FileText className="h-3 w-3 shrink-0" aria-hidden="true" />
                                 <span className="truncate">{getSourceTitle(source, i)}</span>
                                 {score != null && (
-                                  <span className="shrink-0 font-mono text-[11px] tabular-nums text-ink-muted">
+                                  <span className="shrink-0 tabular-nums text-ink">
                                     {score}%
                                   </span>
                                 )}
@@ -751,7 +746,7 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
                             return (
                               <div
                                 key={`${key}-preview`}
-                                className="rounded-lg border border-border bg-paper-200/80 p-3 text-xs leading-relaxed text-ink-secondary shadow-subtle"
+                                className="rounded border-2 border-nb-line bg-paper-subtle p-3 text-xs font-medium leading-relaxed text-ink-secondary"
                               >
                                 <p className="mb-1 font-semibold text-ink">
                                   {getSourceTitle(source, i)}
@@ -786,18 +781,18 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
             type="button"
             onClick={jumpToLatest}
             aria-label="Jump to latest message"
-            className="absolute bottom-3 right-4 flex h-9 w-9 items-center justify-center rounded-full border border-border bg-surface text-ink-secondary shadow-lg transition-colors hover:bg-paper-200 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+            className="nb-icon-btn nb-focus absolute bottom-3 right-4 h-10 w-10 !bg-accent-orange"
           >
             <ChevronDown className="h-4 w-4" aria-hidden="true" />
           </button>
         )}
       </div>
 
-      {/* Composer — floating glass card over the messages area */}
+      {/* Composer — hard-bordered block over the messages area */}
       <div className="shrink-0 px-4 pb-4 pt-2 sm:px-8">
         <div className="mx-auto w-full max-w-4xl">
         <div
-          className={`glass flex items-end gap-2 rounded-2xl px-3.5 py-2.5 shadow-float transition-all focus-within:shadow-glow-violet ${
+          className={`flex items-end gap-2 rounded border-[3px] border-nb-line bg-paper-surface px-3 py-2 shadow-brutal ${
             loading || hasDocuments === false ? 'opacity-60' : ''
           }`}
         >
@@ -807,8 +802,8 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
             disabled={uploading}
             aria-label="Upload a document"
             title="Upload a PDF, DOCX or TXT document"
-            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-ink-muted transition-colors hover:bg-brand-50 hover:text-brand-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:cursor-not-allowed ${
-              uploading ? 'cursor-wait text-brand-600' : ''
+            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded border-2 border-nb-line bg-paper-surface text-ink transition-colors hover:bg-accent-yellow hover:text-ink-on-accent disabled:cursor-not-allowed ${
+              uploading ? 'cursor-wait' : ''
             }`}
           >
             {uploading ? (
@@ -841,7 +836,6 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
             className="max-h-40 min-h-0 flex-1 resize-none bg-transparent py-1 text-sm text-ink placeholder:text-ink-faint focus:outline-none disabled:cursor-not-allowed"
           />
           <WaveformOrb
-            active={listening}
             listening={listening}
             onClick={toggleVoice}
             label="Voice input"
@@ -853,7 +847,7 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
               onClick={stopStreaming}
               aria-label="Stop generating"
               title="Stop generating"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-red-700 text-white shadow-subtle transition-colors hover:bg-red-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-1"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded border-[3px] border-nb-line bg-accent-magenta text-ink-on-accent shadow-brutal-sm transition-transform active:translate-x-[3px] active:translate-y-[3px] active:shadow-none"
             >
               <Square className="h-4 w-4" aria-hidden="true" />
             </button>
@@ -863,20 +857,20 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
               onClick={() => sendMessage()}
               disabled={!input.trim() || hasDocuments === false}
               aria-label="Send message"
-              className="bg-bioluminescent flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white shadow-glow-violet transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:shadow-none disabled:opacity-40"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded border-[3px] border-nb-line bg-accent-yellow text-ink-on-accent shadow-brutal-sm transition-transform active:translate-x-[3px] active:translate-y-[3px] active:shadow-none disabled:cursor-not-allowed disabled:shadow-none disabled:opacity-40"
             >
               <Send className="h-4 w-4" aria-hidden="true" />
             </button>
           )}
         </div>
         {hasDocuments === false && (
-          <p className="mt-2 text-center font-mono text-[11px] text-ink-muted">
+          <p className="nb-label mt-2 text-center">
             Upload a document to start asking questions
           </p>
         )}
         <p className="mt-2 min-h-[2px]">
           {(uploadError || voiceError) && (
-            <span className="block text-center font-mono text-[11px] text-error-text">
+            <span className="block text-center font-mono text-[11px] font-bold uppercase tracking-wider text-error-text">
               {uploadError || voiceError}
             </span>
           )}

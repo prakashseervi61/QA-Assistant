@@ -1,9 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
-  AlertCircle,
   CalendarClock,
-  ChevronRight,
   FileText,
   Hash,
   Info,
@@ -14,6 +12,8 @@ import {
   X,
 } from 'lucide-react';
 import { fetchJSON, postFormData, deleteJSON } from '../api';
+import EmptyState from './EmptyState';
+import { ErrorBanner, SkeletonGrid } from './ui';
 
 const ACCEPTED_TYPES = '.pdf,.docx,.txt';
 
@@ -187,23 +187,23 @@ export default function DocumentList() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="font-editorial flex items-center gap-2.5 text-2xl font-medium tracking-tight text-ink">
-          <span className="bg-bioluminescent flex h-9 w-9 items-center justify-center rounded-xl text-white shadow-glow-violet">
-            <FileText className="h-[18px] w-[18px]" aria-hidden="true" />
-          </span>
-          Documents
-          {documents.length > 0 && (
-            <span className="rounded-full border border-border bg-paper-200 px-2 py-0.5 font-mono text-xs tabular-nums text-ink-secondary">
-              {documents.length}
-            </span>
-          )}
-        </h2>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <span className="nb-tag">Corpus</span>
+          <h2 className="mt-4 flex items-center gap-3 text-3xl font-black uppercase text-ink sm:text-4xl">
+            Documents
+            {documents.length > 0 && (
+                  <span className="nb-chip tabular-nums !bg-accent-yellow !text-ink-on-accent font-mono text-xs">
+                {documents.length}
+              </span>
+            )}
+          </h2>
+        </div>
         <button
           type="button"
           onClick={loadDocs}
           aria-label="Refresh documents"
-          className="glass rounded-lg p-2 text-ink-muted transition-all hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+          className="nb-icon-btn nb-focus h-10 w-10 shrink-0"
         >
           <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />
         </button>
@@ -218,21 +218,19 @@ export default function DocumentList() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -8, scale: 0.98 }}
             transition={{ type: 'spring', stiffness: 320, damping: 26 }}
-            className="glass-strong rounded-2xl p-5 shadow-float"
+            className="nb-card bg-paper-surface p-5"
             aria-label={`Preview ${selected.filename || 'document'}`}
           >
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="flex min-w-0 items-start gap-3.5">
-                <div className="bg-bioluminescent flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-white shadow-glow-violet">
-                  <FileText className="h-6 w-6" aria-hidden="true" />
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded border-[3px] border-nb-line bg-accent-yellow shadow-brutal-sm">
+                  <FileText className="h-6 w-6 text-ink-on-accent" aria-hidden="true" />
                 </div>
                 <div className="min-w-0">
-                  <p className="truncate text-base font-semibold text-ink">
+                  <p className="truncate text-lg font-extrabold uppercase tracking-tight text-ink">
                     {selected.filename || selected.name || 'Unnamed'}
                   </p>
-                  <p className="mt-0.5 font-mono text-xs uppercase tracking-wider text-ink-faint">
-                    {contentTypeLabel(selected)}
-                  </p>
+                  <p className="nb-label mt-1">{contentTypeLabel(selected)}</p>
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-2">
@@ -240,7 +238,7 @@ export default function DocumentList() {
                   type="button"
                   onClick={() => handleDelete(selected.id)}
                   aria-label={`Delete ${selected.filename || 'document'}`}
-                  className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border bg-paper-100 px-3 py-1.5 text-xs font-medium text-ink-secondary transition-colors hover:border-red-300 hover:bg-red-50 hover:text-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
+                  className="nb-btn nb-focus !rounded !bg-error-bg !text-ink-on-accent !px-3 !py-1.5 !text-xs !font-bold hover:!bg-accent-magenta"
                 >
                   <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
                   Delete
@@ -249,7 +247,7 @@ export default function DocumentList() {
                   type="button"
                   onClick={() => setSelected(null)}
                   aria-label="Close preview"
-                  className="glass rounded-lg p-2 text-ink-muted transition-colors hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                  className="nb-icon-btn nb-focus h-11 w-11"
                 >
                   <X className="h-4 w-4" aria-hidden="true" />
                 </button>
@@ -257,33 +255,33 @@ export default function DocumentList() {
             </div>
 
             <dl className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <div className="rounded-xl border border-border bg-paper-100 px-3.5 py-3">
-                <dt className="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider text-ink-faint">
+              <div className="rounded border-2 border-nb-line bg-paper-subtle px-3.5 py-3">
+                <dt className="nb-label flex items-center gap-1.5">
                   <FileText className="h-3 w-3" aria-hidden="true" /> Size
                 </dt>
-                <dd className="mt-1 text-sm font-medium tabular-nums text-ink">
+                <dd className="mt-1.5 text-base font-extrabold tabular-nums text-ink">
                   {formatSize(selected.file_size ?? selected.size ?? 0)}
                 </dd>
               </div>
-              <div className="rounded-xl border border-border bg-paper-100 px-3.5 py-3">
-                <dt className="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider text-ink-faint">
+              <div className="rounded border-2 border-nb-line bg-paper-subtle px-3.5 py-3">
+                <dt className="nb-label flex items-center gap-1.5">
                   <Hash className="h-3 w-3" aria-hidden="true" /> Chunks
                 </dt>
-                <dd className="mt-1 text-sm font-medium tabular-nums text-ink">
+                <dd className="mt-1.5 text-base font-extrabold tabular-nums text-ink">
                   {selected.chunk_count ?? selected.chunks ?? 0}
                 </dd>
               </div>
-              <div className="rounded-xl border border-border bg-paper-100 px-3.5 py-3">
-                <dt className="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider text-ink-faint">
+              <div className="rounded border-2 border-nb-line bg-paper-subtle px-3.5 py-3">
+                <dt className="nb-label flex items-center gap-1.5">
                   <Info className="h-3 w-3" aria-hidden="true" /> Type
                 </dt>
-                <dd className="mt-1 text-sm font-medium text-ink">{contentTypeLabel(selected)}</dd>
+                <dd className="mt-1.5 text-base font-extrabold tabular-nums text-ink">{contentTypeLabel(selected)}</dd>
               </div>
-              <div className="rounded-xl border border-border bg-paper-100 px-3.5 py-3">
-                <dt className="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider text-ink-faint">
+              <div className="rounded border-2 border-nb-line bg-paper-subtle px-3.5 py-3">
+                <dt className="nb-label flex items-center gap-1.5">
                   <CalendarClock className="h-3 w-3" aria-hidden="true" /> Added
                 </dt>
-                <dd className="mt-1 text-sm font-medium text-ink">
+                <dd className="mt-1.5 text-base font-extrabold tabular-nums text-ink">
                   {formatShortDate(selected.created_at)}
                 </dd>
               </div>
@@ -307,11 +305,11 @@ export default function DocumentList() {
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
-          className={`glass flex cursor-pointer flex-col items-center justify-center rounded-3xl border-2 border-dashed px-6 py-10 text-center transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 ${
-            dragging
-              ? 'border-brand-500 shadow-glow-violet'
-              : 'border-glass-border hover:border-brand-400 hover:shadow-card-hover'
-          }`}
+          /* `nb-dropzone` pins every descendant's ink while the yellow ground is
+             showing (drag or hover). Without it the children keep --ink-primary,
+             which flips to paper in dark and drops to 1.25:1 on the yellow. */
+          className="nb-dropzone flex cursor-pointer flex-col items-center justify-center rounded border-[3px] border-dashed border-nb-line bg-paper-surface px-6 py-12 text-center transition-colors hover:bg-accent-yellow"
+          data-dragging={dragging ? 'true' : undefined}
         >
           <input
             id="doc-file"
@@ -326,25 +324,23 @@ export default function DocumentList() {
           <motion.div
             animate={dragging ? { scale: 1.08, rotate: -2 } : { scale: 1, rotate: 0 }}
             transition={{ type: 'spring', stiffness: 300, damping: 18 }}
-            className="bg-bioluminescent mb-3 flex h-12 w-12 items-center justify-center rounded-2xl text-white shadow-glow-violet"
+            className="mb-4 flex h-14 w-14 items-center justify-center rounded border-[3px] border-nb-line bg-accent-cyan shadow-brutal-sm"
           >
-            <UploadCloud className="h-6 w-6" aria-hidden="true" />
+            <UploadCloud className="h-7 w-7 text-ink" aria-hidden="true" />
           </motion.div>
-          <p className="text-sm font-medium text-ink">
-            Drag &amp; drop your document here, or{' '}
-            <span className="font-medium text-brand-500 underline underline-offset-2">
-              browse
-            </span>
+          <p className="text-lg font-extrabold uppercase tracking-tight text-ink">
+            Drop your document here
           </p>
-          <p className="mt-1 font-mono text-xs text-ink-faint">
-            PDF, DOCX or TXT — one file at a time
+          <p className="mt-2 text-sm font-medium text-ink-secondary">
+            or <span className="font-bold text-ink underline decoration-4 underline-offset-2">browse</span> for a file
           </p>
+          <p className="nb-label mt-4">PDF · DOCX · TXT — one at a time</p>
         </label>
 
         {file && (
-          <div className="glass-strong flex items-center justify-between gap-3 rounded-2xl px-4 py-3 shadow-card">
+          <div className="nb-card flex items-center justify-between gap-3 px-4 py-3">
             <div className="flex min-w-0 items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-paper-100 text-brand-500">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded border-2 border-nb-line bg-pastel-cyan text-ink-on-accent">
                 <FileText className="h-5 w-5" aria-hidden="true" />
               </div>
               <div className="min-w-0">
@@ -355,7 +351,7 @@ export default function DocumentList() {
             <button
               type="submit"
               disabled={uploading}
-              className="bg-bioluminescent inline-flex shrink-0 items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white shadow-glow-violet transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              className="nb-btn nb-focus nb-btn-primary !px-4 !py-2 !text-sm"
             >
               {uploading ? (
                 <>
@@ -373,88 +369,43 @@ export default function DocumentList() {
         )}
       </form>
 
-      {error && (
-        <div
-          role="alert"
-          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-error-border bg-error-bg px-4 py-3 shadow-subtle"
-        >
-          <p className="flex items-center gap-2 text-sm text-error-text">
-            <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
-            <span className="min-w-0 break-words">{error}</span>
-          </p>
-          <button
-            type="button"
-            onClick={loadDocs}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-error-border bg-paper-100 px-3 py-1.5 text-xs font-medium text-error-text transition-colors hover:bg-error-bg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
-          >
-            <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
-            Retry
-          </button>
-        </div>
-      )}
+      <ErrorBanner message={error} onRetry={loadDocs} />
 
       {/* Bento corpus — stats tile + document cards */}
       {loading ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" aria-label="Loading documents" role="status">
-          {[0, 1, 2, 3, 4, 5].map(i => (
-            <div key={i} className="glass animate-pulse rounded-2xl p-4">
-              <div className="h-10 w-10 rounded-xl bg-paper-300" />
-              <div className="mt-3 space-y-2">
-                <div className="h-3 w-2/3 rounded bg-paper-300" />
-                <div className="h-3 w-1/3 rounded bg-paper-200" />
-              </div>
-            </div>
-          ))}
-          <span className="sr-only">Loading documents…</span>
-        </div>
+        <SkeletonGrid label="Loading documents" />
       ) : documents.length === 0 ? (
-        <div className="flex min-h-56 flex-col items-center justify-center rounded-3xl border-2 border-dashed border-glass-border bg-glass px-6 py-12 text-center shadow-card">
-          <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-paper-100 text-ink-faint">
-            <FileText className="h-6 w-6" aria-hidden="true" />
-          </div>
-          <h3 className="font-editorial text-lg font-medium text-ink">No documents yet</h3>
-          <p className="mt-1 max-w-xs text-sm leading-relaxed text-ink-muted">
-            Upload a PDF, DOCX or TXT file to start asking questions about it.
-          </p>
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className="mt-4 text-sm font-medium text-brand-500 underline underline-offset-2 hover:text-brand-400"
-          >
-            Choose a file to upload
-          </button>
-        </div>
+        <EmptyState
+          icon={FileText}
+          title="No documents yet"
+          description="Upload a PDF, DOCX or TXT file to start asking questions about it."
+          hint="PDF · DOCX · TXT"
+        />
       ) : (
         <>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <div className="glass flex flex-col justify-center gap-2 rounded-2xl p-5 shadow-card">
-              <p className="font-mono text-[11px] uppercase tracking-wider text-ink-faint">
-                Total size
-              </p>
-              <p className="font-editorial text-2xl font-semibold tracking-tight text-ink tabular-nums">
+            <div className="nb-card nb-tile-yellow flex flex-col justify-center gap-2 p-5">
+              <p className="nb-label">Total size</p>
+              <p className="text-3xl font-black tabular-nums text-ink-on-accent">
                 {formatSize(totalSize)}
               </p>
             </div>
-            <div className="glass flex flex-col justify-center gap-2 rounded-2xl p-5 shadow-card">
-              <p className="font-mono text-[11px] uppercase tracking-wider text-ink-faint">
-                Indexed chunks
-              </p>
-              <p className="font-editorial text-2xl font-semibold tracking-tight text-ink tabular-nums">
+            <div className="nb-card nb-tile-cyan flex flex-col justify-center gap-2 p-5">
+              <p className="nb-label">Indexed chunks</p>
+              <p className="text-3xl font-black tabular-nums text-ink-on-accent">
                 {totalChunks.toLocaleString()}
               </p>
             </div>
-            <div className="glass flex flex-col justify-center gap-2 rounded-2xl p-5 shadow-card">
-              <p className="font-mono text-[11px] uppercase tracking-wider text-ink-faint">
-                Documents
-              </p>
-              <p className="font-editorial text-2xl font-semibold tracking-tight text-ink tabular-nums">
+            <div className="nb-card nb-tile-pink flex flex-col justify-center gap-2 p-5">
+              <p className="nb-label">Documents</p>
+              <p className="text-3xl font-black tabular-nums text-ink-on-accent">
                 {documents.length}
               </p>
             </div>
           </div>
 
-          <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {documents.map(doc => {
+          <ul className="nb-bento">
+            {documents.map((doc, docIndex) => {
               const name = doc.filename || doc.name || 'Unnamed';
               const size = doc.file_size ?? doc.size ?? 0;
               const chunks = doc.chunk_count ?? doc.chunks;
@@ -466,20 +417,30 @@ export default function DocumentList() {
                     onClick={() => setSelected(isSelected ? null : doc)}
                     aria-label={`Preview ${name}`}
                     aria-pressed={isSelected}
-                    whileHover={{ y: -3 }}
-                    whileTap={{ scale: 0.98 }}
+                    whileHover={{ x: -3, y: -3 }}
+                    whileTap={{ x: 2, y: 2 }}
                     transition={{ type: 'spring', stiffness: 320, damping: 22 }}
-                    className={`glass w-full rounded-2xl p-4 text-left shadow-card transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
-                      isSelected ? 'ring-2 ring-brand-500 shadow-glow-violet' : ''
+                    className={`nb-card nb-card-hover w-full p-4 text-left ${
+                      isSelected ? 'bg-accent-yellow' : ''
                     }`}
                   >
                     <div className="flex items-start gap-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-paper-100 text-brand-500">
-                        <FileText className="h-5 w-5" aria-hidden="true" />
+                      {/* Rotate the ground so no two adjacent cards share a
+                          colour — the bento rule applied to the document list. */}
+                      <div
+                        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded border-2 border-nb-line ${
+                          isSelected
+                            ? 'bg-paper-surface'
+                            : ['bg-pastel-green', 'bg-pastel-cyan', 'bg-pastel-yellow', 'bg-pastel-orange', 'bg-pastel-pink', 'bg-pastel-purple'][docIndex % 6]
+                        }`}
+                      >
+                        <FileText className="h-5 w-5 text-ink" aria-hidden="true" />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium text-ink">{name}</p>
-                        <p className="mt-0.5 flex items-center gap-1.5 font-mono text-xs tabular-nums text-ink-faint">
+                        <p className="truncate text-sm font-extrabold uppercase tracking-tight text-ink">
+                          {name}
+                        </p>
+                        <p className="mt-1 flex items-center gap-1.5 font-mono text-[11px] font-bold tabular-nums text-ink-secondary">
                           <span>{formatSize(size)}</span>
                           {chunks != null && (
                             <>
@@ -489,12 +450,14 @@ export default function DocumentList() {
                           )}
                         </p>
                       </div>
-                      <ChevronRight
-                        className={`mt-1 h-4 w-4 shrink-0 text-ink-faint transition-transform ${
-                          isSelected ? 'rotate-90' : ''
-                        }`}
+                      {/* Arrow convention: bold directional arrows, never
+                          chevrons. The card is a link to its own preview. */}
+                      <span
+                        className="mt-1 shrink-0 text-xl font-black leading-none text-ink transition-transform group-hover:translate-x-1"
                         aria-hidden="true"
-                      />
+                      >
+                        →
+                      </span>
                     </div>
                   </motion.button>
                 </li>

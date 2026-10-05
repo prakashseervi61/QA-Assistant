@@ -7,7 +7,6 @@ Orchestrates the full RAG pipeline:
 import asyncio
 import logging
 from collections.abc import AsyncIterator
-from contextlib import nullcontext
 from typing import TYPE_CHECKING
 
 from src.domain.interfaces.embedding_provider import EmbeddingProvider
@@ -16,7 +15,6 @@ from src.domain.interfaces.reranker import Reranker
 from src.domain.interfaces.vector_store import VectorStore
 from src.infrastructure.config.settings import get_settings
 from src.infrastructure.llm.prompt_registry import (
-    DEFAULT_PROMPT_VERSION,
     PROMPT_VERSIONS,
     get_prompt,
 )
@@ -76,41 +74,20 @@ class RAGEngine:
         "Try rephrasing your question or uploading more documents."
     )
 
-    # Backward-compatible alias for the original system prompt. The
-    # versioned templates live in
-    # ``src/infrastructure/llm/prompt_registry.py``; ``v1`` is byte-
-    # identical to the historical prompt so default behaviour is unchanged.
-    PROMPT_TEMPLATE = PROMPT_VERSIONS["v1"]
-
     def __init__(
         self,
         llm_provider: LLMProvider,
         embedding_provider: EmbeddingProvider,
         vector_store: VectorStore,
         reranker: Reranker | None = None,
-        tracer: object | None = None,
         guardrail_manager: object | None = None,
     ) -> None:
         self._llm = llm_provider
         self._embedding = embedding_provider
         self._vector_store = vector_store
         self._reranker = reranker
-        self._tracer = tracer
         self._guardrail_manager = guardrail_manager
         self._settings = get_settings()
-
-    def _span(self, name: str) -> object:
-        """Return a span context manager when tracing is enabled, else a no-op.
-
-        Args:
-            name: Span name (e.g. "retrieval", "rerank", "llm_generate").
-
-        Returns:
-            A context manager object usable with ``with``.
-        """
-        if self._tracer is not None:
-            return self._tracer.start_as_current_span(name)
-        return nullcontext()
 
     @staticmethod
     def _stage_event(stage: str, detail: str) -> dict[str, str]:
@@ -177,7 +154,7 @@ class RAGEngine:
             # 0. Prompt version selection (settings + optional A/B knob).
             # Purely deterministic from the question, so it can be
             # computed once and attached to every finalized response.
-            selected_version = self._select_prompt_version(question)
+            selected_version = self._select_prompt_version()
 
             # 0. Guardrails: input check (pre-retrieval, optional). Never
             # crashes the pipeline — on any failure we log and pass through.
@@ -204,32 +181,30 @@ class RAGEngine:
             base_collection = self._settings.CHROMA_COLLECTION_NAME
             collection = base_collection
 
-            with self._span("retrieval"):
-                query_embedding = await self._embedding.embed(question)
-                if getattr(self._settings, "ENABLE_HYBRID_SEARCH", False):
-                    chunks = await self._vector_store.hybrid_search(
-                        query_embedding=query_embedding,
-                        query_text=question,
-                        k=k,
-                        collection_name=collection,
-                        metadata_filter=metadata_filter,
-                    )
-                else:
-                    chunks = await self._vector_store.similarity_search(
-                        query_embedding=query_embedding,
-                        k=k,
-                        collection_name=collection,
-                        metadata_filter=metadata_filter,
-                    )
+            query_embedding = await self._embedding.embed(question)
+            if getattr(self._settings, "ENABLE_HYBRID_SEARCH", False):
+                chunks = await self._vector_store.hybrid_search(
+                    query_embedding=query_embedding,
+                    query_text=question,
+                    k=k,
+                    collection_name=collection,
+                    metadata_filter=metadata_filter,
+                )
+            else:
+                chunks = await self._vector_store.similarity_search(
+                    query_embedding=query_embedding,
+                    k=k,
+                    collection_name=collection,
+                    metadata_filter=metadata_filter,
+                )
             logger.info("Retrieved %d context chunks", len(chunks))
 
 
             # rerank
             if self._reranker is not None and chunks:
-                with self._span("rerank"):
-                    chunks = await asyncio.to_thread(
-                        self._reranker.rerank, question, chunks, k
-                    )
+                chunks = await asyncio.to_thread(
+                    self._reranker.rerank, question, chunks, k
+                )
 
             if not chunks:
                 result = await self._empty_retrieval_response(collection)
@@ -279,8 +254,7 @@ class RAGEngine:
 
             # 4. Generate answer
             logger.debug("Generating answer via %s", self._llm.get_model_name())
-            with self._span("llm_generate"):
-                answer = await self._llm.generate(prompt)
+            answer = await self._llm.generate(prompt)
             logger.info("Generated answer (len=%d)", len(answer))
 
             # 5. Format sources and compute confidence
@@ -355,7 +329,7 @@ class RAGEngine:
 
         try:
             # 0. Prompt version selection (settings + optional A/B knob).
-            selected_version = self._select_prompt_version(question)
+            selected_version = self._select_prompt_version()
 
             # 0. Guardrails: input check (pre-retrieval, optional). Never
             # crashes the pipeline — on any failure we log and pass through.
@@ -596,22 +570,13 @@ class RAGEngine:
         result["metadata"] = metadata
         return result
 
-    def _select_prompt_version(self, question: str) -> str:
-        """Pick the system-prompt version for a question from settings.
+    def _select_prompt_version(self) -> str:
+        """Pick the system-prompt version from settings.
 
-        Returns ``PROMPT_VERSION`` by default.
-
-        Args:
-            question: The user's question.
-
-        Returns:
-            The selected prompt version id (e.g. ``"v1"``).
+        ``PROMPT_VERSION`` is a typed ``str`` field, so it is always a
+        non-empty string by construction — no runtime validation needed.
         """
-        settings = self._settings
-        version = getattr(settings, "PROMPT_VERSION", DEFAULT_PROMPT_VERSION)
-        if not isinstance(version, str) or not version:
-            version = DEFAULT_PROMPT_VERSION
-        return version
+        return self._settings.PROMPT_VERSION
 
     def _build_prompt(
         self, question: str, chunks: list, prompt_version: str | None = None
@@ -642,7 +607,7 @@ class RAGEngine:
             context = "No relevant context found in the documents."
 
         if prompt_version is None:
-            prompt_version = self._select_prompt_version(question)
+            prompt_version = self._select_prompt_version()
         template = get_prompt(prompt_version)
         return template.format(
             context=context,

@@ -13,9 +13,11 @@ from src.application.use_cases.conversation import (
 )
 from src.application.use_cases.query_document import QueryDocumentUseCase
 from src.infrastructure.config.settings import Settings, get_settings
-from src.infrastructure.embeddings.factory import create_embedding_provider
+from src.infrastructure.embeddings.huggingface_embeddings import (
+    HuggingFaceEmbeddingProvider,
+)
 from src.infrastructure.guardrails.guardrail_manager import create_guardrail_manager
-from src.infrastructure.llm.factory import create_llm_provider
+from src.infrastructure.llm.gemini_provider import GeminiProvider
 from src.infrastructure.llm.token_tracker import TokenTracker, TrackingLLMProvider
 from src.infrastructure.repositories.conversation_repository_factory import (
     create_conversation_repository,
@@ -35,10 +37,19 @@ def _wire_dependencies(settings: Settings) -> TokenTracker:
         The shared :class:`TokenTracker` used to record LLM usage.
     """
     tracker = TokenTracker()
-    llm_provider = create_llm_provider(settings)
+    # ponytail: these two providers used to be built by factory functions that
+    # switched over four LLMs and three embedding providers. Only Gemini and
+    # local HuggingFace remain, so the factory was a pass-through with one
+    # implementation — construct them directly and re-add a factory when a
+    # second provider is genuinely in use.
+    llm_provider = GeminiProvider(
+        api_key=settings.GEMINI_API_KEY, model=settings.GEMINI_MODEL
+    )
     if settings.ENABLE_USAGE_TRACKING:
         llm_provider = TrackingLLMProvider(llm_provider, tracker)
-    embedding_provider = create_embedding_provider(settings)
+    embedding_provider = HuggingFaceEmbeddingProvider(
+        model_name=settings.HUGGINGFACE_MODEL
+    )
     vector_store = ChromaStore(persist_directory=settings.CHROMA_PERSIST_DIR)
 
     from src.infrastructure.rerankers.factory import create_reranker

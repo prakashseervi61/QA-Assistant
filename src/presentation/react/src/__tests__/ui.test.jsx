@@ -2,7 +2,7 @@ import React from 'react';
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ConfidenceSignal, WaveformOrb } from '../components/ui';
-import { getSourceTitle } from '../components/utils/getSourceTitle';
+import { getSourceTitle } from '../components/ChatWidget';
 
 function render(element) {
   return renderToStaticMarkup(element);

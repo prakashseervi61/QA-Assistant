@@ -2,39 +2,41 @@ import { BookOpen, Moon, Search, Sun } from 'lucide-react';
 
 /**
  * Top nav shell — brand on the left, a ⌘K search/command trigger in the
- * center, theme toggle on the right. Replaces the old in-sidebar brand row.
+ * center, theme toggle on the right.
+ *
+ * Neo-Brutalism navbar: white ground, a declared 3px bottom border (no soft
+ * fade), brand mark as a bordered accent square, and the search trigger built
+ * as a hard-bordered input-like block rather than a floating pill.
  */
 export default function TopNav({ isDark, onToggleTheme, onOpenPalette }) {
   return (
-    <header className="relative z-40 flex h-16 shrink-0 items-center gap-3 border-b border-glass-border bg-paper/50 px-4 backdrop-blur-xl sm:px-6">
-      {/* Brand */}
+    <header className="relative z-40 flex h-16 shrink-0 items-center gap-3 border-b-[3px] border-nb-line bg-paper-surface px-4 sm:px-6">
+      {/* Brand — bordered yellow square + uppercase wordmark */}
       <div className="flex items-center gap-2.5">
-        <div className="bg-bioluminescent flex h-9 w-9 items-center justify-center rounded-xl text-white shadow-glow-violet">
-          <BookOpen className="h-[18px] w-[18px]" aria-hidden="true" />
+        <div className="flex h-9 w-9 items-center justify-center rounded border-[3px] border-nb-line bg-accent-yellow shadow-brutal-sm">
+          <BookOpen className="h-[18px] w-[18px] text-ink-on-accent" aria-hidden="true" />
         </div>
         <div className="leading-tight">
-          <p className="font-editorial text-[15px] font-medium tracking-tight text-ink">
+          <p className="text-[15px] font-bold uppercase tracking-tight text-ink">
             Marginalia
           </p>
-          <p className="hidden text-xs text-ink-muted sm:block">
-            Notes on your documents
-          </p>
+          <p className="nb-label hidden text-[10px] sm:block">Notes on your documents</p>
         </div>
       </div>
 
-      {/* Command palette trigger */}
+      {/* Command palette trigger — hard-bordered, press-down on hover */}
       <div className="flex flex-1 justify-center px-2">
         <button
           type="button"
           onClick={onOpenPalette}
           aria-label="Open command palette"
-          className="glass group flex w-full max-w-sm items-center gap-2.5 rounded-xl px-3 py-2 text-sm text-ink-muted shadow-subtle transition-all hover:border-brand-300 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+          className="nb-btn nb-focus group w-full max-w-sm justify-start !rounded !border-[3px] !bg-paper px-3 !py-2 !text-sm !font-medium text-ink-muted"
         >
-          <Search className="h-4 w-4 shrink-0 text-ink-faint transition-colors group-hover:text-brand-600" aria-hidden="true" />
+          <Search className="h-4 w-4 shrink-0 text-ink" aria-hidden="true" />
           <span className="flex-1 truncate text-left">Search commands…</span>
           {/* A ⌘K hint is meaningless without a keyboard, and on mobile this
               control is not the way to navigate — the dock is. */}
-          <kbd className="hidden rounded-md border border-border bg-paper-200 px-1.5 py-0.5 font-mono text-[10px] text-ink-faint sm:inline">
+          <kbd className="hidden border-2 border-nb-line bg-paper-surface px-1.5 py-0.5 font-mono text-[10px] font-bold text-ink sm:inline">
             ⌘K
           </kbd>
         </button>
@@ -45,7 +47,7 @@ export default function TopNav({ isDark, onToggleTheme, onOpenPalette }) {
         type="button"
         onClick={onToggleTheme}
         aria-label={isDark ? 'Switch to light theme' : 'Switch to dark theme'}
-        className="glass flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-ink-muted shadow-subtle transition-all hover:text-brand-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+        className="nb-icon-btn nb-focus h-10 w-10 shrink-0"
       >
         {isDark ? <Sun className="h-4 w-4" aria-hidden="true" /> : <Moon className="h-4 w-4" aria-hidden="true" />}
       </button>

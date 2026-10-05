@@ -11,7 +11,6 @@ from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
 
-from src.domain.interfaces.document_parser import DocumentParser
 from src.domain.interfaces.embedding_provider import EmbeddingProvider
 from src.domain.interfaces.vector_store import VectorStore
 from src.domain.value_objects.chunk import Chunk
@@ -42,12 +41,12 @@ class IngestDocumentUseCase:
 
     def __init__(
         self,
-        parser: DocumentParser,
         text_splitter: TextSplitter | SemanticChunker,
         embedding_provider: EmbeddingProvider,
         vector_store: VectorStore,
     ) -> None:
-        self._parser = parser
+        # No parser injection: execute() builds the right parser from the file
+        # extension via create_parser(), so a ctor-supplied one was never read.
         self._text_splitter = text_splitter
         self._embedding_provider = embedding_provider
         self._vector_store = vector_store
@@ -57,11 +56,8 @@ class IngestDocumentUseCase:
     ) -> tuple[Chunk, str, int] | None:
         """Find existing chunks whose metadata carries *content_hash*.
 
-        Checks the main collection plus the ``_parent``/``_child``
-        collections used in parent-child mode, so duplicates are
-        detected regardless of the active chunking mode. Missing
-        collections yield no matches (``get_by_metadata`` returns an
-        empty list for them).
+        Checks the active collection. A missing collection yields no
+        matches (``get_by_metadata`` returns an empty list for it).
 
         Returns:
             A tuple of ``(first matching chunk, collection where found,
@@ -72,11 +68,7 @@ class IngestDocumentUseCase:
         found_collection = collection_name
         total_chunks = 0
 
-        for candidate in (
-            collection_name,
-            f"{collection_name}_parent",
-            f"{collection_name}_child",
-        ):
+        for candidate in (collection_name,):
             matches = await self._vector_store.get_by_metadata(
                 {"content_hash": content_hash}, candidate
             )
@@ -209,7 +201,6 @@ class IngestDocumentUseCase:
                 metadata=metadata,
             )
             logger.info("Split into %d chunks", len(chunks))
-            total_chunks = len(chunks)
 
             chunk_texts = [chunk.content for chunk in chunks]
             embeddings = await self._embedding_provider.embed_batch(chunk_texts)

@@ -65,7 +65,3 @@ class ConversationRepository(ABC):
         """
         pass
 
-    @abstractmethod
-    async def conversation_exists(self, conversation_id: UUID) -> bool:
-        """Check if a conversation exists."""
-        pass

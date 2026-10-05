@@ -15,19 +15,22 @@ export default class ErrorBoundary extends Component {
     if (this.state.hasError) {
       return (
         <div className="flex h-screen flex-col items-center justify-center bg-paper px-6 text-center">
-          <h1 className="font-editorial text-2xl font-medium text-ink">
-            Something went wrong
-          </h1>
-          <p className="mt-2 max-w-sm text-sm text-ink-muted">
-            The app ran into an unexpected error. Reloading usually fixes it.
-          </p>
-          <button
-            type="button"
-            onClick={() => window.location.reload()}
-            className="mt-5 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white shadow-subtle transition-colors hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
-          >
-            Reload app
-          </button>
+          <div className="nb-card nb-card-dark max-w-md p-10">
+            <span className="nb-tag">Error</span>
+            <h1 className="mt-4 text-3xl font-black uppercase text-paper sm:text-4xl">
+              Something went wrong
+            </h1>
+            <p className="mt-3 text-base font-medium leading-relaxed text-ink-on-inverse-muted">
+              The app ran into an unexpected error. Reloading usually fixes it.
+            </p>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="nb-btn nb-focus nb-btn-primary mt-6"
+            >
+              Reload app →
+            </button>
+          </div>
         </div>
       );
     }

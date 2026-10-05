@@ -1,5 +1,5 @@
 import { memo, useState } from 'react';
-import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
+import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlightSubset from '../plugins/rehypeHighlightSubset';
 import { Check, Copy } from 'lucide-react';
@@ -41,8 +41,8 @@ function CopyButton({ code }) {
       onClick={copyCode}
       aria-label="Copy code block"
       title="Copy code"
-      className={`inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-0.5 font-mono text-[11px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
-        copied ? 'text-brand-400' : 'text-ink-faint hover:bg-paper-200 hover:text-ink-secondary'
+      className={`nb-btn !rounded !px-2 !py-0.5 !text-[10px] !font-bold uppercase !tracking-wider ${
+        copied ? '!bg-pastel-green' : '!bg-paper-surface hover:!bg-accent-yellow'
       }`}
     >
       {copied ? (
@@ -55,14 +55,32 @@ function CopyButton({ code }) {
   );
 }
 
+// H1/H2 are uppercased globally in index.css — display type is never
+// lowercase in this system. Only the weights and sizes need stating here.
 const headingClasses = {
-  1: 'font-editorial text-2xl font-semibold leading-snug text-ink',
-  2: 'font-editorial text-xl font-semibold leading-snug text-ink',
-  3: 'font-editorial text-lg font-semibold leading-snug text-ink',
-  4: 'text-base font-semibold leading-snug text-ink',
-  5: 'text-sm font-semibold leading-snug text-ink-secondary',
-  6: 'text-sm font-medium leading-snug text-ink-muted',
+  1: 'text-2xl font-black uppercase leading-tight text-ink',
+  2: 'text-xl font-black uppercase leading-tight text-ink',
+  3: 'text-lg font-extrabold uppercase leading-snug text-ink',
+  4: 'text-base font-extrabold leading-snug text-ink',
+  5: 'text-sm font-bold uppercase leading-snug text-ink-secondary',
+  6: 'text-sm font-bold uppercase leading-snug text-ink-muted',
 };
+
+/**
+ * Build a heading renderer for one level.
+ * @param {number} level 1-6, indexing headingClasses.
+ */
+function heading(level) {
+  const Tag = `h${level}`;
+  const className = headingClasses[level];
+  return function Heading({ node, children, ...props }) {
+    return (
+      <Tag {...props} className={className}>
+        {children}
+      </Tag>
+    );
+  };
+}
 
 /**
  * Markdown — renders model output safely.
@@ -80,7 +98,6 @@ export default memo(function Markdown({ content }) {
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeHighlightSubset]}
-        urlTransform={defaultUrlTransform}
         components={{
           a({ node, href, children, ...props }) {
             const external = /^https?:/i.test(href || '');
@@ -88,55 +105,21 @@ export default memo(function Markdown({ content }) {
               <a
                 href={href}
                 {...props}
-                className="text-brand-600 underline decoration-brand-300 underline-offset-2 transition-colors hover:text-brand-700"
+                className="font-bold text-ink underline decoration-4 decoration-accent-cyan underline-offset-2 hover:decoration-accent-magenta"
                 {...(external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
               >
                 {children}
               </a>
             );
           },
-          h1({ node, children, ...props }) {
-            return (
-              <h1 {...props} className={headingClasses[1]}>
-                {children}
-              </h1>
-            );
-          },
-          h2({ node, children, ...props }) {
-            return (
-              <h2 {...props} className={headingClasses[2]}>
-                {children}
-              </h2>
-            );
-          },
-          h3({ node, children, ...props }) {
-            return (
-              <h3 {...props} className={headingClasses[3]}>
-                {children}
-              </h3>
-            );
-          },
-          h4({ node, children, ...props }) {
-            return (
-              <h4 {...props} className={headingClasses[4]}>
-                {children}
-              </h4>
-            );
-          },
-          h5({ node, children, ...props }) {
-            return (
-              <h5 {...props} className={headingClasses[5]}>
-                {children}
-              </h5>
-            );
-          },
-          h6({ node, children, ...props }) {
-            return (
-              <h6 {...props} className={headingClasses[6]}>
-                {children}
-              </h6>
-            );
-          },
+          // ponytail: h1-h6 were six near-identical overrides whose only
+          // difference was the headingClasses[n] lookup. One factory instead.
+          h1: heading(1),
+          h2: heading(2),
+          h3: heading(3),
+          h4: heading(4),
+          h5: heading(5),
+          h6: heading(6),
           // Fenced + indented code blocks: wrap the highlighted <code> (which
           // react-markdown passes through the `code` override) with a header
           // bar carrying the language label and copy control.
@@ -146,9 +129,9 @@ export default memo(function Markdown({ content }) {
             const langMatch = className.match(/language-([\w-]+)/);
             const language = langMatch ? langMatch[1] : undefined;
             return (
-              <pre className="overflow-x-auto rounded-lg border border-strong bg-paper-100 text-left shadow-subtle">
-                <div className="flex items-center justify-between gap-2 border-b border-strong bg-paper-200 px-3 py-1.5">
-                  <span className="truncate font-mono text-[11px] uppercase tracking-wider text-ink-faint">
+              <pre className="overflow-x-auto rounded border-[3px] border-nb-line bg-paper-subtle text-left shadow-brutal-sm">
+                <div className="flex items-center justify-between gap-2 border-b-[3px] border-nb-line bg-accent-yellow px-3 py-1.5">
+                  <span className="nb-label truncate !text-ink-on-accent">
                     {language || 'code'}
                   </span>
                   <CopyButton code={nodeToText(children)} />
@@ -173,34 +156,63 @@ export default memo(function Markdown({ content }) {
               );
             }
             return (
-              <code {...props} className="rounded bg-paper-200 px-1 py-0.5 font-mono text-[0.85em] text-ink-secondary">
+              <code
+                {...props}
+                className="rounded border-2 border-nb-line bg-paper-muted px-1.5 py-0.5 font-mono text-[0.85em] font-bold text-ink"
+              >
                 {children}
               </code>
             );
           },
           blockquote({ node, children, ...props }) {
             return (
-              <blockquote {...props} className="border-l-2 border-brand-300 pl-3 text-ink-secondary">
+              <blockquote {...props} className="border-l-[3px] border-nb-line bg-paper-subtle py-1 pl-3 font-medium text-ink-secondary">
                 {children}
               </blockquote>
             );
           },
           ul({ node, children, ...props }) {
             return (
-              <ul {...props} className="my-1 list-disc space-y-1.5 pl-5 marker:text-brand-600">
+              <ul {...props} className="my-1 list-disc space-y-1.5 pl-5 marker:text-ink">
                 {children}
               </ul>
             );
           },
           ol({ node, children, ...props }) {
             return (
-              <ol {...props} className="my-1 list-decimal space-y-1.5 pl-5 marker:text-brand-600">
+              <ol {...props} className="my-1 list-decimal space-y-1.5 pl-5 marker:font-black marker:text-ink">
                 {children}
               </ol>
             );
           },
           hr() {
-            return <hr className="border-border" />;
+            return <hr className="mt-4 border-0 border-t-[3px] border-nb-line" />;
+          },
+          table({ node, children, ...props }) {
+            return (
+              <div className="my-3 overflow-x-auto rounded border-[3px] border-nb-line shadow-brutal-sm">
+                <table {...props} className="w-full border-collapse text-sm">
+                  {children}
+                </table>
+              </div>
+            );
+          },
+          th({ node, children, ...props }) {
+            return (
+              <th
+                {...props}
+                className="border-b-[3px] border-r-[3px] border-nb-line bg-paper-muted px-3 py-2 text-left font-mono text-[11px] font-bold uppercase tracking-wider text-ink last:border-r-0"
+              >
+                {children}
+              </th>
+            );
+          },
+          td({ node, children, ...props }) {
+            return (
+              <td {...props} className="border-b-2 border-r-2 border-nb-line px-3 py-2 font-medium text-ink-secondary last:border-r-0">
+                {children}
+              </td>
+            );
           },
         }}
       >

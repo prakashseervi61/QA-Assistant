@@ -73,7 +73,6 @@ class TestIncrementalIngest:
         )
 
         return IngestDocumentUseCase(
-            parser=deps["parser"],
             text_splitter=deps["splitter"],
             embedding_provider=deps["embedding_provider"],
             vector_store=deps["vector_store"],
@@ -159,32 +158,6 @@ class TestIncrementalIngest:
         deps["parser"].parse.assert_not_called()
         deps["embedding_provider"].embed_batch.assert_not_called()
 
-    @pytest.mark.asyncio
-    async def test_duplicate_detected_in_parent_child_collections(
-        self, use_case, deps, ingest_ctx
-    ):
-        """Enabled + hash found only in the _parent collection -> duplicate."""
-        existing_document_id = uuid4()
-        existing = Chunk(
-            id=uuid4(),
-            document_id=existing_document_id,
-            content="parent chunk",
-            metadata={"filename": "doc.pdf", "chunk_type": "parent"},
-            chunk_index=0,
-        )
-
-        def _lookup(metadata_filter, collection_name):
-            return [existing] if collection_name == "documents_parent" else []
-
-        deps["vector_store"].get_by_metadata = AsyncMock(side_effect=_lookup)
-
-        with ingest_ctx(ENABLE_INCREMENTAL_INGESTION=True):
-            result = await use_case.execute(b"same content", "doc.pdf")
-
-        assert result.get("duplicate") is True
-        assert result["document_id"] == str(existing_document_id)
-        deps["vector_store"].add_documents.assert_not_called()
-        deps["parser"].parse.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_normal_ingest_stores_hash_when_enabled(

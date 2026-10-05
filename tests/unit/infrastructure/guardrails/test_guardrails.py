@@ -7,7 +7,6 @@ from src.infrastructure.guardrails.checks import (
     compute_groundedness,
     detect_pii,
     detect_prompt_injection,
-    redact_pii,
 )
 from src.infrastructure.guardrails.guardrail_manager import (
     GuardrailManager,
@@ -43,11 +42,6 @@ class TestPII:
 
     def test_clean_text_returns_empty(self):
         assert detect_pii("What is machine learning?") == []
-
-    def test_redact_replaces_pii(self):
-        assert redact_pii("Email me at a@b.com please") == (
-            "Email me at [REDACTED] please"
-        )
 
 
 class TestPromptInjection:

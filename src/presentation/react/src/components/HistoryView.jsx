@@ -1,18 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
-  AlertCircle,
-  ChevronRight,
   Clock,
-  History as HistoryIcon,
   Loader2,
   MessageSquare,
-  RefreshCw,
   Search,
   Trash2,
 } from 'lucide-react';
 import { deleteJSON, fetchJSON } from '../api';
 import EmptyState from './EmptyState';
+import { ErrorBanner, SkeletonGrid } from './ui';
 
 // ponytail: Intl.RelativeTimeFormat does this natively (incl. locale-aware
 // wording) — replaced a hand-rolled min/hour/day cascade.
@@ -133,72 +130,39 @@ export default function HistoryView({ onOpen }) {
 
   if (loading) {
     return (
-      <div
-        className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
-        aria-label="Loading conversation history"
-        role="status"
-      >
-        {[0, 1, 2, 3, 4, 5].map(i => (
-          <div key={i} className="glass animate-pulse rounded-2xl p-4">
-            <div className="h-10 w-10 rounded-xl bg-paper-300" />
-            <div className="mt-3 space-y-2">
-              <div className="h-3 w-2/3 rounded bg-paper-300" />
-              <div className="h-3 w-1/3 rounded bg-paper-200" />
-            </div>
-          </div>
-        ))}
-        <span className="sr-only">Loading conversation history…</span>
-      </div>
+      <SkeletonGrid label="Loading conversation history" />
     );
   }
 
   if (error && conversations.length === 0) {
-    return (
-      <div
-        role="alert"
-        className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-error-border bg-error-bg px-4 py-3 shadow-subtle"
-      >
-        <p className="flex items-center gap-2 text-sm text-error-text">
-          <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
-          <span className="min-w-0 break-words">{error}</span>
-        </p>
-        <button
-          type="button"
-          onClick={loadHistory}
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-error-border bg-paper-100 px-3 py-1.5 text-xs font-medium text-error-text transition-colors hover:bg-error-bg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
-        >
-          <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
-          Retry
-        </button>
-      </div>
-    );
+    return <ErrorBanner message={error} onRetry={loadHistory} />;
   }
 
   return (
     <div className="mx-auto max-w-6xl">
-      <div className="mb-5 flex flex-wrap items-center gap-3">
-        <h2 className="font-editorial flex items-center gap-2 text-2xl font-medium tracking-tight text-ink">
-          <span className="bg-bioluminescent flex h-9 w-9 items-center justify-center rounded-xl text-white shadow-glow-violet">
-            <HistoryIcon className="h-[18px] w-[18px]" aria-hidden="true" />
-          </span>
-          History
-        </h2>
-        <span className="rounded-full border border-border bg-paper-200 px-2 py-0.5 font-mono text-xs tabular-nums text-ink-secondary">
-          {conversations.length}
-        </span>
+      <div className="mb-8 flex flex-wrap items-end gap-4">
+        <div>
+          <span className="nb-tag">Archive</span>
+          <h2 className="mt-4 flex items-center gap-3 text-3xl font-black uppercase text-ink sm:text-4xl">
+            History
+            <span className="nb-chip tabular-nums !bg-accent-cyan !text-ink-on-accent font-mono text-xs">
+              {conversations.length}
+            </span>
+          </h2>
+        </div>
 
-        <div className="relative ml-auto min-w-[14rem] flex-1 sm:max-w-xs">
+        <div className="relative ml-auto min-w-[14rem] flex-1 sm:max-w-sm">
           <Search
-            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint"
+            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink"
             aria-hidden="true"
           />
           <input
             type="search"
             value={query}
             onChange={e => setQuery(e.target.value)}
-            placeholder="Filter history…"
+            placeholder="Filter history"
             aria-label="Filter conversation history"
-            className="w-full rounded-xl border border-border bg-paper-100 py-2 pl-9 pr-3 text-sm text-ink placeholder:text-ink-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+            className="nb-input nb-focus w-full py-2 pl-9 pr-3"
           />
         </div>
       </div>
@@ -216,10 +180,9 @@ export default function HistoryView({ onOpen }) {
           description="Every conversation you start is saved automatically and will show up here, even after a restart."
         />
       ) : null}
-      }
 
       {filtered.length === 0 ? (
-        <div className="glass rounded-2xl p-6 text-center shadow-card">
+        <div className="nb-card p-6 text-center">
           <p className="text-sm text-ink-secondary">
             No conversations match “{query.trim()}”.
           </p>
@@ -228,10 +191,8 @@ export default function HistoryView({ onOpen }) {
         <div className="space-y-7">
           {groups.map(group => (
             <section key={group.key} aria-label={group.label}>
-              <h3 className="mb-3 font-mono text-xs font-medium uppercase tracking-wider text-ink-faint">
-                {group.label}
-              </h3>
-              <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <h3 className="nb-tag mb-4">{group.label}</h3>
+              <ul className="nb-bento">
                 <AnimatePresence>
                   {group.items.map((conversation, index) => {
                     const title = conversation.title || 'New chat';
@@ -254,8 +215,8 @@ export default function HistoryView({ onOpen }) {
                         className="relative"
                       >
                         {isConfirming ? (
-                          <div className="glass flex h-full flex-col justify-center gap-3 rounded-2xl p-4 shadow-card">
-                            <p className="text-sm text-ink-secondary">
+                          <div className="nb-card nb-card-dark flex h-full flex-col justify-center gap-3 p-4">
+                            <p className="text-sm font-bold uppercase tracking-tight text-paper">
                               Delete this conversation? This cannot be undone.
                             </p>
                             <div className="flex gap-2">
@@ -263,7 +224,7 @@ export default function HistoryView({ onOpen }) {
                                 type="button"
                                 onClick={() => remove(conversation.id)}
                                 disabled={isDeleting}
-                                className="inline-flex items-center gap-1.5 rounded-lg bg-error-bg px-3 py-1.5 text-xs font-medium text-error-text transition-colors hover:bg-error-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 disabled:opacity-60"
+                                className="nb-btn nb-focus !rounded !px-3 !py-1.5 !text-xs !font-bold !text-ink-on-accent disabled:opacity-60"
                               >
                                 {isDeleting ? (
                                   <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
@@ -276,7 +237,7 @@ export default function HistoryView({ onOpen }) {
                                 type="button"
                                 onClick={() => setConfirmId(null)}
                                 disabled={isDeleting}
-                                className="inline-flex items-center rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-ink-secondary transition-colors hover:bg-paper-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                                className="nb-btn nb-focus !rounded !bg-paper !px-3 !py-1.5 !text-xs !font-bold !text-ink hover:!bg-paper-muted"
                               >
                                 Cancel
                               </button>
@@ -286,14 +247,20 @@ export default function HistoryView({ onOpen }) {
                           <motion.button
                             type="button"
                             onClick={() => onOpen?.(conversation.id)}
-                            whileHover={{ y: -3 }}
-                            whileTap={{ scale: 0.98 }}
+                            whileHover={{ x: -3, y: -3 }}
+                            whileTap={{ x: 2, y: 2 }}
                             transition={{ type: 'spring', stiffness: 320, damping: 22 }}
-                            className="glass group flex w-full flex-col rounded-2xl p-4 text-left shadow-card transition-colors hover:shadow-card-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                            className="nb-card nb-card-hover group flex w-full flex-col p-4 text-left"
                           >
                             <div className="flex items-start justify-between gap-3">
-                              <div className="bg-bioluminescent flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white shadow-glow-violet transition-transform group-hover:scale-105">
-                                <MessageSquare className="h-[18px] w-[18px]" aria-hidden="true" />
+                              {/* Rotate the ground so no two adjacent cards
+                                  share a colour. */}
+                              <div
+                                className={`flex h-10 w-10 shrink-0 items-center justify-center rounded border-[3px] border-nb-line ${
+                                  ['bg-pastel-purple', 'bg-pastel-cyan', 'bg-pastel-green', 'bg-pastel-yellow', 'bg-pastel-pink', 'bg-pastel-orange'][index % 6]
+                                }`}
+                              >
+                                <MessageSquare className="h-[18px] w-[18px] text-ink-on-accent" aria-hidden="true" />
                               </div>
                               <div className="flex items-center gap-1">
                                 <span
@@ -311,20 +278,24 @@ export default function HistoryView({ onOpen }) {
                                       setConfirmId(conversation.id);
                                     }
                                   }}
-                                  className="rounded-md p-1 text-ink-faint opacity-0 transition hover:bg-paper-200 hover:text-error-text focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 group-hover:opacity-100"
+                                  className="rounded border-2 border-transparent p-1 text-ink-secondary opacity-0 transition hover:border-nb-line hover:text-ink focus-visible:opacity-100 group-hover:opacity-100"
                                 >
                                   <Trash2 className="h-4 w-4" aria-hidden="true" />
                                 </span>
-                                <ChevronRight
-                                  className="mt-0.5 h-4 w-4 shrink-0 text-ink-faint transition-transform group-hover:translate-x-0.5"
+                                {/* Arrow convention: bold directional arrows,
+                                    never chevrons. */}
+                                <span
+                                  className="mt-0.5 shrink-0 text-xl font-black leading-none text-ink transition-transform group-hover:translate-x-1"
                                   aria-hidden="true"
-                                />
+                                >
+                                  →
+                                </span>
                               </div>
                             </div>
-                            <p className="mt-3 truncate text-sm font-medium text-ink transition-colors group-hover:text-brand-500">
+                            <p className="mt-3 truncate text-sm font-extrabold uppercase tracking-tight text-ink">
                               {title}
                             </p>
-                            <p className="mt-1 flex flex-wrap items-center gap-1.5 font-mono text-xs tabular-nums text-ink-faint">
+                            <p className="mt-1.5 flex flex-wrap items-center gap-1.5 font-mono text-[11px] font-bold tabular-nums text-ink-secondary">
                               <span>
                                 {count > 0
                                   ? `${count} message${count === 1 ? '' : 's'}`

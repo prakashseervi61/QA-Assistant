@@ -9,14 +9,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# HuggingFace embedding dimension lookup by model
-_HF_DIMENSIONS: dict[str, int] = {
-    "all-MiniLM-L6-v2": 384,
-    "all-MiniLM-L12-v2": 384,
-    "all-mpnet-base-v2": 768,
-}
-
-
 class HuggingFaceEmbeddingProvider(EmbeddingProvider):
     """Embedding provider using local HuggingFace sentence-transformers models.
 
@@ -31,7 +23,9 @@ class HuggingFaceEmbeddingProvider(EmbeddingProvider):
     def __init__(self, model_name: str = "all-MiniLM-L6-v2") -> None:
         self._model_name = model_name
         self._model: SentenceTransformer | None = None
-        self._dimension: int = _HF_DIMENSIONS.get(model_name, 384)
+        # Provisional until the model loads; _load_model then overwrites this
+        # with the dimension the model reports, so a wrong guess is transient.
+        self._dimension: int = 384
         self._load_lock = asyncio.Lock()
 
     def _load_model(self) -> None:

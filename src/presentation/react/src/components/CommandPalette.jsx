@@ -15,7 +15,6 @@ export default function CommandPalette({ open, onOpen, onClose, active, onNaviga
   const [query, setQuery] = useState('');
   const [highlight, setHighlight] = useState(0);
   const inputRef = useRef(null);
-  const listRef = useRef(null);
 
   // Global ⌘K / Ctrl+K toggle.
   useEffect(() => {
@@ -97,7 +96,7 @@ export default function CommandPalette({ open, onOpen, onClose, active, onNaviga
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.15 }}
-          className="fixed inset-0 z-[60] flex items-start justify-center bg-black/40 px-4 pt-[12vh] backdrop-blur-sm"
+          className="fixed inset-0 z-[60] flex items-start justify-center bg-paper px-4 pt-[12vh]"
           onMouseDown={e => {
             if (e.target === e.currentTarget) onClose();
           }}
@@ -110,11 +109,11 @@ export default function CommandPalette({ open, onOpen, onClose, active, onNaviga
             role="dialog"
             aria-modal="true"
             aria-label="Command palette"
-            className="glass-strong w-full max-w-lg overflow-hidden rounded-2xl shadow-float"
+            className="w-full max-w-lg overflow-hidden rounded border-[3px] border-nb-line bg-paper-surface shadow-brutal-lg"
           >
             {/* Search row */}
-            <div className="flex items-center gap-3 border-b border-border px-4 py-3.5">
-              <Search className="h-4 w-4 shrink-0 text-ink-muted" aria-hidden="true" />
+            <div className="flex items-center gap-3 border-b-[3px] border-nb-line bg-accent-yellow px-4 py-3.5">
+              <Search className="h-4 w-4 shrink-0 text-ink-on-accent" aria-hidden="true" />
               <input
                 ref={inputRef}
                 value={query}
@@ -122,23 +121,22 @@ export default function CommandPalette({ open, onOpen, onClose, active, onNaviga
                 onKeyDown={handleListKeyDown}
                 placeholder="Type a command or search…"
                 aria-label="Search commands"
-                className="w-full flex-1 bg-transparent text-sm text-ink placeholder:text-ink-faint focus:outline-none"
+                className="w-full flex-1 bg-transparent text-sm font-bold text-ink-on-accent placeholder:font-medium placeholder:text-ink-on-accent-muted focus:outline-none"
               />
-              <kbd className="rounded-md border border-border bg-paper-200 px-1.5 py-0.5 font-mono text-[10px] text-ink-faint">
-                esc
+              <kbd className="border-2 border-nb-line bg-paper-surface px-1.5 py-0.5 font-mono text-[10px] font-bold text-ink">
+                ESC
               </kbd>
             </div>
 
             {/* Results */}
             <div
-              ref={listRef}
               role="listbox"
               aria-label="Commands"
-              className="max-h-72 overflow-y-auto p-2"
+              className="max-h-72 overflow-y-auto p-3"
             >
               {commands.length === 0 && (
-                <p className="px-3 py-6 text-center text-sm text-ink-faint">
-                  No commands match “{query}”.
+                <p className="px-3 py-6 text-center text-sm font-bold uppercase tracking-wider text-ink-muted">
+                  No commands match “{query}”
                 </p>
               )}
               {commands.map((command, index) => {
@@ -154,18 +152,18 @@ export default function CommandPalette({ open, onOpen, onClose, active, onNaviga
                     aria-selected={active}
                     onMouseEnter={() => setHighlight(index)}
                     onClick={() => runCommand(command)}
-                    className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
-                      active ? 'bg-bioluminescent text-white shadow-glow-violet' : 'text-ink'
+                    className={`flex w-full items-center gap-3 rounded border-[3px] border-nb-line px-3 py-2.5 text-left transition-transform ${
+                      active
+                        ? 'bg-accent-yellow text-ink-on-accent shadow-brutal-sm'
+                        : 'bg-paper-surface text-ink hover:bg-paper-subtle'
                     }`}
                   >
                     <span
-                      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
-                        active
-                          ? 'bg-white/15 text-white'
-                          : 'bg-paper-200 text-brand-600'
+                      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded border-2 border-nb-line ${
+                        active ? 'bg-paper-surface' : 'bg-paper-muted'
                       }`}
                     >
-                      <Icon className="h-4 w-4" aria-hidden="true" />
+                      <Icon className="h-4 w-4 text-ink" aria-hidden="true" />
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-medium leading-tight">
@@ -174,34 +172,33 @@ export default function CommandPalette({ open, onOpen, onClose, active, onNaviga
                           : command.name}
                       </span>
                       {command.kind === 'nav' && (
-                        <span className="block truncate text-xs text-ink-faint">
+                        <span className="nb-label mt-1 block truncate !text-[10px]">
                           {command.description}
                         </span>
                       )}
                     </span>
-                    {command.kind === 'nav' && command.key === active && (
-                      <span className="text-[10px] uppercase tracking-wider opacity-70">Open</span>
-                    )}
-                    {command.kind === 'theme' && (
-                      <span className="text-[10px] uppercase tracking-wider opacity-70">Toggle</span>
-                    )}
+                    {(command.kind === 'nav' && command.key === active) || command.kind === 'theme' ? (
+                      <span className="nb-chip !border-2 !bg-paper-surface !px-2 !py-0.5 font-mono !text-[10px] uppercase">
+                        {command.kind === 'theme' ? 'Toggle' : 'Open'}
+                      </span>
+                    ) : null}
                   </button>
                 );
               })}
             </div>
 
             {/* Footer hints */}
-            <div className="flex items-center gap-3 border-t border-border px-4 py-2 font-mono text-[10px] text-ink-faint">
+            <div className="flex items-center gap-3 border-t-[3px] border-nb-line bg-paper-subtle px-4 py-2 font-mono text-[10px] font-bold uppercase tracking-wider text-ink-secondary">
               <span className="flex items-center gap-1">
-                <kbd className="rounded border border-border bg-paper-200 px-1">↑</kbd>
-                <kbd className="rounded border border-border bg-paper-200 px-1">↓</kbd>
+                <kbd className="border-2 border-nb-line bg-paper-surface px-1">↑</kbd>
+                <kbd className="border-2 border-nb-line bg-paper-surface px-1">↓</kbd>
                 navigate
               </span>
               <span className="flex items-center gap-1">
-                <kbd className="rounded border border-border bg-paper-200 px-1">↵</kbd>
+                <kbd className="border-2 border-nb-line bg-paper-surface px-1">↵</kbd>
                 select
               </span>
-              <span className="ml-auto">⌘K to open</span>
+              <span className="ml-auto">⌘K</span>
             </div>
           </motion.div>
         </motion.div>

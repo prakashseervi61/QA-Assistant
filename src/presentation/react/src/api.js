@@ -1,9 +1,11 @@
-export const API_BASE_URL = import.meta.env?.VITE_API_BASE_URL || '/api'; // proxied by Vite; override with VITE_API_BASE_URL
-
-const AUTH_TOKEN_KEY = 'qa_assistant_token';
+// The API is served behind the Vite dev proxy and nginx in production, both of
+// which mount it at /api on the same origin. ponytail: the previous
+// VITE_API_BASE_URL override was never set in .env, .env.example or any
+// Dockerfile, so the hardcoded /api was the only path that ever ran.
+export const API_BASE_URL = '/api';
 
 // Storage access can throw (Safari private mode, sandboxed iframes, enterprise
-// lockdowns). Fail silently so auth/UX flows never crash over storage.
+// lockdowns). Fail silently so the app never crashes over storage.
 export function safeGetItem(key) {
   try {
     return localStorage.getItem(key);
@@ -20,7 +22,7 @@ export function safeSetItem(key, value) {
   }
 }
 
-function safeRemoveItem(key) {
+export function safeRemoveItem(key) {
   try {
     localStorage.removeItem(key);
   } catch {
@@ -29,41 +31,27 @@ function safeRemoveItem(key) {
 }
 
 /**
- * Store (or clear, when passed null/undefined) the bearer token used for
- * authenticated requests. No-op storage-wise when no token is provided.
+ * Single request path for every non-streaming API call.
+ *
+ * ponytail: fetchJSON / postFormData / deleteJSON were three functions sharing
+ * an identical `if (!res.ok) throw` tail and `return res.json()` ending.
+ *
+ * @param {string} endpoint  Path relative to API_BASE_URL, e.g. '/documents'.
+ * @param {object} [options] fetch options, plus an optional `json` key: when
+ *   present it is stringified into the body with a JSON Content-Type. Omit it
+ *   to pass a FormData body through untouched (the browser sets the boundary).
+ * @returns {Promise<any>} The parsed response body.
+ * @throws {Error} `API error <status>: <body>` on any non-2xx response.
  */
-export function setAuthToken(token) {
-  if (token == null) {
-    safeRemoveItem(AUTH_TOKEN_KEY);
-  } else {
-    safeSetItem(AUTH_TOKEN_KEY, token);
-  }
-}
-
-/** Return the stored bearer token, or null when none has been set. */
-export function getAuthToken() {
-  return safeGetItem(AUTH_TOKEN_KEY);
-}
-
-/**
- * Merge caller-provided headers with defaults and, when a token is stored,
- * attach `Authorization: Bearer <token>`. No token => no Authorization header
- * (zero behavior change for existing users). An explicitly-provided
- * `Authorization` always wins over the stored token.
- */
-function buildHeaders(headers = {}) {
-  const merged = { ...headers };
-  const token = getAuthToken();
-  if (token && !merged.Authorization) {
-    merged.Authorization = `Bearer ${token}`;
-  }
-  return merged;
-}
-
-export async function fetchJSON(endpoint, options = {}) {
+export async function request(endpoint, { json, ...options } = {}) {
+  const hasJsonBody = json !== undefined;
   const res = await fetch(`${API_BASE_URL}${endpoint}`, {
     ...options,
-    headers: buildHeaders({ 'Content-Type': 'application/json', ...options.headers }),
+    ...(hasJsonBody ? { body: JSON.stringify(json) } : {}),
+    headers: {
+      ...(hasJsonBody ? { 'Content-Type': 'application/json' } : {}),
+      ...options.headers,
+    },
   });
   if (!res.ok) {
     const err = await res.text();
@@ -72,38 +60,26 @@ export async function fetchJSON(endpoint, options = {}) {
   return res.json();
 }
 
-export async function postFormData(endpoint, formData) {
-  const res = await fetch(`${API_BASE_URL}${endpoint}`, {
-    method: 'POST',
-    body: formData,
-    headers: buildHeaders(),
-  });
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`API error ${res.status}: ${err}`);
-  }
-  return res.json();
+/** GET returning parsed JSON. */
+export function fetchJSON(endpoint, options = {}) {
+  return request(endpoint, options);
 }
 
-export async function deleteJSON(endpoint) {
-  const res = await fetch(`${API_BASE_URL}${endpoint}`, {
-    method: 'DELETE',
-    headers: buildHeaders({ 'Content-Type': 'application/json' }),
-  });
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`API error ${res.status}: ${err}`);
-  }
-  return res.json();
+/** POST a FormData body (multipart — the browser sets the boundary). */
+export function postFormData(endpoint, formData) {
+  return request(endpoint, { method: 'POST', body: formData });
 }
 
-// ---------------------------------------------------------------------------
-// Server-Sent Events (SSE) helpers
-//
-// The backend's POST /query/stream endpoint emits one `data:` JSON line per
-// event followed by a blank line, and always terminates with the bare marker
-// `data: [DONE]`. These helpers are pure and exported so they can be unit
-// tested in isolation.
+/** POST a JSON body. */
+export function postJSON(endpoint, json) {
+  return request(endpoint, { method: 'POST', json });
+}
+
+/** DELETE returning parsed JSON. */
+export function deleteJSON(endpoint) {
+  return request(endpoint, { method: 'DELETE' });
+}
+
 // ---------------------------------------------------------------------------
 
 /**
@@ -182,7 +158,7 @@ export function parseSSEEvent(lines) {
 export async function streamChat(payload, { signal, onEvent } = {}) {
   const res = await fetch(`${API_BASE_URL}/query/stream`, {
     method: 'POST',
-    headers: buildHeaders({ 'Content-Type': 'application/json' }),
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
     signal,
   });

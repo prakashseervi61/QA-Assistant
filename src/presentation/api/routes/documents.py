@@ -3,6 +3,7 @@
 import logging
 import os
 
+from src.presentation.api.dependencies import Registry
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from src.application.dto.responses import (
@@ -20,26 +21,22 @@ router = APIRouter()
 
 ALLOWED_EXTENSIONS = {".pdf", ".docx", ".txt"}
 
-# Injected at startup by app.py so upload/list/delete share one ChromaStore
-_vector_store: VectorStore | None = None
-_embedding_provider: EmbeddingProvider | None = None
+# Injected at startup by app.py so upload/list/delete share one ChromaStore.
+# Two Registries rather than two bare globals: the 503-when-unwired guard is
+# then the same code the chat use cases use, instead of a second hand-rolled copy.
+_vector_store: Registry[VectorStore] = Registry("Document service")
+_embedding_provider: Registry[EmbeddingProvider] = Registry("Embedding service")
 
 
 def configure(vector_store: VectorStore, embedding_provider: EmbeddingProvider) -> None:
     """Register shared infrastructure dependencies at startup."""
-    global _vector_store, _embedding_provider
-    _vector_store = vector_store
-    _embedding_provider = embedding_provider
+    _vector_store.set(vector_store)
+    _embedding_provider.set(embedding_provider)
 
 
 def _get_dependencies() -> tuple[VectorStore, EmbeddingProvider]:
     """Return the injected dependencies or raise a 503 if not wired."""
-    if _vector_store is None or _embedding_provider is None:
-        raise HTTPException(
-            status_code=503,
-            detail="Document service not initialised. Check server configuration.",
-        )
-    return _vector_store, _embedding_provider
+    return _vector_store.get(), _embedding_provider.get()
 
 
 # ---------------------------------------------------------------------------
@@ -112,7 +109,6 @@ async def upload_document(file: UploadFile = File(...)) -> IngestResponse:
 
         # Lazy import — use case depends on infra that may not be wired yet
         from src.application.use_cases.ingest_document import IngestDocumentUseCase
-        from src.infrastructure.document_processing.parser_factory import create_parser
         from src.infrastructure.document_processing.semantic_chunker import (
             SemanticChunker,
         )
@@ -131,7 +127,6 @@ async def upload_document(file: UploadFile = File(...)) -> IngestResponse:
             text_splitter = TextSplitter()
 
         use_case = IngestDocumentUseCase(
-            parser=create_parser(ext),
             text_splitter=text_splitter,
             embedding_provider=embedding_provider,
             vector_store=vector_store,
@@ -205,22 +200,6 @@ async def delete_document(document_id: str) -> dict:
             {"document_id": document_id},
             settings.CHROMA_COLLECTION_NAME,
         )
-        # Parent/child collections may not exist (feature off, or the
-        # collections were never created) — deletion failures there are
-        # logged and ignored so an orphan cleanup can't fail the request.
-        for suffix in ("_parent", "_child"):
-            try:
-                await vector_store.delete_by_metadata(
-                    {"document_id": document_id},
-                    f"{settings.CHROMA_COLLECTION_NAME}{suffix}",
-                )
-            except Exception as exc:
-                logger.warning(
-                    "Failed to delete document %s from collection '%s': %s",
-                    document_id,
-                    f"{settings.CHROMA_COLLECTION_NAME}{suffix}",
-                    exc,
-                )
     except Exception as exc:
         logger.error(
             "Failed to delete document %s: %s", document_id, exc, exc_info=True

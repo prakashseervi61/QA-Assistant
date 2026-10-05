@@ -16,7 +16,7 @@ A production-grade **Retrieval-Augmented Generation (RAG)** question-answering a
 - **One embedding provider** — local HuggingFace sentence-transformers (no API key, no data leaves the machine)
 - **Retrieval** — hybrid search (opt-in), BGE cross-encoder reranking (on), semantic chunking (on), guardrails (on, flag-only)
 - **Streaming answers** — Server-Sent Events endpoint for token-by-token output
-- **Conversations** — multi-turn history, persistable to PostgreSQL, restorable from the UI
+- **Conversations** — multi-turn history in a local SQLite file, restorable from the UI
 - **Safety & ops (opt-in)** — JWT authentication, per-IP rate limiting, PII / prompt-injection / hallucination guardrails, token-usage tracking, and OpenTelemetry tracing
 - **Clean Architecture** — `domain → application → infrastructure → presentation` with dependency injection
 
@@ -36,15 +36,14 @@ A production-grade **Retrieval-Augmented Generation (RAG)** question-answering a
                                 │ use cases (query · ingest · conversation)
 ┌───────────────────────────────▼────────────────────────────────┐
 │                         RAGEngine                               │
-│  guardrails → query rewrite → embed → hybrid/vector search →   │
-│  rerank → prompt (versioned) → LLM                              │
+│  guardrails → embed → hybrid/vector search → rerank →          │
+│  prompt (versioned) → LLM                                      │
 └───────┬───────────────┬────────────────┬───────────────────────┘
         │               │                │
 ┌───────▼──────┐ ┌──────▼───────┐ ┌──────▼───────────────────────┐
-│ LLM factory  │ │  Embeddings  │ │ ChromaDB vector store        │
-│ gemini/openai│ │ gemini/openai│ │ (+ conversations repository: │
-│ anthropic/   │ │ huggingface  │ │ in-memory or PostgreSQL)     │
-│ deepseek     │ │              │ │                              │
+│  Gemini LLM  │ │  Embeddings  │ │ ChromaDB vector store        │
+│ (google-genai│ │ huggingface  │ │ + SQLite conversation history│
+│  SDK)        │ │ (local, free)│ │                              │
 └──────────────┘ └──────────────┘ └──────────────────────────────┘
 ```
 
@@ -119,7 +118,8 @@ EMBEDDING_PROVIDER=huggingface
 One command (Git Bash):
 
 ```bash
-bash scripts/start_all.sh
+bash scripts/start_all.sh            # macOS / Linux
+scripts\start_all.bat                 # Windows (double-click)
 ```
 
 Or two terminals:
@@ -458,7 +458,10 @@ src/
 deploy/
 └── nginx.conf               # Frontend image config (SSE-friendly proxy)
 scripts/
-└── start_all.sh             # Starts uvicorn + Vite together
+├── start_all.sh             # Starts uvicorn + Vite (macOS/Linux)
+├── start_all.bat            # Same, for Windows
+├── stop_all.sh
+└── stop_all.bat
 tests/                       # Unit + integration tests (434)
 eval/                        # RAGAS offline evaluation harness (11 tests)
 data/                        # Local ChromaDB persistence (CHROMA_PERSIST_DIR)

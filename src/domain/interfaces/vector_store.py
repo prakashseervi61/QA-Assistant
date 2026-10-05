@@ -49,14 +49,6 @@ class VectorStore(ABC):
         """Return the number of chunks in a collection."""
         ...
 
-    async def get_documents_by_ids(
-        self,
-        ids: list[str],
-        collection_name: str = "documents",
-    ) -> list[Chunk]:
-        """Retrieve chunks by their IDs. Default returns empty."""
-        return []
-
     async def get_by_metadata(
         self,
         metadata_filter: dict[str, object],

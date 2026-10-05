@@ -111,7 +111,7 @@ class TestChromaStoreMetadataFilter:
         mock_client_cls.return_value = mock_client
 
         store = ChromaStore(persist_directory="/tmp/test")
-        store._hybrid_search_sync(
+        store._query_sync(
             query_embedding=[0.1, 0.2],
             query_text="test query",
             k=3,

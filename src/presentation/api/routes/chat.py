@@ -6,6 +6,7 @@ from collections.abc import AsyncIterator
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+
 from fastapi.responses import StreamingResponse
 
 from src.application.dto.requests import QueryRequest
@@ -26,6 +27,7 @@ from src.application.use_cases.query_document import (
     QueryDocumentUseCase,
 )
 from src.domain.interfaces.llm_provider import LLMQuotaExceededError
+from src.presentation.api.dependencies import Registry
 
 logger = logging.getLogger(__name__)
 
@@ -33,90 +35,59 @@ router = APIRouter()
 
 
 # ---------------------------------------------------------------------------
-# Dependency placeholder — will be wired up in app.py factory
+# Startup dependencies — registered by app._wire_dependencies
 # ---------------------------------------------------------------------------
 
-_query_use_case: QueryDocumentUseCase | None = None
+_query_use_case: Registry[QueryDocumentUseCase] = Registry("Query")
 
 
 def set_query_use_case(use_case: QueryDocumentUseCase) -> None:
     """Register the QueryDocumentUseCase dependency at startup."""
-    global _query_use_case
-    _query_use_case = use_case
+    _query_use_case.set(use_case)
 
 
 def get_query_use_case() -> QueryDocumentUseCase:
     """FastAPI dependency that returns the injected use case."""
-    if _query_use_case is None:
-        raise HTTPException(
-            status_code=503,
-            detail="Query service not initialised. Check server configuration.",
-        )
-    return _query_use_case
+    return _query_use_case.get()
 
 
-_conversation_list_use_case: ListConversationsUseCase | None = None
+_conversation_list_use_case: Registry[ListConversationsUseCase] = Registry("Conversation list")
 
 
 def set_conversation_list_use_case(use_case: ListConversationsUseCase) -> None:
     """Register the ListConversationsUseCase dependency at startup."""
-    global _conversation_list_use_case
-    _conversation_list_use_case = use_case
+    _conversation_list_use_case.set(use_case)
 
 
 def get_conversation_list_use_case() -> ListConversationsUseCase:
     """FastAPI dependency that returns the injected use case."""
-    if _conversation_list_use_case is None:
-        raise HTTPException(
-            status_code=503,
-            detail=(
-                "Conversation list service not initialised. Check server configuration."
-            ),
-        )
-    return _conversation_list_use_case
+    return _conversation_list_use_case.get()
 
 
-_conversation_get_use_case: GetConversationUseCase | None = None
+_conversation_get_use_case: Registry[GetConversationUseCase] = Registry("Conversation get")
 
 
 def set_conversation_get_use_case(use_case: GetConversationUseCase) -> None:
     """Register the GetConversationUseCase dependency at startup."""
-    global _conversation_get_use_case
-    _conversation_get_use_case = use_case
+    _conversation_get_use_case.set(use_case)
 
 
 def get_conversation_get_use_case() -> GetConversationUseCase:
     """FastAPI dependency that returns the injected use case."""
-    if _conversation_get_use_case is None:
-        raise HTTPException(
-            status_code=503,
-            detail=(
-                "Conversation get service not initialised. Check server configuration."
-            ),
-        )
-    return _conversation_get_use_case
+    return _conversation_get_use_case.get()
 
 
-_conversation_delete_use_case: DeleteConversationUseCase | None = None
+_conversation_delete_use_case: Registry[DeleteConversationUseCase] = Registry("Conversation delete")
 
 
 def set_conversation_delete_use_case(use_case: DeleteConversationUseCase) -> None:
     """Register the DeleteConversationUseCase dependency at startup."""
-    global _conversation_delete_use_case
-    _conversation_delete_use_case = use_case
+    _conversation_delete_use_case.set(use_case)
 
 
 def get_conversation_delete_use_case() -> DeleteConversationUseCase:
     """FastAPI dependency that returns the injected use case."""
-    if _conversation_delete_use_case is None:
-        raise HTTPException(
-            status_code=503,
-            detail=(
-                "Conversation delete service not initialised. "
-                "Check server configuration."
-            ),
-        )
-    return _conversation_delete_use_case
+    return _conversation_delete_use_case.get()
 
 
 def _to_source_chunks(sources: list[dict]) -> list[SourceChunk]:
@@ -132,11 +103,6 @@ def _to_source_chunks(sources: list[dict]) -> list[SourceChunk]:
         )
         for s in sources
     ]
-
-
-def _to_iso(dt: datetime) -> str:
-    """Format a datetime as an ISO 8601 string."""
-    return dt.isoformat()
 
 
 # ---------------------------------------------------------------------------
@@ -281,8 +247,8 @@ async def list_conversations(
         ConversationResponse(
             id=str(c.id),
             title=c.title,
-            created_at=_to_iso(c.created_at),
-            updated_at=_to_iso(c.updated_at or c.created_at),
+            created_at=c.created_at.isoformat(),
+            updated_at=(c.updated_at or c.created_at).isoformat(),
             message_count=len(c.messages),
         )
         for c in conversations
@@ -320,7 +286,7 @@ async def get_conversation(
             role=m.role,
             content=m.content,
             sources=_to_source_chunks(m.sources),
-            created_at=_to_iso(m.created_at),
+            created_at=m.created_at.isoformat(),
         )
         for m in messages
     ]

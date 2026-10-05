@@ -4,9 +4,30 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ===========================================================================
+   Neo-Brutalism primitives.
+
+   The two non-negotiable rules live here as CSS custom properties so they are
+   declared once and cannot drift between components:
+
+     --nb-border: 3px solid var(--nb-line)
+     --nb-shadow: 5px 5px 0 var(--nb-shadow-color)
+
+   The component classes below (.nb-card, .nb-btn, .nb-input, .nb-tag) are the
+   only sanctioned way to draw a structural element. Anything built from
+   Tailwind utilities alone risks ending up with a 1px border or a blurred
+   shadow, which is how the aesthetic dies.
+   =========================================================================== */
+
 @layer base {
+  :root {
+    --nb-border: 3px solid var(--nb-line);
+    --nb-border-sm: 2px solid var(--nb-line);
+    --nb-ease: 0.1s ease;
+  }
+
   html {
-    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    font-feature-settings: 'ss01' on, 'cv01' on;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -15,53 +36,57 @@
   body {
     background-color: var(--bg-paper);
     color: var(--ink-primary);
-    font-family: 'Inter', 'Geist', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: 'Space Grotesk', 'Inter', system-ui, -apple-system, sans-serif;
   }
 
-  /* Kinetic editorial typography (Inter/Geist throughout — no serif headings) */
-  .font-editorial {
-    font-family: 'Inter', 'Geist', Georgia, Cambria, 'Times New Roman', serif;
+  /* Display type is always uppercase with tight tracking — this is load-bearing,
+     not decoration. Lowercase display text breaks the aesthetic. */
+  h1,
+  h2 {
+    font-weight: 900;
+    letter-spacing: -0.03em;
+    text-transform: uppercase;
+    line-height: 0.95;
+  }
+
+  h3 {
+    font-weight: 800;
     letter-spacing: -0.02em;
   }
 
-  /* Tabular numbers for clean alignment in tables, sizes, and timestamps */
+  /* Tabular numbers for stats, sizes and timestamps */
   .tabular-nums {
     font-variant-numeric: tabular-nums;
   }
 
-  /* Aurora canopy — fixed, non-interactive brand backdrop */
-  .aurora-canopy {
-    background-image: var(--aurora-mesh);
-    background-attachment: fixed;
-  }
-
-  /* Glass panels — frosted, theme-flipped surface with soft saturate blur */
-  .glass {
-    background-color: var(--glass-bg);
-    border: 1px solid var(--glass-border);
-    backdrop-filter: blur(20px) saturate(1.4);
-    -webkit-backdrop-filter: blur(20px) saturate(1.4);
-  }
-
-  .glass-strong {
-    background-color: var(--glass-bg-strong);
-    border: 1px solid var(--glass-border);
-    backdrop-filter: blur(28px) saturate(1.6);
-    -webkit-backdrop-filter: blur(28px) saturate(1.6);
-  }
-
-  .glass-hover:hover {
-    background-color: var(--glass-bg-strong);
-    border-color: var(--glass-border);
-  }
-
-  /* Tactile selection styling */
   ::selection {
-    background-color: var(--accent-brand-300);
-    color: var(--ink-primary);
+    background-color: var(--accent-yellow);
+    /* --ink-on-accent, not --ink-primary: yellow is theme-invariant, so paper
+       ink here would land at 1.25:1 in dark mode. */
+    color: var(--ink-on-accent);
   }
 
-  /* Syntax highlighting (rehype-highlight) — bioluminescent on any theme */
+  /* Brutalist scrollbars: squared off, high contrast, no rounded thumb. */
+  ::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: var(--bg-subtle);
+    border-left: 2px solid var(--nb-line);
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--nb-line);
+    border: 2px solid var(--bg-subtle);
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--accent-yellow);
+  }
+
+  /* Syntax highlighting — flat accent set, no bioluminescence */
   .hljs {
     color: inherit;
     background: transparent;
@@ -69,7 +94,7 @@
 
   .hljs-comment,
   .hljs-quote {
-    color: var(--ink-faint);
+    color: var(--code-comment);
     font-style: italic;
   }
 
@@ -78,7 +103,8 @@
   .hljs-literal,
   .hljs-section,
   .hljs-link {
-    color: var(--accent-mineral-1);
+    color: var(--code-keyword);
+    font-weight: 700;
   }
 
   .hljs-string,
@@ -87,7 +113,7 @@
   .hljs-type,
   .hljs-attr,
   .hljs-addition {
-    color: var(--accent-mineral-2);
+    color: var(--code-string);
   }
 
   .hljs-number,
@@ -95,7 +121,7 @@
   .hljs-bullet,
   .hljs-regexp,
   .hljs-meta {
-    color: var(--accent-mineral-3);
+    color: var(--code-number);
   }
 
   .hljs-built_in,
@@ -104,64 +130,396 @@
   .hljs-deletion,
   .hljs-selector-id,
   .hljs-selector-class {
-    color: var(--ink-secondary);
+    color: var(--code-builtin);
+  }
+}
+
+@layer components {
+  /* ---- CARD -------------------------------------------------------------
+     White surface, hard border, hard shadow. Hover lifts UP-LEFT with a
+     bigger shadow — opposite of the button press, because a card should feel
+     picked up while a button feels pushed down. */
+  .nb-card {
+    background-color: var(--bg-surface);
+    border: var(--nb-border);
+    border-radius: 4px;
+    box-shadow: var(--nb-shadow);
   }
 
-  /* Refined, low-profile warm scrollbars */
-  ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+  @media (hover: hover) {
+    .nb-card-hover {
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .nb-card-hover:hover {
+      transform: translate(-3px, -3px);
+      box-shadow: var(--nb-shadow-lg);
+    }
   }
 
-  ::-webkit-scrollbar-track {
-    background: transparent;
+  /* ---- BUTTON -----------------------------------------------------------
+     Physical push-down: hover lifts slightly, active presses fully in and
+     consumes its own shadow. */
+  .nb-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border: var(--nb-border);
+    border-radius: 4px;
+    background-color: var(--bg-surface);
+    color: var(--ink-primary);
+    font-weight: 700;
+    font-size: 0.9375rem;
+    letter-spacing: 0.02em;
+    padding: 0.75rem 1.5rem;
+    cursor: pointer;
+    box-shadow: var(--nb-shadow);
+    transition: transform var(--nb-ease), box-shadow var(--nb-ease);
   }
 
-  ::-webkit-scrollbar-thumb {
-    background-color: var(--border-strong);
-    border-radius: 9999px;
+  @media (hover: hover) {
+    .nb-btn:hover:not(:disabled) {
+      transform: translate(2px, 2px);
+      box-shadow: var(--nb-shadow-sm);
+    }
   }
 
-  ::-webkit-scrollbar-thumb:hover {
-    background-color: var(--ink-muted);
+  .nb-btn:active:not(:disabled) {
+    transform: translate(5px, 5px);
+    box-shadow: var(--nb-shadow-none);
+  }
+
+  .nb-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.4;
+    box-shadow: var(--nb-shadow-sm);
+  }
+
+  /* Primary CTA: yellow on beige is the highest-contrast pairing available. */
+  .nb-btn-primary {
+    background-color: var(--accent-yellow);
+    color: var(--ink-on-accent);
+  }
+
+  .nb-btn-dark {
+    background-color: var(--ink-primary);
+    color: var(--bg-surface);
+  }
+
+  .nb-btn-accent {
+    background-color: var(--accent-cyan);
+    color: var(--ink-on-accent);
+  }
+
+  .nb-btn-danger {
+    background-color: var(--accent-magenta);
+    color: var(--ink-on-accent);
+  }
+
+  /* Square icon-only button — same physics, tighter box. */
+  .nb-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: var(--nb-border);
+    border-radius: 4px;
+    background-color: var(--bg-surface);
+    color: var(--ink-primary);
+    box-shadow: var(--nb-shadow-sm);
+    cursor: pointer;
+    transition: transform var(--nb-ease), box-shadow var(--nb-ease),
+      background-color var(--nb-ease);
+  }
+
+  @media (hover: hover) {
+    .nb-icon-btn:hover:not(:disabled) {
+      background-color: var(--accent-yellow);
+      /* Yellow is theme-invariant, so the ink on it must be too — otherwise the
+         icon inherits --ink-primary and lands at 1.25:1 in dark theme. */
+      color: var(--ink-on-accent);
+      transform: translate(1px, 1px);
+      box-shadow: 2px 2px 0 var(--nb-shadow-color);
+    }
+  }
+
+  .nb-icon-btn:active:not(:disabled) {
+    transform: translate(3px, 3px);
+    box-shadow: var(--nb-shadow-none);
+  }
+
+  /* ---- INPUT ------------------------------------------------------------
+     Focus adds a hard shadow rather than a blurred ring, so the focus state is
+     as physical as everything else. */
+  .nb-input {
+    border: var(--nb-border);
+    border-radius: 4px;
+    background-color: var(--bg-surface);
+    color: var(--ink-primary);
+    font-family: inherit;
+    font-size: 0.9375rem;
+    font-weight: 500;
+    padding: 0.75rem 1rem;
+    outline: none;
+  }
+
+  .nb-input::placeholder {
+    color: var(--ink-faint);
+  }
+
+  .nb-input:focus {
+    box-shadow: var(--nb-shadow-sm);
+  }
+
+  .nb-input:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+
+  /* ---- SECTION TAG ------------------------------------------------------
+     The black pill that announces a section. White text on structural black. */
+  .nb-tag {
+    display: inline-block;
+    background: var(--ink-primary);
+    color: var(--bg-surface);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 5px 14px;
+    border-radius: 2px;
+  }
+
+  /* ---- BADGE / CHIP -----------------------------------------------------
+     Small bordered pill used for counts, sources and statuses. */
+  .nb-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    border: var(--nb-border-sm);
+    border-radius: 4px;
+    background-color: var(--bg-surface);
+    color: var(--ink-primary);
+    font-weight: 700;
+    padding: 0.25rem 0.625rem;
+  }
+
+  /* ---- TOOLTIP -----------------------------------------------------------
+     Neo-Brutalism tooltip: a hard-bordered black plate with square corners,
+     never the native `title` tooltip (which the OS renders in its own grey
+     rounded bubble and cannot be styled).
+
+     Rendered by <DockTooltip> rather than as a CSS ::after, because the label
+     text has to live in the accessibility tree — a CSS-only tooltip is
+     invisible to screen readers. */
+  .nb-tooltip {
+    position: absolute;
+    z-index: 50;
+    left: calc(100% + 12px);
+    top: 50%;
+    transform: translateY(-50%) translateX(-4px);
+    background: var(--ink-primary);
+    color: var(--bg-paper);
+    border: 3px solid var(--nb-line);
+    border-radius: 4px;
+    padding: 6px 12px;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    box-shadow: 4px 4px 0 var(--nb-shadow-color);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.1s ease, transform 0.1s ease;
+  }
+
+  /* Offset arrow, drawn as a rotated square so it inherits the hard border
+     rather than looking like a soft speech-bubble tail. */
+  .nb-tooltip::before {
+    content: '';
+    position: absolute;
+    left: -8px;
+    top: 50%;
+    width: 12px;
+    height: 12px;
+    transform: translateY(-50%) rotate(45deg);
+    background: var(--ink-primary);
+    border-left: 3px solid var(--nb-line);
+    border-bottom: 3px solid var(--nb-line);
+  }
+
+  @media (hover: hover) {
+    .nb-tooltip-host:hover .nb-tooltip,
+    .nb-tooltip-host:focus-visible .nb-tooltip {
+      opacity: 1;
+      transform: translateY(-50%) translateX(0);
+    }
+  }
+
+  /* Touch devices have no hover, so the plate would flash on tap and stick.
+     Hide it there — the icons carry aria-label + title for everyone else. */
+  @media (hover: none) {
+    .nb-tooltip {
+      display: none;
+    }
+  }
+
+  /* ---- LABEL ----------------------------------------------------------
+     11-13px uppercase with wide tracking — the metadata voice of the system. */
+  .nb-label {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+  }
+
+  /* ---- BENTO ------------------------------------------------------------
+     The signature layout: tight 12px gaps because the 3px borders do the
+     separating. Never round this gap up — the borders collide by design. */
+  .nb-bento {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+
+  @media (max-width: 1024px) {
+    .nb-bento {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  @media (max-width: 640px) {
+    .nb-bento {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  /* Accent grounds for bento tiles — rotate so no two neighbours match. */
+  .nb-tile-yellow {
+    background-color: var(--pastel-yellow);
+  }
+  .nb-tile-cyan {
+    background-color: var(--pastel-cyan);
+  }
+  .nb-tile-pink {
+    background-color: var(--pastel-pink);
+  }
+  .nb-tile-green {
+    background-color: var(--pastel-green);
+  }
+  .nb-tile-purple {
+    background-color: var(--pastel-purple);
+  }
+  .nb-tile-orange {
+    background-color: var(--pastel-orange);
+  }
+
+  /* A label on a coloured tile cannot use the theme-flipping --ink-muted:
+     #666666 on pastel-purple is 2.70:1 and the dark-theme value is worse.
+     Pins every tile's labels to the fixed ink that clears AA on all six. */
+  .nb-tile-yellow .nb-label,
+  .nb-tile-cyan .nb-label,
+  .nb-tile-pink .nb-label,
+  .nb-tile-green .nb-label,
+  .nb-tile-purple .nb-label,
+  .nb-tile-orange .nb-label {
+    color: var(--ink-on-accent-muted);
+  }
+
+  /* Dark card — stats and featured panels. Yellow numerals on black. */
+  .nb-card-dark {
+    background-color: var(--ink-primary);
+    border: var(--nb-border);
+    border-radius: 4px;
+    box-shadow: var(--nb-shadow);
+    color: var(--bg-surface);
+  }
+
+  /* Full-bleed divider — a declared 3px rule, not a soft fade. */
+  .nb-rule {
+    border: 0;
+    border-top: var(--nb-border);
+  }
+
+  /* Focus ring: a hard outline, never a blurred halo. Cyan against both the
+     beige and black canvases, with an offset so it never sits under the
+     element's own border. */
+  .nb-focus:focus-visible,
+  :where(a, button, input, select, textarea, [tabindex]):focus-visible {
+    outline: 3px solid var(--nb-focus);
+    outline-offset: 2px;
+  }
+
+  /* Dropzone: the ground turns yellow on hover/drag, so pin every descendant's
+     ink for the duration — otherwise the children's --ink-primary flips to
+     paper in dark theme and collapses to 1.25:1 against that yellow. */
+  @media (hover: hover) {
+    .nb-dropzone:hover *,
+    .nb-dropzone:hover {
+      color: var(--ink-on-accent);
+    }
+  }
+
+  .nb-dropzone[data-dragging='true'],
+  .nb-dropzone[data-dragging='true'] * {
+    background-color: var(--accent-yellow);
+    color: var(--ink-on-accent);
+  }
+
+  /* Skip link: off-screen until focused, then it lands as a brutalist plate in
+     the top-left. First tab stop, so keyboard users can bypass the nav rail. */
+  .nb-skip-link {
+    position: absolute;
+    left: -9999px;
+    top: 0;
+    z-index: 100;
+    background: var(--accent-yellow);
+    /* Yellow is theme-invariant, so the ink on it must be too. */
+    color: var(--ink-on-accent);
+    border: 3px solid var(--nb-line);
+    border-radius: 4px;
+    box-shadow: var(--nb-shadow);
+    padding: 12px 20px;
+    font-weight: 800;
+    font-size: 14px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    text-decoration: none;
+  }
+
+  .nb-skip-link:focus {
+    left: 12px;
+    top: 12px;
+  }
+
+  /* Screen-reader-only, but focusable (used by the skip link target). */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
   }
 }
 
 @layer utilities {
-  /* Editorial card styling with 1px tactile warm border */
-  .card-warm {
-    background-color: var(--bg-surface);
-    border: 1px solid var(--border-default);
-    box-shadow: var(--shadow-card);
-  }
-
-  .card-warm-subtle {
-    background-color: var(--bg-subtle);
-    border: 1px solid var(--border-subtle);
-  }
-
-  /* Tactile focus ring */
-  .ring-tactile {
-    outline: none;
-    box-shadow: 0 0 0 2px var(--bg-paper), 0 0 0 4px var(--accent-brand-600);
-  }
-
-  /* Smooth layout panel transitions */
-  .transition-panel {
-    transition: width 220ms cubic-bezier(0.4, 0, 0.2, 1),
-                transform 220ms cubic-bezier(0.4, 0, 0.2, 1),
-                opacity 180ms ease-in-out;
-  }
-
-  /* Streaming caret shown at the end of an in-progress answer */
+  /* Streaming caret at the end of an in-progress answer. Square, because
+     nothing in this system is round. */
   .caret {
     display: inline-block;
-    width: 3px;
+    width: 8px;
     height: 1.05em;
     margin-left: 2px;
     vertical-align: text-bottom;
-    border-radius: 1px;
-    background-image: linear-gradient(180deg, var(--accent-mineral-1), var(--accent-mineral-2));
+    background-color: var(--accent-magenta);
     animation: caret-blink 1.1s steps(2, start) infinite;
   }
 
@@ -171,40 +529,10 @@
     }
   }
 
-  /* Aurora shimmer sweep used on active badges & in-flight pills */
-  .shimmer {
-    position: relative;
-    overflow: hidden;
-  }
-
-  .shimmer::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    transform: translateX(-100%);
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.18), transparent);
-    animation: shimmer-sweep 2.4s ease-in-out infinite;
-  }
-
-  @keyframes shimmer-sweep {
-    100% {
-      transform: translateX(100%);
-    }
-  }
-
-  /* Ambient slow float for empty-state orbs */
-  @keyframes float-slow {
-    0%, 100% {
-      transform: translateY(0);
-    }
-    50% {
-      transform: translateY(-8px);
-    }
-  }
-
   /* Sound-wave bars for voice input */
   @keyframes wave-bar {
-    0%, 100% {
+    0%,
+    100% {
       transform: scaleY(0.35);
     }
     50% {
@@ -213,9 +541,14 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .caret,
-    .shimmer::after {
+    .caret {
       animation: none;
+    }
+
+    .nb-card-hover,
+    .nb-btn,
+    .nb-icon-btn {
+      transition: none;
     }
   }
 }

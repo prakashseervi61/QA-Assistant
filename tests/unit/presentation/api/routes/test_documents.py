@@ -1,6 +1,7 @@
 """Tests for the document management API routes."""
 
 import io
+import re
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -124,13 +125,15 @@ class TestUploadDocumentSplitterSelection:
 
 
 class TestDeleteDocument:
+    """Deleting a document removes its chunks from the active collection."""
+
     @pytest.mark.asyncio
     @patch("src.presentation.api.routes.documents._get_dependencies")
     @patch("src.presentation.api.routes.documents.get_settings")
-    async def test_delete_cleans_parent_and_child_collections(
+    async def test_delete_removes_chunks_from_active_collection(
         self, mock_get_settings, mock_get_deps
     ):
-        """M3: delete removes chunks from main, parent, and child collections."""
+        """Delete targets the single configured collection and reports success."""
         settings = MagicMock()
         settings.MAX_FILE_SIZE_MB = 50
         settings.CHROMA_COLLECTION_NAME = "documents"
@@ -146,28 +149,58 @@ class TestDeleteDocument:
         collections = [
             call.args[1] for call in vector_store.delete_by_metadata.call_args_list
         ]
-        assert collections == ["documents", "documents_parent", "documents_child"]
+        assert collections == ["documents"]
 
     @pytest.mark.asyncio
     @patch("src.presentation.api.routes.documents._get_dependencies")
     @patch("src.presentation.api.routes.documents.get_settings")
-    async def test_delete_ignores_parent_child_cleanup_failures(
+    async def test_delete_propagates_store_failure_as_http_error(
         self, mock_get_settings, mock_get_deps
     ):
-        """M3: a failure cleaning an optional parent/child collection does
-        not fail the request; the main-collection delete must succeed."""
+        """A store failure must surface as a 500, not a silent success."""
         settings = MagicMock()
         settings.MAX_FILE_SIZE_MB = 50
         settings.CHROMA_COLLECTION_NAME = "documents"
         mock_get_settings.return_value = settings
 
         vector_store = AsyncMock()
-        vector_store.delete_by_metadata = AsyncMock(
-            side_effect=[None, RuntimeError("collection missing"), None]
-        )
+        vector_store.delete_by_metadata = AsyncMock(side_effect=RuntimeError("boom"))
         mock_get_deps.return_value = (vector_store, AsyncMock())
 
-        result = await documents_router.delete_document("doc-123")
+        with pytest.raises(HTTPException) as exc:
+            await documents_router.delete_document("doc-123")
+        assert exc.value.status_code == 500
 
-        assert "deleted" in result["message"]
-        assert vector_store.delete_by_metadata.call_count == 3
+
+class TestUploadWiring:
+    """Guard the upload route's wiring itself.
+
+    ponytail: this exists because every other test here patches
+    IngestDocumentUseCase wholesale, so nothing ever constructed the real one —
+    a stale keyword argument in the route survived a green suite and only
+    surfaced on a real upload. Now the route's actual call is inspected against
+    the constructor's real signature, which is where an arity mismatch shows.
+    """
+
+    def test_route_passes_only_kwargs_the_use_case_accepts(self):
+        import inspect
+
+        from src.application.use_cases.ingest_document import IngestDocumentUseCase
+
+        route_src = inspect.getsource(documents_router.upload_document)
+        accepted = set(
+            inspect.signature(IngestDocumentUseCase.__init__).parameters
+        ) - {"self"}
+
+        # Keywords inside the IngestDocumentUseCase(...) call specifically.
+        call = re.search(
+            r"IngestDocumentUseCase\((.*?)\n        \)", route_src, re.S
+        )
+        assert call, "could not find the IngestDocumentUseCase(...) call"
+
+        supplied = set(re.findall(r"(\w+)=", call.group(1)))
+        assert supplied, "expected the route to pass constructor kwargs"
+        assert supplied <= accepted, (
+            "upload_document passes kwargs the use case does not accept: "
+            f"{sorted(supplied - accepted)}"
+        )

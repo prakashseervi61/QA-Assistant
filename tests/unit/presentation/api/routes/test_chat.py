@@ -24,14 +24,19 @@ QUOTA_MESSAGE = (
 
 @pytest.fixture(autouse=True)
 def restore_use_cases():
-    """Restore the module-level use cases after each test."""
-    original_query = chat._query_use_case
-    original_list = chat._conversation_list_use_case
-    original_get = chat._conversation_get_use_case
+    """Reset the dependency registries after each test.
+
+    The registries are module-level singletons, so a test that wires one has to
+    clear it or the next test inherits it. ``set(None)`` is how you un-register.
+    """
     yield
-    chat._query_use_case = original_query
-    chat._conversation_list_use_case = original_list
-    chat._conversation_get_use_case = original_get
+    for registry in (
+        chat._query_use_case,
+        chat._conversation_list_use_case,
+        chat._conversation_get_use_case,
+        chat._conversation_delete_use_case,
+    ):
+        registry.set(None)
 
 
 def _make_app() -> FastAPI:
@@ -120,7 +125,7 @@ class TestListConversations:
         assert item["updated_at"]
 
     def test_get_conversations_returns_503_when_not_wired(self):
-        chat._conversation_list_use_case = None
+        chat._conversation_list_use_case.set(None)
 
         client = TestClient(_make_app())
         response = client.get("/api/conversations")
@@ -187,7 +192,7 @@ class TestGetConversation:
         assert response.status_code == 400
 
     def test_get_conversation_returns_503_when_not_wired(self):
-        chat._conversation_get_use_case = None
+        chat._conversation_get_use_case.set(None)
 
         client = TestClient(_make_app())
         response = client.get(f"/api/conversations/{uuid4()}")

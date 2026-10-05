@@ -60,12 +60,29 @@ class GeminiProvider(LLMProvider):
             return None
         return self._types.GenerateContentConfig(**settings)
 
-    async def generate(self, prompt: str, system_prompt: str | None = None) -> str:
+    async def _generate(
+        self, prompt: str, system_prompt: str | None, **config_overrides: object
+    ) -> str:
+        """Shared generate path.
+
+        ponytail: generate() and generate_json() were byte-identical apart from
+        one ``response_mime_type`` kwarg, duplicated error handling included.
+        Both are now two-line delegators.
+
+        Args:
+            prompt: The user prompt.
+            system_prompt: Optional system instruction.
+            **config_overrides: Extra ``_config`` kwargs for this call.
+
+        Returns:
+            The model's text response (empty string when none).
+        """
+
         def _gen():
             return self._client.models.generate_content(
                 model=self._model,
                 contents=prompt,
-                config=self._config(system_prompt),
+                config=self._config(system_prompt, **config_overrides),
             )
 
         try:
@@ -78,6 +95,9 @@ class GeminiProvider(LLMProvider):
                     QUOTA_ERROR_MESSAGE.format(model=self._model)
                 ) from exc
             raise RuntimeError(f"Gemini API error: {exc}") from exc
+
+    async def generate(self, prompt: str, system_prompt: str | None = None) -> str:
+        return await self._generate(prompt, system_prompt)
 
     async def get_usage(self) -> dict[str, object]:
         """Return token usage from the most recent generate call.
@@ -106,25 +126,9 @@ class GeminiProvider(LLMProvider):
         can rely on.
         """
 
-        def _gen():
-            return self._client.models.generate_content(
-                model=self._model,
-                contents=prompt,
-                config=self._config(
-                    system_prompt, response_mime_type="application/json"
-                ),
-            )
-
-        try:
-            response = await asyncio.to_thread(_gen)
-            self._last_response = response
-            return response.text or ""
-        except Exception as exc:
-            if _is_quota_error(exc):
-                raise LLMQuotaExceededError(
-                    QUOTA_ERROR_MESSAGE.format(model=self._model)
-                ) from exc
-            raise RuntimeError(f"Gemini API error: {exc}") from exc
+        return await self._generate(
+            prompt, system_prompt, response_mime_type="application/json"
+        )
 
     async def generate_stream(
         self, prompt: str, system_prompt: str | None = None

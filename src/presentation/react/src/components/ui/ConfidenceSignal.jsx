@@ -22,17 +22,19 @@ export default function ConfidenceSignal({ confidence, className = '' }) {
 
   const percent = Math.round(Math.min(Math.max(confidence, 0), 1) * 100);
   const isLow = confidence < LOW_CONFIDENCE_THRESHOLD;
-  const tone = isLow
-    ? 'border-error-border bg-error-bg text-error-text'
-    : 'border-border bg-paper-200 text-ink-secondary';
+  // Colour is never the only signal: the low state also swaps the icon and
+  // the label text, so it survives a colourblind reader and a greyscale print.
+  // The low tone also pins its ink — magenta is theme-invariant, and inheriting
+  // the message bubble's ink put paper on magenta at 3.19:1 in dark theme.
+  const tone = isLow ? 'bg-accent-magenta text-ink-on-accent' : 'bg-paper-surface text-ink';
   const label = isLow ? 'Low confidence' : 'Confidence';
 
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 font-mono text-[11px] tabular-nums ${tone} ${className}`}
+      className={`inline-flex items-center gap-1.5 rounded border-2 border-nb-line px-2 py-0.5 font-mono text-[11px] font-bold uppercase tracking-wider tabular-nums ${tone} ${className}`}
       title={`${label}: ${percent}% average similarity across the cited chunks.`}
     >
-      {isLow && <ShieldAlert className="h-3 w-3" aria-hidden="true" />}
+      {isLow && <ShieldAlert className="h-3 w-3" aria-hidden="true" strokeWidth={3} />}
       {label} {percent}%
       <span className="sr-only">
         {isLow

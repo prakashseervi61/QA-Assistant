@@ -39,20 +39,6 @@ def detect_pii(text: str) -> list[dict[str, object]]:
     return issues
 
 
-def redact_pii(text: str) -> str:
-    """Replace all PII matches in ``text`` with ``[REDACTED]``.
-
-    Args:
-        text: The text to redact.
-
-    Returns:
-        The redacted text.
-    """
-    redacted = text
-    for pattern in PII_PATTERNS.values():
-        redacted = re.sub(pattern, "[REDACTED]", redacted)
-    return redacted
-
 
 # ---------------------------------------------------------------------------
 # Prompt-injection detection

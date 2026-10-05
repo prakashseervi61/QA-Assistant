@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from src.application.services.rag_engine import RAGEngine, RAGQueryError
+from src.infrastructure.llm.prompt_registry import PROMPT_VERSIONS
 from src.domain.interfaces.llm_provider import LLMQuotaExceededError
 from src.domain.value_objects.chunk import Chunk
 
@@ -285,29 +286,6 @@ class TestRAGEngineQuery:
         await rag_engine.query("What is AI?")
         mock_vector_store.similarity_search.assert_awaited_once()
 
-
-    async def test_query_parent_child_without_parent_id_falls_back_to_children(
-        self, rag_engine, mock_vector_store, mock_llm_provider
-    ):
-        """Children without parent_id metadata are used as-is (graceful)."""
-        from uuid import uuid4
-
-
-        plain_child = Chunk(
-            id=uuid4(),
-            content="Plain chunk without parent link.",
-            metadata={"filename": "doc.txt", "score": 0.8},
-            chunk_index=0,
-        )
-        mock_vector_store.similarity_search.return_value = [plain_child]
-
-        result = await rag_engine.query("test")
-
-        assert "answer" in result
-        prompt = mock_llm_provider.generate.call_args.args[0]
-        assert "Plain chunk" in prompt
-        # No parent lookup was attempted.
-        mock_vector_store.get_documents_by_ids.assert_not_awaited()
 
     # Query rewriting fallback (M1)
 
@@ -689,20 +667,31 @@ class TestRAGEngineComputeConfidence:
 
 
 class TestRAGEnginePromptTemplate:
-    """Verify the prompt template structure."""
+    """Verify the active system prompt's structure.
+
+    These assertions used to read ``RAGEngine.PROMPT_TEMPLATE``, a class-level
+    alias that existed only for backwards compatibility and was never used by
+    the engine — the real template is looked up per request through
+    ``prompt_registry.get_prompt``. Pointing at PROMPT_VERSIONS["v1"] keeps the
+    coverage while testing the object that is actually shipped.
+    """
+
+    @staticmethod
+    def _active_prompt():
+        return PROMPT_VERSIONS["v1"]
 
     def test_prompt_template_has_placeholders(self):
-        assert "{context}" in RAGEngine.PROMPT_TEMPLATE
-        assert "{question}" in RAGEngine.PROMPT_TEMPLATE
+        assert "{context}" in self._active_prompt()
+        assert "{question}" in self._active_prompt()
 
     def test_prompt_template_has_instructions(self):
-        assert "Instructions:" in RAGEngine.PROMPT_TEMPLATE
+        assert "Instructions:" in self._active_prompt()
 
     def test_prompt_template_mentions_citations(self):
-        assert "cite" in RAGEngine.PROMPT_TEMPLATE.lower()
+        assert "cite" in self._active_prompt().lower()
 
     def test_prompt_template_has_context_label(self):
-        assert "Context from documents" in RAGEngine.PROMPT_TEMPLATE
+        assert "Context from documents" in self._active_prompt()
 
 
 # RAGEngine Constants Tests

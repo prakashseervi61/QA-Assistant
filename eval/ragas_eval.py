@@ -110,11 +110,10 @@ def _build_query_use_case() -> object:
     from src.application.services.rag_engine import RAGEngine
     from src.application.use_cases.query_document import QueryDocumentUseCase
     from src.infrastructure.config.settings import get_settings
-    from src.infrastructure.embeddings.factory import create_embedding_provider
-    from src.infrastructure.llm.factory import create_llm_provider
-    from src.infrastructure.llm.query_rewriter_factory import (
-        create_query_rewriter,
+    from src.infrastructure.embeddings.huggingface_embeddings import (
+        HuggingFaceEmbeddingProvider,
     )
+    from src.infrastructure.llm.gemini_provider import GeminiProvider
     from src.infrastructure.repositories.sqlite_conversation_repository import (
         SQLiteConversationRepository,
     )
@@ -122,19 +121,19 @@ def _build_query_use_case() -> object:
     from src.infrastructure.vector_store.chroma_store import ChromaStore
 
     settings = get_settings()
-    llm_provider = create_llm_provider(settings)
-    embedding_provider = create_embedding_provider(settings)
+    llm_provider = GeminiProvider(
+        api_key=settings.GEMINI_API_KEY, model=settings.GEMINI_MODEL
+    )
+    embedding_provider = HuggingFaceEmbeddingProvider(
+        model_name=settings.HUGGINGFACE_MODEL
+    )
     vector_store = ChromaStore(persist_directory=settings.CHROMA_PERSIST_DIR)
     reranker = create_reranker()
-    query_rewriter = create_query_rewriter(
-        llm_provider, embedding_provider, vector_store
-    )
     rag_engine = RAGEngine(
         llm_provider=llm_provider,
         embedding_provider=embedding_provider,
         vector_store=vector_store,
         reranker=reranker,
-        query_rewriter=query_rewriter,
     )
     # An eval run keeps its own throwaway history file so it never touches
     # the user's real conversations.

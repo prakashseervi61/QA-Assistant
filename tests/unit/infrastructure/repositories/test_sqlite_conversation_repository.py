@@ -34,7 +34,6 @@ class TestSQLiteConversationRepository:
 
         # A brand-new instance stands in for a restarted process.
         second = SQLiteConversationRepository(db)
-        assert await second.conversation_exists(conversation.id)
         assert (await second.get_conversation(conversation.id)).title == "Durable"
 
     @pytest.mark.asyncio
@@ -90,11 +89,18 @@ class TestSQLiteConversationRepository:
             await repo.get_messages(uuid4())
 
     @pytest.mark.asyncio
-    async def test_conversation_exists_reflects_state(self, repo):
+    async def test_missing_conversation_raises_key_error(self, repo):
+        """Absence is signalled by KeyError from get_conversation.
+
+        Replaces a test for a dedicated conversation_exists() probe that no
+        production code called — the read path already reports a missing
+        conversation by raising.
+        """
         conversation = Conversation(title="Exists")
-        assert await repo.conversation_exists(conversation.id) is False
+        with pytest.raises(KeyError):
+            await repo.get_conversation(conversation.id)
         await repo.save_conversation(conversation)
-        assert await repo.conversation_exists(conversation.id) is True
+        assert (await repo.get_conversation(conversation.id)).title == "Exists"
 
     @pytest.mark.asyncio
     async def test_list_orders_by_most_recently_updated(self, repo):
@@ -143,7 +149,8 @@ class TestSQLiteConversationRepository:
         await repo.add_message(conversation.id, Message(role="user", content="hi"))
 
         assert await repo.delete_conversation(conversation.id) is True
-        assert await repo.conversation_exists(conversation.id) is False
+        with pytest.raises(KeyError):
+            await repo.get_conversation(conversation.id)
 
         from uuid import uuid4
 
@@ -170,12 +177,12 @@ class TestSQLiteConversationRepository:
         assert listed[0].title == "Renamed"
 
     @pytest.mark.asyncio
-    async def test_document_ids_round_trip(self, repo):
-        from uuid import uuid4
-
-        doc_id = uuid4()
-        conversation = Conversation(title="With docs", document_ids=[doc_id])
+    async def test_save_survives_the_legacy_document_ids_column(self, repo):
+        """The conversations table still has a document_ids column with a
+        NOT NULL default. Inserts omit it, so the default must keep every write
+        working — a regression here would surface as a constraint failure on
+        every conversation save."""
+        conversation = Conversation(title="No documents listed")
         await repo.save_conversation(conversation)
 
-        loaded = await repo.get_conversation(conversation.id)
-        assert loaded.document_ids == [doc_id]
+        assert (await repo.get_conversation(conversation.id)).title == "No documents listed"

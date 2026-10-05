@@ -1,10 +1,8 @@
 import {
-  Bookmark,
   Clock,
   FolderOpen,
   MessageSquare,
   Settings,
-  Users,
 } from 'lucide-react';
 
 /**
@@ -14,13 +12,16 @@ import {
  * Single source of truth for every locator of a top-level view. `path` is the
  * real URL for the view, so every page is linkable, bookmarkable and reachable
  * with the back/forward buttons.
+ *
+ * ponytail: only views with something behind them get a nav entry. Collections
+ * and Bookmarks were routes whose bodies were permanent "nothing here yet"
+ * placeholders with no backend endpoint at all — a dock icon that can only ever
+ * lead to an empty page is worse than no icon.
  */
 export const navItems = [
   { key: 'chat', path: '/', name: 'Chat', icon: MessageSquare, description: 'Ask questions grounded in your documents', keywords: 'ask question new chat talk home' },
   { key: 'documents', path: '/documents', name: 'Documents', icon: FolderOpen, description: 'Upload and manage your source files', keywords: 'docs upload files source pdf' },
-  { key: 'collections', path: '/collections', name: 'Collections', icon: Users, description: 'Group documents for joint querying', keywords: 'groups folders tags' },
   { key: 'history', path: '/history', name: 'History', icon: Clock, description: 'Every past conversation, saved on disk', keywords: 'history past chats log archive previous recent' },
-  { key: 'bookmarks', path: '/bookmarks', name: 'Bookmarks', icon: Bookmark, description: 'Revisit saved answers and sources', keywords: 'saved favorites stars marked' },
   { key: 'settings', path: '/settings', name: 'Settings', icon: Settings, description: 'Appearance and server configuration', keywords: 'preferences config options' },
 ];
 

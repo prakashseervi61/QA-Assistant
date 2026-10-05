@@ -58,16 +58,6 @@ class SemanticChunker:
         self._min_chunk_size = min_chunk_size
         self._max_chunk_size = max_chunk_size
 
-    @property
-    def chunk_size(self) -> int:
-        """Effective chunk size, for compatibility with IngestDocumentUseCase."""
-        return self._max_chunk_size
-
-    @property
-    def chunk_overlap(self) -> int:
-        """Semantic chunking uses no fixed character overlap."""
-        return 0
-
     async def split_text(
         self,
         text: str,

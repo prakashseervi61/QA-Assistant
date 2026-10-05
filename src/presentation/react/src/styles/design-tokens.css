@@ -1,168 +1,189 @@
 /**
  * Design Tokens — Marginalia
- * Mineral & Manuscript design system.
- * A single CSS-variable token layer:
- *   ☀️ Light  "Alabaster & Ink"  — warm archival off-white, Oxford-Lapis actions, Burnt Sienna highlights.
- *   🌙 Dark   "Obsidian & Verdigris" — OLED charcoal with a 1% blue shift, Verdigris actions, Soft Ember highlights.
- * The whole app flips via `[data-theme="dark"]` — no per-component overrides.
+ * Neo-Brutalism design system.
+ *
+ * Two non-negotiable rules, applied to every structural element:
+ *   1. Hard border — 3px solid, radius capped at 4px.
+ *   2. Hard offset shadow — solid colour, no blur, no spread, no rgba.
+ *
+ * Everything else is a flat fill. No gradients, no glass, no blur, no glows.
+ * The app still flips via `[data-theme="dark"]`, but dark here means black
+ * canvas with *white* borders and shadows — a flat black/white inversion, not
+ * a muted charcoal palette. A black shadow on a black canvas is invisible, so
+ * --nb-line and --nb-shadow have to flip with the theme.
  */
 
 :root {
-  /* Canvas & Surface Foundations (alabaster paper — never pure white for backgrounds) */
-  --bg-paper-50: #fbfaf6;
-  --bg-paper-100: #f6f5f1;  /* Canvas: warm archival off-white */
-  --bg-paper: #f6f5f1;
-  --bg-surface: #ffffff;    /* Card surface: pure white only for elevation */
-  --bg-subtle: #f1efe9;
-  --bg-muted: #e9e6de;
-  --bg-dark-sidebar: #181a1b; /* User bubble — rich charcoal ink */
-  --bg-dark-sidebar-subtle: #23272b;
-  --bg-dark-sidebar-hover: #2e3338;
+  color-scheme: light;
 
-  /* Ink & Typography Hierarchy (rich charcoal — never pure black) */
-  --ink-primary: #181a1b;
-  --ink-secondary: #3e4347;
-  --ink-muted: #6e757b;
-  --ink-faint: #9aa1a7;
-  --ink-inverse: #f6f5f1;
+  /* Canvas & Surfaces — paper beige, never pure white for the background */
+  --bg-paper: #fffef0;   /* Canvas: warm paper beige */
+  --bg-surface: #ffffff; /* Card surface: white, to lift off the beige */
+  --bg-subtle: #f7f5e0;  /* Recessed wells (inputs, code, meta tiles) */
+  --bg-muted: #efeccf;   /* Stronger well / hover ground */
 
-  /* Accent 1 — Action/Links: Lapis/Oxford Blue (deep intellectual, trustworthy) */
-  --accent-brand-50: #f3f7f9;
-  --accent-brand-100: #e4edf2;
-  --accent-brand-200: #c6dae4;
-  --accent-brand-300: #9dbdcc;
-  --accent-brand-400: #6e9aae;
-  --accent-brand-500: #487a93;
-  --accent-brand-600: #2c5270; /* Primary Action */
-  --accent-brand-700: #254862;
-  --accent-brand-800: #1f3b50;
-  --accent-brand-900: #182d3e;
-  --accent-brand-950: #0f1d2a;
+  /* Ink — #0A0A0A, never pure #000 */
+  --ink-primary: #0a0a0a;
+  --ink-secondary: #333333;
+  --ink-muted: #666666;
+  --ink-faint: #8c8c8c;
+  --ink-inverse: #ffffff;
 
-  /* Mineral gradient endpoints (Accent 1 → Accent 2, theme-flipped) */
-  --accent-mineral-1: #2c5270; /* Lapis */
-  --accent-mineral-2: #b85c38; /* Burnt Sienna — the Marginalia soul, used sparingly */
-  --accent-mineral-3: #54778c; /* Secondary mineral note (deep slate-teal) */
+  /* THE structural colour: every border and every hard shadow.
+     Named `-color` deliberately. `--nb-shadow` is the *shorthand* consumed by
+     `box-shadow`, so letting both roles share one name would make the token
+     self-referential (`--nb-shadow: 5px 5px 0 var(--nb-shadow)`), which CSS
+     treats as guaranteed-invalid and silently drops every shadow in the app. */
+  --nb-line: #0a0a0a;
+  --nb-shadow-color: #0a0a0a;
 
-  /* Functional Indicators (Muted & Warm) */
-  --color-success-bg: #f0fdf4;
-  --color-success-text: #166534;
-  --color-success-border: #bbf7d0;
-  --color-success-dot: #22c55e;
+  /* Accents — rotate 2-3 per surface. Never all six at once. */
+  --accent-yellow: #ffe600;  /* Primary CTA, hero badges, active states */
+  /* The others follow; declared below so --ink-on-accent can reference them. */
+  --accent-magenta: #ff3ea5; /* Destructive, attention markers */
+  --accent-cyan: #00c2cb;    /* Feature blocks, info, links */
+  --accent-purple: #7b2fbe;  /* Stats panels, full-bleed contrast */
+  --accent-green: #00c853;   /* Success, checkmarks */
+  --accent-orange: #ff6b35;  /* Warmth accent */
 
-  --color-error-bg: #fef2f2;
-  --color-error-text: #991b1b;
-  --color-error-border: #fecaca;
-  --color-error-dot: #ef4444;
+  /* Pastels — bento card grounds. Still fully saturated, still bordered. */
+  --pastel-yellow: #ffdb58;
+  --pastel-cyan: #87ceeb;
+  --pastel-pink: #ffc0cb;
+  --pastel-green: #bafca2;
+  --pastel-purple: #c4a1ff;
+  --pastel-orange: #ffa07a;
 
-  /* Borders & Dividers (warm parchment greys) */
-  --border-subtle: #ece9e1;
-  --border-default: #e1ded5;
-  --border-strong: #cecabf;
-  --border-dark: #3e4347;
+  /* Ink on an accent ground. The accents are the same vivid values in BOTH
+     themes, so the ink that sits on them cannot be a theme-flipping token —
+     measured against #FFE600, #0A0A0A is 15.6:1 while paper is 1.25:1. Purple
+     is the one accent that needs light ink (2.82:1 vs 6.91:1). */
+  --ink-on-accent: #0a0a0a;
+  --ink-on-purple: #fffef0;
 
-  /* Shadows (Tactile & Soft) */
-  --shadow-subtle: 0 1px 2px 0 rgba(24, 26, 27, 0.05);
-  --shadow-card: 0 1px 3px 0 rgba(24, 26, 27, 0.05), 0 1px 2px -1px rgba(24, 26, 27, 0.04);
-  --shadow-hover: 0 4px 12px -2px rgba(24, 26, 27, 0.08), 0 2px 4px -2px rgba(24, 26, 27, 0.05);
-  --shadow-float: 0 12px 28px -4px rgba(24, 26, 27, 0.1), 0 4px 8px -2px rgba(24, 26, 27, 0.05);
+  /* Secondary ink for body copy sitting on a coloured ground (tile
+     descriptions). Also theme-invariant, and deliberately fixed at the light
+     theme's --ink-secondary: it clears 5.95:1 on the worst pastel. Note there
+     is very little headroom left — the lightest grey that still clears 4.5:1 on
+     every coloured ground is #282828, only 1.34:1 against the title ink — so
+     hierarchy on a tile has to come from size and weight, not from a lighter
+     shade of text. */
+  --ink-on-accent-muted: #333333;
 
-  /* Mineral glows (theme-flipped) */
-  --glow-mineral: 0 0 24px -4px rgba(44, 82, 112, 0.45);
-  --glow-ember: 0 0 24px -4px rgba(184, 92, 56, 0.4);
-  --glow-aurora: 0 0 32px -6px rgba(44, 82, 112, 0.4), 0 0 32px -6px rgba(184, 92, 56, 0.3);
+  /* Ink for body copy on an inverted ground (.nb-card-dark fills with
+     --ink-primary, so the ground flips with the theme and the ink must too).
+     Dimmed rather than full-strength so it still reads as secondary: 10.61:1. */
+  --ink-on-inverse-muted: #c0beb2;
 
-  /* Radii */
-  --radius-sm: 0.375rem;
-  --radius-md: 0.5rem;
-  --radius-lg: 0.75rem;
-  --radius-xl: 1rem;
-  --radius-pill: 9999px;
+  /* Focus ring. Must clear 3:1 against BOTH canvases, which rules out every
+     accent: cyan scores 2.16:1 on beige, purple 2.82:1 on black. Magenta is
+     the only one that passes both (3.19:1 / 6.11:1). */
+  --nb-focus: #ff3ea5;
 
-  /* Aurora mesh — soft mineral gradient wash used on the canopy */
-  --aurora-mesh:
-    radial-gradient(60% 70% at 15% 10%, rgba(44, 82, 112, 0.13) 0%, transparent 60%),
-    radial-gradient(50% 60% at 85% 15%, rgba(184, 92, 56, 0.11) 0%, transparent 60%),
-    radial-gradient(70% 60% at 50% 100%, rgba(84, 119, 140, 0.08) 0%, transparent 55%);
+  /* Syntax highlighting. These CANNOT reuse the accent tokens: the accents are
+     grounds (large flat fills), and as text they are unreadable on beige —
+     #00C2CB scores 1.99:1 and #FF6B35 2.58:1 against the code well. So the code
+     palette is its own pair of sets, deepened for the light canvas and brightened
+     for the black one. Every value below clears 4.5:1 on --bg-subtle in its theme. */
+  --code-comment: #6a6a6a;  /* 4.92:1 */
+  --code-keyword: #7b2fbe;  /* 6.38:1 */
+  --code-string: #007b81;   /* 4.59:1 */
+  --code-number: #c2410c;   /* 4.71:1 */
+  --code-builtin: #333333;  /* 11.49:1 */
 
-  /* Glassmorphism surfaces (warm-tinted floating panels) */
-  --glass-bg: rgba(255, 255, 255, 0.66);
-  --glass-bg-strong: rgba(255, 255, 255, 0.84);
-  --glass-border: rgba(24, 26, 27, 0.08);
+  /* Semantic status — colour is never the only signal; each pairs with an icon */
+  --color-success-bg: #bafca2;
+  --color-success-text: #0a0a0a;
+  --color-success-border: #0a0a0a;
+  --color-success-dot: #00c853;
+
+  --color-error-bg: #ffc0cb;
+  --color-error-text: #0a0a0a;
+  --color-error-border: #0a0a0a;
+  --color-error-dot: #ff3ea5;
+
+  --color-warning-bg: #ffdb58;
+  --color-warning-text: #0a0a0a;
+
+  /*
+   * Hard shadows — flat colour, zero blur, zero spread. The three sizes are
+   * the whole vocabulary: raised, resting, and pressed-flat.
+   * `--nb-shadow-none` is the pressed state (offset consumed).
+   */
+  --nb-shadow-sm: 3px 3px 0 var(--nb-shadow-color);
+  --nb-shadow: 5px 5px 0 var(--nb-shadow-color);
+  --nb-shadow-lg: 8px 8px 0 var(--nb-shadow-color);
+  --nb-shadow-none: 0 0 0 var(--nb-shadow-color);
+
+  /* Borders — there is only one border colour. Weight is the variable. */
+  --border-subtle: #0a0a0a;
+  --border-default: #0a0a0a;
+  --border-strong: #0a0a0a;
+
+  /* Radii — 4px is the hard ceiling on structural elements. */
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 4px;
+  --radius-xl: 4px;
+  --radius-pill: 4px;
 }
 
 /* ---------------------------------------------------------------------------
- * Dark theme — "Obsidian & Verdigris". OLED-friendly charcoal with a 1% blue
- * shift (#131516, not a muddy brown), carbon all-surfaces, warm plaster-white
- * ink, and Verdigris → Soft Ember accents.
+ * Dark theme — flat inversion. Black canvas, white structural lines. The
+ * accent set is unchanged; only the ink/paper/shadow roles swap.
  * ------------------------------------------------------------------------- */
-[data-theme="dark"] {
+[data-theme='dark'] {
   color-scheme: dark;
 
-  --bg-paper-50: #101214;
-  --bg-paper-100: #131516;  /* Canvas: deep charcoal, 1% blue shift */
-  --bg-paper: #131516;
-  --bg-surface: #1c1f22;    /* Card surface: elevated dark grey */
-  --bg-subtle: #171a1c;
-  --bg-muted: #23272a;
-  --bg-dark-sidebar: #e8e6e1; /* User bubble — warm parchment (inverted for contrast) */
-  --bg-dark-sidebar-subtle: #23272b;
-  --bg-dark-sidebar-hover: #2e3338;
+  --bg-paper: #0a0a0a;
+  --bg-surface: #141414;
+  --bg-subtle: #1e1e1e;
+  --bg-muted: #2a2a2a;
 
-  --ink-primary: #e8e6e1;  /* Warm plaster/parchment white — never pure white */
-  --ink-secondary: #c2c0ba;
-  --ink-muted: #8a8a86;
-  --ink-faint: #5b5d5f;
-  --ink-inverse: #131516;
+  --ink-primary: #fffef0;
+  --ink-secondary: #d4d2c4;
+  --ink-muted: #a3a199;
+  --ink-faint: #75736c;
+  --ink-inverse: #0a0a0a;
 
-  /* Accent 1 — Action/Links: Verdigris/Oxidized Teal */
-  --accent-brand-50: #0e1b22;
-  --accent-brand-100: #14262f;
-  --accent-brand-200: #1b3441;
-  --accent-brand-300: #23485a;
-  --accent-brand-400: #3d6e86;
-  --accent-brand-500: #6b9ead;
-  --accent-brand-600: #7faebe;
-  --accent-brand-700: #9abec9;
+  /* A black shadow on a black canvas is invisible — flip the structural colour. */
+  --nb-line: #fffef0;
+  --nb-shadow-color: #fffef0;
 
-  /* Mineral gradient endpoints (Accent 1 → Accent 2, theme-flipped) */
-  --accent-mineral-1: #6b9ead; /* Verdigris */
-  --accent-mineral-2: #d97757; /* Soft Ember */
-  --accent-mineral-3: #a9c6cf; /* Pale oxidized teal note */
+  --color-success-bg: #00c853;
+  --color-success-text: #0a0a0a;  /* black ink on every accent ground */
+  --color-success-border: #fffef0;
+  --color-success-dot: #bafca2;
 
-  --color-success-bg: #101a16;
-  --color-success-text: #86efac;
-  --color-success-border: #1f5635;
-  --color-success-dot: #4ade80;
+  --color-error-bg: #ff3ea5;
+  --color-error-text: #0a0a0a;
+  --color-error-border: #fffef0;
+  --color-error-dot: #ffc0cb;
 
-  --color-error-bg: #2a1014;
-  --color-error-text: #fca5a5;
-  --color-error-border: #7f1d1d;
-  --color-error-dot: #f87171;
+  --color-warning-bg: #ffdb58;
+  --color-warning-text: #0a0a0a;
 
-  --border-subtle: #1a1c1f;
-  --border-default: #262a2d;
-  --border-strong: #34383c;
-  --border-dark: #34383c;
+  /* Code palette on the black well. The vivid accents become legible here —
+     cyan 7.60:1, orange 5.88:1 — but purple inverts, dropping to 2.38:1, so
+     keyword and comment get their own lighter values rather than reusing the
+     light-theme ones (which would be unreadable in reverse). */
+  --code-comment: #9d9b91;  /* 5.98:1 */
+  --code-keyword: #b57ee8;  /* 5.65:1 */
+  --code-string: #00c2cb;   /* 7.60:1 */
+  --code-number: #ff6b35;   /* 5.88:1 */
+  --code-builtin: #d4d2c4;  /* 10.97:1 */
 
-  --shadow-subtle: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
-  --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.45), 0 1px 2px -1px rgba(0, 0, 0, 0.4);
-  --shadow-hover: 0 4px 12px -2px rgba(0, 0, 0, 0.5), 0 2px 4px -2px rgba(0, 0, 0, 0.45);
-  --shadow-float: 0 12px 28px -4px rgba(0, 0, 0, 0.6), 0 4px 8px -2px rgba(0, 0, 0, 0.5);
+  /* Pastel grounds stay theme-invariant. They used to swap to the vivid accent
+     values in dark mode, on the theory that near-white pastels would "blow out"
+     against a black canvas. Measured, that swap is what actually breaks the dark
+     theme: five of the six land between 1.25:1 and 3.19:1 against the ink that
+     sits on them, because the ink on a coloured ground is fixed black. Keeping
+     the pastels as-is instead means --ink-on-accent clears 4.5:1 on every one of
+     them in BOTH themes (9.32:1 worst case), and a pastel tile ringed by a 3px
+     hard border reads as *more* defined on black, not less. */
 
-  /* Mineral glows (theme-flipped) */
-  --glow-mineral: 0 0 24px -4px rgba(107, 158, 173, 0.5);
-  --glow-ember: 0 0 24px -4px rgba(217, 119, 87, 0.5);
-  --glow-aurora: 0 0 32px -6px rgba(107, 158, 173, 0.45), 0 0 32px -6px rgba(217, 119, 87, 0.35);
-
-  /* Aurora mesh at full strength on the dark canvas */
-  --aurora-mesh:
-    radial-gradient(60% 70% at 15% 10%, rgba(107, 158, 173, 0.2) 0%, transparent 60%),
-    radial-gradient(50% 60% at 85% 15%, rgba(217, 119, 87, 0.16) 0%, transparent 60%),
-    radial-gradient(70% 60% at 50% 100%, rgba(169, 198, 207, 0.1) 0%, transparent 55%);
-
-  /* Glassmorphism surfaces (obsidian frosted panels) */
-  --glass-bg: rgba(19, 21, 22, 0.62);
-  --glass-bg-strong: rgba(28, 31, 34, 0.84);
-  --glass-border: rgba(232, 230, 225, 0.08);
+  /* .nb-card-dark inverts in dark theme (near-white ground), so its secondary
+     ink has to invert too: 7.58:1. */
+  --ink-on-inverse-muted: #55534d;
 }
+

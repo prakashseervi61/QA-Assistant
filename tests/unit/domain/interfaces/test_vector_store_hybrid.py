@@ -45,7 +45,7 @@ class TestVectorStoreHybridSearch:
         mock_client_cls.return_value = mock_client
 
         store = ChromaStore(persist_directory="/tmp/test")
-        result = store._hybrid_search_sync(
+        result = store._query_sync(
             query_embedding=[0.1, 0.2],
             query_text="test query",
             k=3,
@@ -71,7 +71,7 @@ class TestVectorStoreHybridSearch:
         mock_client_cls.return_value = mock_client
 
         store = ChromaStore(persist_directory="/tmp/test")
-        result = store._hybrid_search_sync(
+        result = store._query_sync(
             query_embedding=[0.1], query_text="q", k=5, collection_name="c"
         )
         assert result == []
@@ -95,7 +95,7 @@ class TestVectorStoreHybridSearch:
         mock_client_cls.return_value = mock_client
 
         store = ChromaStore(persist_directory="/tmp/test")
-        store._hybrid_search_sync(
+        store._query_sync(
             query_embedding=[0.1], query_text="", k=3, collection_name="c"
         )
         call_kwargs = mock_collection.query.call_args[1]
@@ -122,7 +122,7 @@ class TestVectorStoreHybridSearch:
         mock_client_cls.return_value = mock_client
 
         store = ChromaStore(persist_directory="/tmp/test")
-        store._hybrid_search_sync(
+        store._query_sync(
             query_embedding=[0.1], query_text="   ", k=3, collection_name="c"
         )
         call_kwargs = mock_collection.query.call_args[1]
@@ -140,7 +140,7 @@ class TestVectorStoreHybridSearch:
         mock_client_cls.return_value = mock_client
 
         store = ChromaStore(persist_directory="/tmp/test")
-        result = store._hybrid_search_sync(
+        result = store._query_sync(
             query_embedding=[0.1], query_text="q", k=3, collection_name="c"
         )
         assert result == []
@@ -169,7 +169,7 @@ class TestVectorStoreHybridSearch:
         mock_client_cls.return_value = mock_client
 
         store = ChromaStore(persist_directory="/tmp/test")
-        result = store._hybrid_search_sync(
+        result = store._query_sync(
             query_embedding=[0.1, 0.2],
             query_text="test query",
             k=5,
@@ -202,7 +202,7 @@ class TestVectorStoreHybridSearch:
         mock_client_cls.return_value = mock_client
 
         store = ChromaStore(persist_directory="/tmp/test")
-        result = store._hybrid_search_sync(
+        result = store._query_sync(
             query_embedding=[0.1], query_text="q", k=3, collection_name="c"
         )
         assert result == []

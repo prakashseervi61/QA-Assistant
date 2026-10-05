@@ -2,16 +2,25 @@
 
 import logging
 
-from src.application.services.rag_engine import RAGEngine
-from src.infrastructure.llm.prompt_registry import PROMPT_VERSIONS, get_prompt
+from src.infrastructure.llm.prompt_registry import (
+    DEFAULT_PROMPT_VERSION,
+    PROMPT_VERSIONS,
+    get_prompt,
+)
 
 
 class TestPromptVersions:
     """PROMPT_VERSIONS content and get_prompt behaviour."""
 
-    def test_v1_is_byte_identical_to_current_engine_template(self):
-        """v1 must be the current system prompt verbatim (no behavior change)."""
-        assert PROMPT_VERSIONS["v1"] == RAGEngine.PROMPT_TEMPLATE
+    def test_v1_is_the_default_template(self):
+        """The default version must resolve to the v1 template.
+
+        Replaces a tautological test that compared v1 against
+        ``RAGEngine.PROMPT_TEMPLATE`` — an alias that was itself defined as
+        ``PROMPT_VERSIONS["v1"]``, so it could never fail. This asserts the
+        property that actually matters: v1 is what ships by default.
+        """
+        assert get_prompt(DEFAULT_PROMPT_VERSION) == PROMPT_VERSIONS["v1"]
 
     def test_returns_v1_template(self):
         assert get_prompt("v1") == PROMPT_VERSIONS["v1"]

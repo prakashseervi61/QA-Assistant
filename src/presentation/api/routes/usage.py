@@ -10,7 +10,10 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# Module-level tracker singleton (wired in app.py via dependency)
+# Module-level tracker singleton (wired in app.py via dependency).
+# ponytail: deliberately not a Registry — unlike the use cases, this getter
+# fabricates a fresh tracker instead of raising 503, because usage totals are
+# optional and a missing tracker must not fail the request.
 _tracker: TokenTracker | None = None
 
 
