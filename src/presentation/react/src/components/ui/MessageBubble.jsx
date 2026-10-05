@@ -1,7 +1,8 @@
 import { motion } from 'framer-motion';
-import { AlertCircle, User } from 'lucide-react';
+import { AlertCircle, ShieldAlert, User } from 'lucide-react';
 import { getSourceTitle } from '../utils/getSourceTitle';
 import CitationPill from './CitationPill';
+import ConfidenceSignal, { LOW_CONFIDENCE_THRESHOLD } from './ConfidenceSignal';
 
 /**
  * MessageBubble — a single chat message.
@@ -14,11 +15,16 @@ export default function MessageBubble({
   role = 'assistant',
   content = '',
   sources = [],
+  confidence = null,
   isStreaming = false,
   error = false,
   showCitation = true,
 }) {
   const isUser = role === 'user';
+  const isLowConfidence =
+    typeof confidence === 'number' &&
+    !Number.isNaN(confidence) &&
+    confidence < LOW_CONFIDENCE_THRESHOLD;
 
   return (
     <motion.div
@@ -43,23 +49,37 @@ export default function MessageBubble({
               Something went wrong while answering. Please try again.
             </p>
           )}
+          {isLowConfidence && !error && (
+            <p className="mb-2 flex items-start gap-2 text-xs font-medium text-error-text">
+              <ShieldAlert className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              <span>
+                The cited passages only weakly match your question. Check the
+                sources before relying on this answer.
+              </span>
+            </p>
+          )}
           <div className="whitespace-pre-wrap break-words text-[15px] leading-relaxed text-ink-primary">
             {content}
             {isStreaming && <span className="caret" aria-label="Streaming" />}
           </div>
-          {showCitation && sources.length > 0 && (
+          {!isStreaming && (showCitation || confidence !== null) && (
             <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border-strong pt-2.5">
-              <span className="text-xs font-medium tracking-wide text-ink-faint uppercase">
-                Sources
-              </span>
-              {sources.map((source, index) => (
-                <CitationPill
-                  key={source.id || index}
-                  index={index}
-                  title={getSourceTitle(source, index)}
-                  source={source}
-                />
-              ))}
+              {showCitation && sources.length > 0 && (
+                <>
+                  <span className="text-xs font-medium tracking-wide text-ink-faint uppercase">
+                    Sources
+                  </span>
+                  {sources.map((source, index) => (
+                    <CitationPill
+                      key={source.id || index}
+                      index={index}
+                      title={getSourceTitle(source, index)}
+                      source={source}
+                    />
+                  ))}
+                </>
+              )}
+              <ConfidenceSignal confidence={confidence} />
             </div>
           )}
         </div>

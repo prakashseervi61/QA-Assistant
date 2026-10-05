@@ -32,7 +32,9 @@ export default function TopNav({ isDark, onToggleTheme, onOpenPalette }) {
         >
           <Search className="h-4 w-4 shrink-0 text-ink-faint transition-colors group-hover:text-brand-600" aria-hidden="true" />
           <span className="flex-1 truncate text-left">Search commands…</span>
-          <kbd className="rounded-md border border-border bg-paper-200 px-1.5 py-0.5 font-mono text-[10px] text-ink-faint">
+          {/* A ⌘K hint is meaningless without a keyboard, and on mobile this
+              control is not the way to navigate — the dock is. */}
+          <kbd className="hidden rounded-md border border-border bg-paper-200 px-1.5 py-0.5 font-mono text-[10px] text-ink-faint sm:inline">
             ⌘K
           </kbd>
         </button>

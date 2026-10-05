@@ -133,7 +133,8 @@ export default function App() {
     }
   }, [location.pathname]);
 
-  const pagePad = 'p-4 sm:p-6 lg:px-24 lg:py-8';
+  // pb-20 clears the mobile bottom nav bar; the dock is a left rail on lg.
+  const pagePad = 'p-4 pb-24 sm:p-6 sm:pb-24 lg:px-24 lg:py-8 lg:pb-8';
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-paper">

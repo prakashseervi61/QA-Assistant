@@ -94,6 +94,24 @@ describe('MessageBubble', () => {
   it('renders an error callout when error is set', () => {
     expect(render(<MessageBubble role="assistant" error />)).toContain('Something went wrong');
   });
+
+  it('shows the confidence the backend computed', () => {
+    const out = render(<MessageBubble role="assistant" content="A" confidence={0.82} />);
+    expect(out).toContain('Confidence');
+    expect(out).toContain('82%');
+  });
+
+  it('flags a weakly grounded answer as low confidence', () => {
+    const out = render(<MessageBubble role="assistant" content="A" confidence={0.2} />);
+    expect(out).toContain('Low confidence');
+    expect(out).toContain('20%');
+  });
+
+  it('omits the confidence chip when no score is available', () => {
+    // Older messages loaded from history carry no stored score.
+    const out = render(<MessageBubble role="assistant" content="A" />);
+    expect(out).not.toContain('Confidence');
+  });
 });
 
 describe('getSourceTitle', () => {

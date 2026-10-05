@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, ChevronDown, FileText, Loader2, MessageSquare, Paperclip, Send, Sparkles, Square } from 'lucide-react';
+import { Check, ChevronDown, FileText, Loader2, MessageSquare, Paperclip, Send, ShieldAlert, Sparkles, Square } from 'lucide-react';
 import { fetchJSON, postFormData, streamChat } from '../api';
 import Markdown from './Markdown';
-import { WaveformOrb } from './ui';
+import { ConfidenceSignal, WaveformOrb } from './ui';
+import { LOW_CONFIDENCE_THRESHOLD } from './ui/ConfidenceSignal';
 
 const SUGGESTIONS = [
   'Summarize the key points of my documents',
@@ -478,6 +479,15 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
                 setConversationId(event.conversation_id);
                 refreshConversations();
               }
+              // Keep the confidence the backend computed so the answer can
+              // show how strongly it is grounded instead of looking equally
+              // trustworthy no matter how weak the citations were.
+              if (typeof event.confidence === 'number') {
+                updateMessageById(botId, msg => ({
+                  ...msg,
+                  confidence: event.confidence,
+                }));
+              }
               if (event.sources?.length > 0) {
                 updateMessageById(botId, msg => ({ ...msg, sources: event.sources }));
               }
@@ -606,10 +616,14 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
             </div>
           )
         ) : (
-          <div role="log" aria-live="polite" className="mx-auto w-full max-w-4xl space-y-5 px-4 py-6 sm:px-8">
+          <div role="log" aria-live="polite" className="mx-auto w-full max-w-4xl space-y-5 px-4 py-6 pb-24 sm:px-8 lg:pb-6">
             {messages.map((msg, msgIndex) => {
               const isUser = msg.role === 'user';
               const showInlineSources = !isUser && msg.sources?.length > 0 && !loading;
+              const isLowConfidence =
+                !isUser &&
+                typeof msg.confidence === 'number' &&
+                msg.confidence < LOW_CONFIDENCE_THRESHOLD;
               return (
                 <div key={msg.id} className={`flex items-start gap-2.5 ${isUser ? 'justify-end' : 'justify-start'}`}>
                   {!isUser && (
@@ -668,10 +682,26 @@ export default function ChatWidget({ conversationId: initialConversationId = nul
                         <p className="whitespace-pre-wrap">{msg.content}</p>
                       ) : msg.content ? (
                         <>
+                          {isLowConfidence && (
+                            <p className="mb-2.5 flex items-start gap-1.5 rounded-lg border border-error-border bg-error-bg px-2.5 py-1.5 text-xs font-medium text-error-text">
+                              <ShieldAlert className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                              <span>
+                                The cited passages only weakly match your
+                                question — check the sources before relying on
+                                this answer.
+                              </span>
+                            </p>
+                          )}
                           <Markdown content={msg.content} />
                           {!isUser && loading && <span className="caret" aria-hidden="true" />}
                         </>
                       ) : null
+                    )}
+
+                    {!isUser && !loading && typeof msg.confidence === 'number' && !msg.error && (
+                      <div className="mt-2.5 flex justify-end border-t border-border-strong pt-2">
+                        <ConfidenceSignal confidence={msg.confidence} />
+                      </div>
                     )}
 
                     {showInlineSources && (
