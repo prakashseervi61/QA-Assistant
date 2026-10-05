@@ -175,11 +175,19 @@ async def query_documents(
     except ConversationNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
     except LLMQuotaExceededError as exc:
+        # Quota guidance is genuinely useful to the local user, and the API is
+        # bound to loopback, so this text never leaves the machine.
         logger.warning("LLM quota exceeded: %s", exc)
         raise HTTPException(status_code=429, detail=str(exc))
-    except QueryDocumentError as exc:
-        logger.error("Query failed: %s", exc)
-        raise HTTPException(status_code=500, detail=str(exc))
+    except QueryDocumentError:
+        # QueryDocumentError already wraps a low-level provider/vector-store
+        # message, which can carry absolute paths or SDK internals. Log the
+        # detail, return something stable.
+        logger.error("Query failed", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="The query could not be completed. See the server logs.",
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -200,13 +208,20 @@ async def _stream_events(
             metadata_filter=request.metadata_filter,
         ):
             yield f"data: {json.dumps(event)}\n\n"
-    except (
-        QueryDocumentError,
-        ValueError,
-        ConversationNotFoundError,
-        LLMQuotaExceededError,
-    ) as exc:
+    except (ValueError, ConversationNotFoundError, LLMQuotaExceededError) as exc:
+        # Validation and quota text is safe (and useful) to show the user.
         error_event = {"type": "error", "message": str(exc)}
+        yield f"data: {json.dumps(error_event)}\n\n"
+    except QueryDocumentError:
+        # Wraps a provider/vector-store message that may carry absolute paths
+        # or SDK internals — log it, send something stable.
+        logger.error("Streaming query failed", exc_info=True)
+        error_event = {
+            "type": "error",
+            "message": (
+                "The query could not be completed. See the server logs."
+            ),
+        }
         yield f"data: {json.dumps(error_event)}\n\n"
     finally:
         yield "data: [DONE]\n\n"

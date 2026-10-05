@@ -52,8 +52,13 @@ class HuggingFaceEmbeddingProvider(EmbeddingProvider):
             logger.info("Loading HuggingFace model: %s", self._model_name)
             self._model = SentenceTransformer(self._model_name)
 
-            # Update dimension from the actual model if available
-            actual_dim = self._model.get_sentence_embedding_dimension()
+            # Update dimension from the actual model if available.
+            # sentence-transformers renamed this to get_embedding_dimension();
+            # fall back to the old name so either version works.
+            getter = getattr(self._model, "get_embedding_dimension", None)
+            if getter is None:
+                getter = self._model.get_sentence_embedding_dimension
+            actual_dim = getter()
             if actual_dim:
                 self._dimension = actual_dim
 

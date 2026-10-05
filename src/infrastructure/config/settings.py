@@ -65,7 +65,9 @@ class Settings(BaseSettings):
     ALLOWED_EXTENSIONS: list[str] = [".pdf", ".docx", ".txt"]
 
     # API
-    API_HOST: str = "0.0.0.0"
+    # Loopback by default: the API holds every ingested document, so binding
+    # it to all interfaces would expose the corpus to the whole LAN.
+    API_HOST: str = "127.0.0.1"
     API_PORT: int = 8000
     CORS_ORIGINS: list[str] = ["http://localhost:3000"]
 

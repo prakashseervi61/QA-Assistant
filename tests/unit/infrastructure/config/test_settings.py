@@ -32,7 +32,7 @@ class TestSettingsDefaults:
         assert Settings().MAX_FILE_SIZE_MB == 50
 
     def test_api_host_default(self):
-        assert Settings().API_HOST == "0.0.0.0"
+        assert Settings().API_HOST == "127.0.0.1"
 
     def test_api_port_default(self):
         assert Settings().API_PORT == 8000

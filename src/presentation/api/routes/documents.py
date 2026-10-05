@@ -65,8 +65,48 @@ async def upload_document(file: UploadFile = File(...)) -> IngestResponse:
             ),
         )
 
+    # Reject an oversized upload before reading it. Starlette spools the body to
+    # a temp file with no upper bound, and `await file.read()` would pull the
+    # whole thing into memory — so an unbounded read here is a trivial way to
+    # exhaust RAM (and then the parser gets to decompress it: DOCX is a zip).
+    settings = get_settings()
+    max_bytes = settings.MAX_FILE_SIZE_MB * 1024 * 1024
+
+    # Trust the declared length when the client provides one, but do not rely on
+    # it: a chunked request can omit Content-Length, so the real guard is the
+    # byte counter in the loop below.
+    if file.size is not None and file.size > max_bytes:
+        await file.close()
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                f"File is too large. Maximum size is {settings.MAX_FILE_SIZE_MB} MB."
+            ),
+        )
+
+    # Read in bounded chunks and abort as soon as the cap is passed, so we never
+    # buffer more than the limit regardless of what the client claims.
+    buffer = bytearray()
+    read_chunk = 1024 * 1024
+    while True:
+        chunk = await file.read(read_chunk)
+        if not chunk:
+            break
+        buffer.extend(chunk)
+        if len(buffer) > max_bytes:
+            await file.close()
+            raise HTTPException(
+                status_code=413,
+                detail=(
+                    f"File is too large. Maximum size is "
+                    f"{settings.MAX_FILE_SIZE_MB} MB."
+                ),
+            )
+
+    content = bytes(buffer)
+    await file.close()
+
     try:
-        content = await file.read()
         if not content:
             raise HTTPException(status_code=400, detail="Empty file.")
 
@@ -85,7 +125,6 @@ async def upload_document(file: UploadFile = File(...)) -> IngestResponse:
         from src.infrastructure.document_processing.text_splitter import TextSplitter
 
         vector_store, embedding_provider = _get_dependencies()
-        settings = get_settings()
 
         if settings.ENABLE_PARENT_CHILD:
             text_splitter = ParentChildSplitter(
@@ -128,7 +167,9 @@ async def upload_document(file: UploadFile = File(...)) -> IngestResponse:
         raise
     except Exception as exc:
         logger.error("Upload failed for '%s': %s", file.filename, exc, exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Ingestion failed: {exc}")
+        raise HTTPException(
+            status_code=500, detail="Ingestion failed."
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -146,7 +187,9 @@ async def list_documents() -> DocumentListResponse:
         docs = await vector_store.list_documents(settings.CHROMA_COLLECTION_NAME)
     except Exception as exc:
         logger.error("Failed to list documents: %s", exc, exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to list documents: {exc}")
+        raise HTTPException(
+            status_code=500, detail="Failed to list documents."
+        )
 
     documents = [
         DocumentInfo(
@@ -199,6 +242,8 @@ async def delete_document(document_id: str) -> dict:
         logger.error(
             "Failed to delete document %s: %s", document_id, exc, exc_info=True
         )
-        raise HTTPException(status_code=500, detail=f"Failed to delete document: {exc}")
+        raise HTTPException(
+            status_code=500, detail="Failed to delete document."
+        )
 
     return {"message": f"Document {document_id} deleted successfully."}

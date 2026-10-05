@@ -40,7 +40,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$ErrorActionPreference='Stop';" ^
   "Remove-Item '%RUN_DIR%\api.pid' -Force -ErrorAction SilentlyContinue;" ^
   "Remove-Item '%RUN_DIR%\web.pid' -Force -ErrorAction SilentlyContinue;" ^
-  "$uvicornArgs = @('src.presentation.api.app:create_app','--factory','--host','0.0.0.0','--port','%API_PORT%');" ^
+  "$uvicornArgs = @('src.presentation.api.app:create_app','--factory','--host','127.0.0.1','--port','%API_PORT%');" ^
   "$uvicorn = Get-Command uvicorn -ErrorAction SilentlyContinue;" ^
   "if ($uvicorn) { $exe = $uvicorn.Source; $argList = $uvicornArgs }" ^
   "else { $exe = (Get-Command python -ErrorAction Stop).Source; $argList = @('-m','uvicorn') + $uvicornArgs };" ^

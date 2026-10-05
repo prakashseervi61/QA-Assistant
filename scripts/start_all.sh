@@ -47,7 +47,7 @@ echo "Starting API  (port $API_PORT)..."
 cd "$PROJECT_ROOT"
 nohup "${UVICORN_CMD[@]}" \
     src.presentation.api.app:create_app \
-    --factory --host 0.0.0.0 --port "$API_PORT" \
+    --factory --host 127.0.0.1 --port "$API_PORT" \
     >"$LOG_DIR/api.out.log" 2>"$LOG_DIR/api.err.log" &
 echo "$!" >"$RUN_DIR/api.pid"
 
