@@ -66,7 +66,6 @@ class TestUploadDocumentSizeLimit:
         settings = mock_get_settings.return_value
         settings.ENABLE_PARENT_CHILD = False
         settings.ENABLE_SEMANTIC_CHUNKING = False
-        settings.ENABLE_CHUNK_ENRICHMENT = False
 
         mock_uc = mock_use_case_cls.return_value
         mock_uc.execute = AsyncMock(
@@ -95,49 +94,6 @@ class TestUploadDocumentSplitterSelection:
     @patch("src.application.use_cases.ingest_document.IngestDocumentUseCase")
     @patch("src.presentation.api.routes.documents._get_dependencies")
     @patch("src.presentation.api.routes.documents.get_settings")
-    async def test_upload_constructs_parent_child_splitter_when_enabled(
-        self, mock_get_settings, mock_get_deps, mock_use_case_cls
-    ):
-        """C2: documents.py builds a ParentChildSplitter when the flag is on."""
-        from src.infrastructure.document_processing.parent_child_splitter import (
-            ParentChildSplitter,
-        )
-
-        settings = MagicMock()
-        settings.MAX_FILE_SIZE_MB = 50
-        settings.ENABLE_PARENT_CHILD = True
-        settings.PARENT_CHUNK_SIZE = 1500
-        settings.CHILD_CHUNK_SIZE = 300
-        settings.CHILD_CHUNK_OVERLAP = 75
-        settings.ENABLE_SEMANTIC_CHUNKING = False
-        settings.ENABLE_CHUNK_ENRICHMENT = False
-        mock_get_settings.return_value = settings
-        mock_get_deps.return_value = (AsyncMock(), AsyncMock())
-
-        mock_uc = mock_use_case_cls.return_value
-        mock_uc.execute = AsyncMock(
-            return_value={
-                "document_id": "abc",
-                "filename": "test.pdf",
-                "chunk_count": 3,
-                "message": "ok",
-            }
-        )
-
-        response = await documents_router.upload_document(self._make_file())
-
-        _, kwargs = mock_use_case_cls.call_args
-        splitter = kwargs["text_splitter"]
-        assert isinstance(splitter, ParentChildSplitter)
-        assert splitter.parent_chunk_size == 1500
-        assert splitter.child_chunk_size == 300
-        assert splitter.child_overlap == 75
-        assert response.document_id == "abc"
-
-    @pytest.mark.asyncio
-    @patch("src.application.use_cases.ingest_document.IngestDocumentUseCase")
-    @patch("src.presentation.api.routes.documents._get_dependencies")
-    @patch("src.presentation.api.routes.documents.get_settings")
     async def test_upload_uses_text_splitter_when_parent_child_disabled(
         self, mock_get_settings, mock_get_deps, mock_use_case_cls
     ):
@@ -148,7 +104,6 @@ class TestUploadDocumentSplitterSelection:
         settings.MAX_FILE_SIZE_MB = 50
         settings.ENABLE_PARENT_CHILD = False
         settings.ENABLE_SEMANTIC_CHUNKING = False
-        settings.ENABLE_CHUNK_ENRICHMENT = False
         mock_get_settings.return_value = settings
         mock_get_deps.return_value = (AsyncMock(), AsyncMock())
 

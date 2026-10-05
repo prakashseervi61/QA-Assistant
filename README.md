@@ -12,9 +12,9 @@ A production-grade **Retrieval-Augmented Generation (RAG)** question-answering a
 
 - **Multi-format ingestion** — PDF (PyMuPDF with PyPDF2 fallback), DOCX, and TXT
 - **Full RAG pipeline** — embed → retrieve → rerank → generate, with citations and confidence
-- **4 LLM providers** — Gemini, OpenAI, Anthropic, DeepSeek (OpenAI-compatible) via a single config line
-- **3 embedding providers** — Gemini, OpenAI, and local HuggingFace (no API key, free)
-- **Advanced retrieval (opt-in)** — hybrid search, query rewriting with Reciprocal Rank Fusion (RRF), BGE cross-encoder reranking, parent-child retrieval, semantic chunking, and chunk enrichment
+- **One LLM provider** — Gemini. ponytail: the factory was a switch over four; only Gemini is wired up, so the switch is gone. Re-add it when a second provider is genuinely in use.
+- **One embedding provider** — local HuggingFace sentence-transformers (no API key, no data leaves the machine)
+- **Retrieval** — hybrid search (opt-in), BGE cross-encoder reranking (on), semantic chunking (on), guardrails (on, flag-only)
 - **Streaming answers** — Server-Sent Events endpoint for token-by-token output
 - **Conversations** — multi-turn history, persistable to PostgreSQL, restorable from the UI
 - **Safety & ops (opt-in)** — JWT authentication, per-IP rate limiting, PII / prompt-injection / hallucination guardrails, token-usage tracking, and OpenTelemetry tracing
@@ -37,7 +37,7 @@ A production-grade **Retrieval-Augmented Generation (RAG)** question-answering a
 ┌───────────────────────────────▼────────────────────────────────┐
 │                         RAGEngine                               │
 │  guardrails → query rewrite → embed → hybrid/vector search →   │
-│  parent-child expand → rerank → prompt (versioned) → LLM        │
+│  rerank → prompt (versioned) → LLM                              │
 └───────┬───────────────┬────────────────┬───────────────────────┘
         │               │                │
 ┌───────▼──────┐ ┌──────▼───────┐ ┌──────▼───────────────────────┐
@@ -58,14 +58,11 @@ A production-grade **Retrieval-Augmented Generation (RAG)** question-answering a
 - **Chunking strategies** (pick one via config):
   - **Fixed-size** (`TextSplitter`) — sentence-boundary-aware, default `CHUNK_SIZE=1000`, `CHUNK_OVERLAP=200`.
   - **Semantic chunking** (`ENABLE_SEMANTIC_CHUNKING`) — splits on embedding-similarity dips.
-  - **Parent-child** (`ENABLE_PARENT_CHILD`) — retrieves small child chunks, expands them to their larger parents for the LLM prompt.
-- **Chunk enrichment** (`ENABLE_CHUNK_ENRICHMENT`) — adds extracted keywords and (optionally, `ENABLE_CHUNK_ENRICHMENT_SUMMARIES`) summaries to chunk metadata.
 - **Incremental ingestion** (`ENABLE_INCREMENTAL_INGESTION`) — re-uploading a byte-identical file (same SHA-256 content hash) is detected as a duplicate and skipped without re-parsing/embedding.
 
 ### Retrieval & generation
 
 - **Hybrid search** (`ENABLE_HYBRID_SEARCH`) — combines dense vector similarity with BM25 keyword search.
-- **Query rewriting** (`ENABLE_QUERY_REWRITING`) — the LLM generates diverse query variants; results are fused with **Reciprocal Rank Fusion** (RRF). HyDE embeddings are implemented (see `query_rewriter.py`) but not yet wired into the query path.
 - **Reranking** (`ENABLE_RERANKING`) — `BAAI/bge-reranker-v2-m3` cross-encoder re-scores retrieved chunks.
 - **Versioned prompts** (`PROMPT_VERSION`) — system prompts live in a registry; unknown versions fall back to `v1` with a logged warning.
 - **Structured output** — an engine-level option (`use_structured_output=True` on `RAGEngine.query`) returns a JSON answer with per-chunk citations. Not exposed via an env var yet because the chat API contract does not carry the citations field end-to-end.
@@ -74,10 +71,7 @@ A production-grade **Retrieval-Augmented Generation (RAG)** question-answering a
 ### Safety & observability (all opt-in)
 
 - **Guardrails** (`ENABLE_GUARDRAILS`) — regex-based PII detection (email, phone, SSN, credit card, IP), prompt-injection detection, and a groundedness (hallucination) heuristic. Flag-only by default; block with `GUARDRAIL_BLOCK_VIOLATIONS`.
-- **Authentication** (`ENABLE_AUTH`) — HMAC-SHA256 JWT-shaped tokens (stdlib only, no third-party lib), an API-key → token endpoint, and PBKDF2 password hashing helpers.
-- **Rate limiting** (`ENABLE_RATE_LIMITING`) — in-memory sliding window per client IP.
 - **Usage tracking** (`ENABLE_USAGE_TRACKING`, default on) — records per-call LLM token usage and estimated cost; exposed via `GET /api/usage`.
-- **Tracing** (`ENABLE_TRACING`) — OpenTelemetry spans (retrieval, rerank, generation) exported to Phoenix or any OTLP endpoint.
 
 ---
 
@@ -160,7 +154,6 @@ docker compose up --build
 |---|---|---|
 | API (uvicorn) | 8000 | Boots the `create_app` factory; healthcheck on `/api/health` |
 | Frontend (nginx) | 3000 | Serves the built React app; `proxy_buffering off` keeps SSE flowing |
-| Phoenix (tracing) | 6006 | Optional OTLP trace collector (`ENABLE_TRACING=true`) |
 
 - ChromaDB persists in the `chroma_data` volume (mounted at `/data/chroma`).
 - `.env` values are passed to the API container via `environment` (`LLM_PROVIDER`, `GEMINI_API_KEY`, `EMBEDDING_PROVIDER`, chunking settings, tracing settings). Set `GEMINI_API_KEY` before `compose up`.
@@ -177,18 +170,10 @@ All settings load from `.env` or environment variables via `pydantic-settings` (
 | `APP_NAME` | `Marginalia` | FastAPI app title |
 | `DEBUG` | `false` | Reserved — enable debug mode |
 | `LOG_LEVEL` | `INFO` | Reserved — logging level |
-| `LLM_PROVIDER` | `gemini` | `gemini`, `openai`, `anthropic`, `deepseek` |
+| `LLM_PROVIDER` | `gemini` | `gemini` (only) |
 | `GEMINI_API_KEY` | `""` | Required when using Gemini |
 | `GEMINI_MODEL` | `gemini-2.5-flash` | |
-| `OPENAI_API_KEY` | `""` | Required when using OpenAI |
-| `OPENAI_MODEL` | `gpt-4o` | |
-| `ANTHROPIC_API_KEY` | `""` | Required when using Anthropic |
-| `ANTHROPIC_MODEL` | `claude-sonnet-4-20250514` | |
-| `DEEPSEEK_API_KEY` | `""` | Required when using DeepSeek |
-| `DEEPSEEK_MODEL` | `deepseek-v4-flash` | |
-| `EMBEDDING_PROVIDER` | `huggingface` | `gemini`, `openai`, `huggingface` (local, free) |
-| `GEMINI_EMBEDDING_MODEL` | `text-embedding-004` | |
-| `OPENAI_EMBEDDING_MODEL` | `text-embedding-3-small` | |
+| `EMBEDDING_PROVIDER` | `huggingface` | `huggingface` (only, local, free) |
 | `HUGGINGFACE_MODEL` | `all-MiniLM-L6-v2` | Local model, downloaded on first use |
 | `CHROMA_PERSIST_DIR` | `./data/chroma` | ChromaDB storage directory |
 | `CHROMA_COLLECTION_NAME` | `documents` | ChromaDB collection name |
@@ -199,7 +184,6 @@ All settings load from `.env` or environment variables via `pydantic-settings` (
 | `API_HOST` | `127.0.0.1` | Loopback by default — the API serves every ingested document, so it is not exposed to the LAN unless you deliberately change this |
 | `API_PORT` | `8000` | Reserved — uvicorn launched with explicit port |
 | `CORS_ORIGINS` | `["http://localhost:3000"]` | Allowed CORS origins (JSON list) |
-| `DATABASE_URL` | `None` | PostgreSQL URL for conversations (requires `pip install -e ".[postgres]"`); unset = local SQLite history at `HISTORY_DB_PATH` |
 
 ### Advanced RAG (feature flags)
 
@@ -208,19 +192,10 @@ All settings load from `.env` or environment variables via `pydantic-settings` (
 | `ENABLE_RERANKING` | `false` | Re-score retrieved chunks with a BGE cross-encoder |
 | `RERANKER_MODEL` | `BAAI/bge-reranker-v2-m3` | |
 | `ENABLE_HYBRID_SEARCH` | `false` | Dense vector + BM25 keyword search |
-| `ENABLE_QUERY_REWRITING` | `false` | LLM multi-query variants fused with RRF |
-| `QUERY_REWRITING_VARIANTS` | `3` | Total queries (original + variants) |
-| `ENABLE_PARENT_CHILD` | `false` | Retrieve children, prompt with parents |
-| `PARENT_CHUNK_SIZE` | `2000` | |
-| `CHILD_CHUNK_SIZE` | `200` | |
-| `CHILD_CHUNK_OVERLAP` | `50` | |
 | `ENABLE_SEMANTIC_CHUNKING` | `false` | Split on embedding-similarity dips |
 | `SEMANTIC_SIMILARITY_THRESHOLD` | `0.5` | |
 | `SEMANTIC_MIN_CHUNK_SIZE` | `100` | |
 | `SEMANTIC_MAX_CHUNK_SIZE` | `2000` | |
-| `ENABLE_CHUNK_ENRICHMENT` | `false` | Extract keywords into chunk metadata |
-| `ENABLE_CHUNK_ENRICHMENT_SUMMARIES` | `false` | Also add LLM-generated summaries |
-| `CHUNK_ENRICHMENT_MAX_KEYWORDS` | `10` | |
 | `ENABLE_INCREMENTAL_INGESTION` | `false` | Skip byte-identical re-uploads (SHA-256 dedup) |
 | `PROMPT_VERSION` | `v1` | RAG system-prompt template version |
 
@@ -230,26 +205,14 @@ All settings load from `.env` or environment variables via `pydantic-settings` (
 
 | Variable | Default | Description |
 |---|---|---|
-| `ENABLE_AUTH` | `false` | Require a JWT bearer token on all routes except `/api/health` and `/api/auth/token` |
-| `SECRET_KEY` | `dev-secret-change-me` | HMAC signing key; **must** be overridden when `ENABLE_AUTH=true` (startup fails otherwise) |
-| `AUTH_API_KEY` | `""` | API key exchanged for a JWT via `POST /api/auth/token`; empty = endpoint rejects all keys |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | `60` | JWT lifetime |
-| `ENABLE_RATE_LIMITING` | `false` | Per-IP sliding-window rate limit (in-memory, resets on restart) |
-| `RATE_LIMIT_MAX_REQUESTS` | `60` | |
-| `RATE_LIMIT_WINDOW_SECONDS` | `60` | |
 | `ENABLE_GUARDRAILS` | `false` | PII + prompt-injection input checks, groundedness + PII-leak output checks |
 | `GUARDRAIL_BLOCK_VIOLATIONS` | `false` | Flag-only by default; set `true` to block flagged inputs before the LLM |
 | `GUARDRAIL_GROUNDEDNESS_THRESHOLD` | `0.2` | Below this score the output is flagged |
 | `ENABLE_USAGE_TRACKING` | `true` | Record LLM token usage & cost; exposes `GET /api/usage` |
-| `ENABLE_TRACING` | `false` | Emit OpenTelemetry spans to `TRACING_ENDPOINT` |
-| `TRACING_ENDPOINT` | `http://localhost:6006/v1/traces` | OTLP HTTP endpoint |
-| `TRACING_SERVICE_NAME` | `qa-assistant` | Service name reported to the trace backend |
 
 ### Optional dependency extras
 
 ```bash
-pip install -e ".[tracing]"    # OpenTelemetry (required for ENABLE_TRACING)
-pip install -e ".[postgres]"   # SQLAlchemy + asyncpg (required for DATABASE_URL)
 ```
 
 Tracing degrades gracefully: if enabled but the packages are missing, the app logs a warning and uses a no-op tracer.
@@ -258,12 +221,11 @@ Tracing degrades gracefully: if enabled but the packages are missing, the app lo
 
 ## API Reference
 
-All routes are served under the `/api` prefix. `/api/health` and `/api/auth/token` are public; everything else requires a valid JWT when `ENABLE_AUTH=true` and is subject to rate limiting when `ENABLE_RATE_LIMITING=true`.
+All routes are served under the `/api` prefix. The API binds **127.0.0.1** by default, so it is reachable only from this machine — that loopback boundary is the access control, which is why there is no auth layer. Set `API_HOST=0.0.0.0` only if you put your own auth in front of it.
 
 | Method | Endpoint | Description |
 |---|---|---|
 | `GET` | `/api/health` | Liveness/readiness probe |
-| `POST` | `/api/auth/token` | Exchange an API key for a JWT |
 | `POST` | `/api/documents/upload` | Upload & ingest a document (multipart field `file`) |
 | `GET` | `/api/documents` | List ingested documents |
 | `DELETE` | `/api/documents/{id}` | Delete a document and its chunks |
@@ -279,7 +241,6 @@ All routes are served under the `/api` prefix. `/api/health` and `/api/auth/toke
 { "status": "healthy", "version": "0.1.0", "vector_store": "initialized" }
 ```
 
-### `POST /api/auth/token`
 
 Request:
 
@@ -436,7 +397,7 @@ A responsive React SPA (Tailwind CSS). Every view has its own URL (`/`, `/docume
 ## Testing & Quality
 
 ```bash
-# All tests — 490 total (479 in tests/, 11 in eval/ — matches CI)
+# All tests — 339 total (328 in tests/, 11 in eval/ — matches CI)
 python -m pytest -q
 
 # Lint & formatting (exactly what CI enforces)
@@ -482,15 +443,15 @@ src/
 ├── infrastructure/          # Adapters & external implementations
 │   ├── config/              # Settings (pydantic-settings)
 │   ├── auth/                # JWT-shaped tokens (stdlib HMAC-SHA256)
-│   ├── llm/                 # Gemini, OpenAI, Anthropic, DeepSeek + prompt registry
-│   ├── embeddings/          # Gemini, OpenAI, HuggingFace factories
+│   ├── llm/                 # Gemini provider + prompt registry
+│   ├── embeddings/          # HuggingFace provider
 │   ├── document_processing/ # PDF/DOCX/TXT/Marker parsers, splitters, enrichers
 │   ├── vector_store/        # ChromaDB (persistent, cosine, hybrid)
 │   ├── rerankers/           # BGE cross-encoder reranker
 │   ├── guardrails/          # PII / injection / groundedness checks
 │   ├── ratelimit/           # In-memory sliding-window limiter
 │   ├── observability/       # OpenTelemetry tracer
-│   └── repositories/        # Conversation repos (in-memory, Postgres)
+│   └── repositories/        # SQLite conversation history
 └── presentation/            # Interfaces
     ├── api/                 # FastAPI app factory + routes (health/auth/documents/chat/usage)
     └── react/               # React + Vite + Tailwind frontend
@@ -514,15 +475,11 @@ The Google AI Studio project behind `GEMINI_API_KEY` has no billing account link
 
 ### Conversation history resets when the API restarts
 
-Conversations are stored **in-memory** by default (`MemoryConversationRepository`). Page refreshes are safe — the UI persists the last conversation ID in `localStorage` — but history is lost when the API process restarts. Documents and their embeddings in ChromaDB are persistent. Set `DATABASE_URL` (and install `.[postgres]`) for persistent conversations.
+Conversations are stored in a local SQLite file (`data/history.db`), so history survives a restart. Documents and their embeddings in ChromaDB are persistent too. If the history file cannot be opened the API fails to start rather than silently discarding your history.
 
 ### First HuggingFace embedding call is slow
 
 The local model (`all-MiniLM-L6-v2`, ~80–100 MB) is downloaded from the HuggingFace Hub on first use and cached. The first run needs internet; subsequent runs are offline.
-
-### Startup fails with "SECRET_KEY must be overridden"
-
-You set `ENABLE_AUTH=true` but left the bundled dev secret. Generate a long random value, e.g. `python -c "import secrets; print(secrets.token_urlsafe(64))"`, and set it in `.env`.
 
 ## Tech Stack
 

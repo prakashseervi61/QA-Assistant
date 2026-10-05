@@ -55,36 +55,21 @@ class TestSettingsDefaults:
     def test_gemini_model_default(self):
         assert Settings().GEMINI_MODEL == "gemini-2.5-flash"
 
-    def test_openai_model_default(self):
-        assert Settings().OPENAI_MODEL == "gpt-4o"
-
-    def test_anthropic_model_default(self):
-        assert Settings().ANTHROPIC_MODEL == "claude-sonnet-4-20250514"
-
     def test_allowed_extensions_default(self):
         assert Settings().ALLOWED_EXTENSIONS == [".pdf", ".docx", ".txt"]
 
     def test_cors_origins_default(self):
         assert Settings().CORS_ORIGINS == ["http://localhost:3000"]
 
-    def test_api_keys_default_empty(self):
-        s = Settings(
-            GEMINI_API_KEY="",
-            OPENAI_API_KEY="",
-            ANTHROPIC_API_KEY="",
-            DEEPSEEK_API_KEY="",
-        )
-        assert s.GEMINI_API_KEY == ""
-        assert s.OPENAI_API_KEY == ""
-        assert s.ANTHROPIC_API_KEY == ""
-        assert s.DEEPSEEK_API_KEY == ""
+    def test_gemini_api_key_default_empty(self):
+        # ponytail: pass the value explicitly — a bare Settings() picks up
+        # the developer's real .env, so this asserted against a live secret
+        # and printed it whenever it failed.
+        assert Settings(GEMINI_API_KEY="").GEMINI_API_KEY == ""
 
 
 class TestSettingsCustomValues:
     """Verify settings accept overridden values."""
-
-    def test_custom_llm_provider(self):
-        assert Settings(LLM_PROVIDER="openai").LLM_PROVIDER == "openai"
 
     def test_custom_chunk_size(self):
         assert Settings(CHUNK_SIZE=500).CHUNK_SIZE == 500
@@ -99,8 +84,6 @@ class TestSettingsCustomValues:
         s = Settings(GEMINI_API_KEY="my-secret-key")
         assert s.GEMINI_API_KEY == "my-secret-key"
 
-    def test_custom_embedding_provider(self):
-        assert Settings(EMBEDDING_PROVIDER="openai").EMBEDDING_PROVIDER == "openai"
 
 
 class TestGetSettingsSingleton:
@@ -154,13 +137,11 @@ class TestSettingsValidation:
 
     def test_settings_from_dict(self):
         data = {
-            "LLM_PROVIDER": "anthropic",
             "CHUNK_SIZE": 2000,
             "CHUNK_OVERLAP": 400,
             "DEBUG": True,
         }
         s = Settings(**data)
-        assert s.LLM_PROVIDER == "anthropic"
         assert s.CHUNK_SIZE == 2000
         assert s.CHUNK_OVERLAP == 400
         assert s.DEBUG is True

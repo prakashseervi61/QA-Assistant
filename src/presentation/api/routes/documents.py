@@ -112,12 +112,6 @@ async def upload_document(file: UploadFile = File(...)) -> IngestResponse:
 
         # Lazy import — use case depends on infra that may not be wired yet
         from src.application.use_cases.ingest_document import IngestDocumentUseCase
-        from src.infrastructure.document_processing.chunk_enricher_factory import (
-            create_chunk_enricher,
-        )
-        from src.infrastructure.document_processing.parent_child_splitter import (
-            ParentChildSplitter,
-        )
         from src.infrastructure.document_processing.parser_factory import create_parser
         from src.infrastructure.document_processing.semantic_chunker import (
             SemanticChunker,
@@ -126,13 +120,7 @@ async def upload_document(file: UploadFile = File(...)) -> IngestResponse:
 
         vector_store, embedding_provider = _get_dependencies()
 
-        if settings.ENABLE_PARENT_CHILD:
-            text_splitter = ParentChildSplitter(
-                parent_chunk_size=settings.PARENT_CHUNK_SIZE,
-                child_chunk_size=settings.CHILD_CHUNK_SIZE,
-                child_overlap=settings.CHILD_CHUNK_OVERLAP,
-            )
-        elif settings.ENABLE_SEMANTIC_CHUNKING:
+        if settings.ENABLE_SEMANTIC_CHUNKING:
             text_splitter = SemanticChunker(
                 embedding_provider=embedding_provider,
                 similarity_threshold=settings.SEMANTIC_SIMILARITY_THRESHOLD,
@@ -142,16 +130,11 @@ async def upload_document(file: UploadFile = File(...)) -> IngestResponse:
         else:
             text_splitter = TextSplitter()
 
-        chunk_enricher = (
-            create_chunk_enricher() if settings.ENABLE_CHUNK_ENRICHMENT else None
-        )
-
         use_case = IngestDocumentUseCase(
             parser=create_parser(ext),
             text_splitter=text_splitter,
             embedding_provider=embedding_provider,
             vector_store=vector_store,
-            chunk_enricher=chunk_enricher,
         )
 
         result = await use_case.execute(file_content=content, filename=file.filename)

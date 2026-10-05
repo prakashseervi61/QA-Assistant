@@ -21,20 +21,12 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
 
     # LLM Provider
-    LLM_PROVIDER: Literal["gemini", "openai", "anthropic", "deepseek"] = "gemini"
+    LLM_PROVIDER: Literal["gemini"] = "gemini"
     GEMINI_API_KEY: str = ""
     GEMINI_MODEL: str = "gemini-2.5-flash"
-    OPENAI_API_KEY: str = ""
-    OPENAI_MODEL: str = "gpt-4o"
-    ANTHROPIC_API_KEY: str = ""
-    ANTHROPIC_MODEL: str = "claude-sonnet-4-20250514"
-    DEEPSEEK_API_KEY: str = ""
-    DEEPSEEK_MODEL: str = "deepseek-v4-flash"
 
     # Embedding Provider
-    EMBEDDING_PROVIDER: Literal["gemini", "openai", "huggingface"] = "huggingface"
-    GEMINI_EMBEDDING_MODEL: str = "text-embedding-004"
-    OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"
+    EMBEDDING_PROVIDER: Literal["huggingface"] = "huggingface"
     HUGGINGFACE_MODEL: str = "all-MiniLM-L6-v2"
 
     # Vector Store
@@ -68,15 +60,7 @@ class Settings(BaseSettings):
     # Hybrid Search
     ENABLE_HYBRID_SEARCH: bool = False
 
-    # Query Rewriting
-    ENABLE_QUERY_REWRITING: bool = False
-    QUERY_REWRITING_VARIANTS: int = 3
 
-    # Parent-Child Retrieval
-    ENABLE_PARENT_CHILD: bool = False
-    PARENT_CHUNK_SIZE: int = 2000
-    CHILD_CHUNK_SIZE: int = 200
-    CHILD_CHUNK_OVERLAP: int = 50
 
     # Semantic Chunking
     # ON by default: chunks split on semantic boundaries at ingestion
@@ -85,11 +69,6 @@ class Settings(BaseSettings):
     SEMANTIC_SIMILARITY_THRESHOLD: float = 0.5
     SEMANTIC_MIN_CHUNK_SIZE: int = 100
     SEMANTIC_MAX_CHUNK_SIZE: int = 2000
-
-    # Chunk Enrichment
-    ENABLE_CHUNK_ENRICHMENT: bool = False
-    ENABLE_CHUNK_ENRICHMENT_SUMMARIES: bool = False
-    CHUNK_ENRICHMENT_MAX_KEYWORDS: int = 10
 
     # Incremental Ingestion (optional — OFF by default)
     # When enabled, re-uploading a byte-identical file (same SHA-256

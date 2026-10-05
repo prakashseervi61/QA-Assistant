@@ -13,9 +13,9 @@ from src.application.use_cases.conversation import (
 )
 from src.application.use_cases.query_document import QueryDocumentUseCase
 from src.infrastructure.config.settings import Settings, get_settings
-from src.infrastructure.embeddings.factory import EmbeddingProviderFactory
+from src.infrastructure.embeddings.factory import create_embedding_provider
 from src.infrastructure.guardrails.guardrail_manager import create_guardrail_manager
-from src.infrastructure.llm.factory import LLMProviderFactory
+from src.infrastructure.llm.factory import create_llm_provider
 from src.infrastructure.llm.token_tracker import TokenTracker, TrackingLLMProvider
 from src.infrastructure.repositories.conversation_repository_factory import (
     create_conversation_repository,
@@ -35,30 +35,22 @@ def _wire_dependencies(settings: Settings) -> TokenTracker:
         The shared :class:`TokenTracker` used to record LLM usage.
     """
     tracker = TokenTracker()
-    llm_provider = LLMProviderFactory.create(settings)
+    llm_provider = create_llm_provider(settings)
     if settings.ENABLE_USAGE_TRACKING:
         llm_provider = TrackingLLMProvider(llm_provider, tracker)
-    embedding_provider = EmbeddingProviderFactory.create(settings)
+    embedding_provider = create_embedding_provider(settings)
     vector_store = ChromaStore(persist_directory=settings.CHROMA_PERSIST_DIR)
 
     from src.infrastructure.rerankers.factory import create_reranker
 
     reranker = create_reranker()
 
-    from src.infrastructure.llm.query_rewriter_factory import (
-        create_query_rewriter,
-    )
-
-    query_rewriter = create_query_rewriter(
-        llm_provider, embedding_provider, vector_store
-    )
 
     rag_engine = RAGEngine(
         llm_provider=llm_provider,
         embedding_provider=embedding_provider,
         vector_store=vector_store,
         reranker=reranker,
-        query_rewriter=query_rewriter,
         guardrail_manager=create_guardrail_manager(),
     )
     conversation_repository = create_conversation_repository()
