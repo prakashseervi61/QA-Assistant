@@ -115,9 +115,8 @@ def _build_query_use_case() -> object:
     from src.infrastructure.llm.query_rewriter_factory import (
         create_query_rewriter,
     )
-    from src.infrastructure.observability.tracer import create_tracer
-    from src.infrastructure.repositories.memory_conversation_repository import (
-        MemoryConversationRepository,
+    from src.infrastructure.repositories.sqlite_conversation_repository import (
+        SQLiteConversationRepository,
     )
     from src.infrastructure.rerankers.factory import create_reranker
     from src.infrastructure.vector_store.chroma_store import ChromaStore
@@ -130,16 +129,18 @@ def _build_query_use_case() -> object:
     query_rewriter = create_query_rewriter(
         llm_provider, embedding_provider, vector_store
     )
-    tracer = create_tracer()
     rag_engine = RAGEngine(
         llm_provider=llm_provider,
         embedding_provider=embedding_provider,
         vector_store=vector_store,
         reranker=reranker,
         query_rewriter=query_rewriter,
-        tracer=tracer,
     )
-    conversation_repository = MemoryConversationRepository()
+    # An eval run keeps its own throwaway history file so it never touches
+    # the user's real conversations.
+    conversation_repository = SQLiteConversationRepository(
+        "./data/eval-history.db"
+    )
     return QueryDocumentUseCase(rag_engine, conversation_repository)
 
 

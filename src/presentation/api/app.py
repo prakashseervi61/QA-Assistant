@@ -2,7 +2,7 @@
 
 import logging
 
-from fastapi import Depends, FastAPI
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.application.services.rag_engine import RAGEngine
@@ -12,29 +12,18 @@ from src.application.use_cases.conversation import (
     ListConversationsUseCase,
 )
 from src.application.use_cases.query_document import QueryDocumentUseCase
-from src.infrastructure.auth.jwt_auth import get_current_user_dependency
 from src.infrastructure.config.settings import Settings, get_settings
 from src.infrastructure.embeddings.factory import EmbeddingProviderFactory
 from src.infrastructure.guardrails.guardrail_manager import create_guardrail_manager
 from src.infrastructure.llm.factory import LLMProviderFactory
 from src.infrastructure.llm.token_tracker import TokenTracker, TrackingLLMProvider
-from src.infrastructure.ratelimit.limiter import rate_limit_dependency
 from src.infrastructure.repositories.conversation_repository_factory import (
     create_conversation_repository,
 )
 from src.infrastructure.vector_store.chroma_store import ChromaStore
-from src.presentation.api.routes import auth, chat, documents, health, usage
+from src.presentation.api.routes import chat, documents, health, usage
 
 logger = logging.getLogger(__name__)
-
-# Applied to every router except health. Both dependencies are no-ops when
-# auth/rate limiting are disabled (the defaults), so existing endpoints
-# behave exactly as before.
-PROTECTED_ROUTER_DEPENDENCIES = [
-    Depends(get_current_user_dependency),
-    Depends(rate_limit_dependency),
-]
-
 
 def _wire_dependencies(settings: Settings) -> TokenTracker:
     """Build shared infrastructure and inject it into the routers.
@@ -64,17 +53,12 @@ def _wire_dependencies(settings: Settings) -> TokenTracker:
         llm_provider, embedding_provider, vector_store
     )
 
-    from src.infrastructure.observability.tracer import create_tracer
-
-    tracer = create_tracer()
-
     rag_engine = RAGEngine(
         llm_provider=llm_provider,
         embedding_provider=embedding_provider,
         vector_store=vector_store,
         reranker=reranker,
         query_rewriter=query_rewriter,
-        tracer=tracer,
         guardrail_manager=create_guardrail_manager(),
     )
     conversation_repository = create_conversation_repository()
@@ -133,31 +117,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_headers=["*"],
     )
 
-    # Register routes.
-    # Health stays public (liveness probes must not require auth); all
-    # other routers get the auth + rate-limit dependencies (no-ops when
-    # disabled).
+    # Register routes. The API binds loopback by default, so there is no
+    # per-request auth layer; health stays separate for liveness probes.
     app.include_router(health.router, prefix="/api", tags=["health"])
-    # The token endpoint stays public — it is how clients obtain a JWT.
-    # It is deliberately NOT part of PROTECTED_ROUTER_DEPENDENCIES.
-    app.include_router(auth.router, prefix="/api", tags=["auth"])
     app.include_router(
         documents.router,
         prefix="/api",
         tags=["documents"],
-        dependencies=PROTECTED_ROUTER_DEPENDENCIES,
     )
     app.include_router(
         chat.router,
         prefix="/api",
         tags=["chat"],
-        dependencies=PROTECTED_ROUTER_DEPENDENCIES,
     )
     # usage router defines its own /api/usage path — no prefix.
-    app.include_router(
-        usage.router,
-        tags=["usage"],
-        dependencies=PROTECTED_ROUTER_DEPENDENCIES,
-    )
+    app.include_router(usage.router, tags=["usage"])
 
     return app
