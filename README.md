@@ -25,7 +25,7 @@ A production-grade **Retrieval-Augmented Generation (RAG)** question-answering a
 ```
 ┌────────────────────────────────────────────────────────────────┐
 │                       React + Vite + Tailwind                  │
-│            Documents · Chat · Recent · Collections · Settings  │
+│            Chat · Documents · Collections · History · Settings  │
 └───────────────────────────────┬────────────────────────────────┘
                                 │  /api/*   (Vite proxy / nginx)
 ┌───────────────────────────────▼────────────────────────────────┐
@@ -194,12 +194,12 @@ All settings load from `.env` or environment variables via `pydantic-settings` (
 | `CHROMA_COLLECTION_NAME` | `documents` | ChromaDB collection name |
 | `CHUNK_SIZE` | `1000` | Characters per chunk |
 | `CHUNK_OVERLAP` | `200` | Overlap between consecutive chunks |
-| `MAX_FILE_SIZE_MB` | `50` | Reserved — not enforced by the API |
+| `MAX_FILE_SIZE_MB` | `50` | Hard upload limit. Larger uploads are rejected with `413` before the body is buffered |
 | `ALLOWED_EXTENSIONS` | `[".pdf", ".docx", ".txt"]` | Accepted upload extensions |
-| `API_HOST` | `0.0.0.0` | Reserved — uvicorn launched with explicit host |
+| `API_HOST` | `127.0.0.1` | Loopback by default — the API serves every ingested document, so it is not exposed to the LAN unless you deliberately change this |
 | `API_PORT` | `8000` | Reserved — uvicorn launched with explicit port |
 | `CORS_ORIGINS` | `["http://localhost:3000"]` | Allowed CORS origins (JSON list) |
-| `DATABASE_URL` | `None` | PostgreSQL URL for persistent conversations (requires `pip install -e ".[postgres]"`); unset = in-memory storage |
+| `DATABASE_URL` | `None` | PostgreSQL URL for conversations (requires `pip install -e ".[postgres]"`); unset = local SQLite history at `HISTORY_DB_PATH` |
 
 ### Advanced RAG (feature flags)
 
@@ -422,13 +422,13 @@ Optional query param `limit` (1–100, default 10). Zeroed totals and an empty `
 
 ## Frontend
 
-A responsive React SPA (Tailwind CSS) with a slide-in chat panel (mobile) that is always visible on desktop. Five sidebar views:
+A responsive React SPA (Tailwind CSS). Every view has its own URL (`/`, `/documents`, `/collections`, `/history`, `/bookmarks`, `/settings`), so pages are linkable, bookmarkable and reachable with the back/forward buttons. Navigation is a left rail on desktop and a bottom bar on mobile:
 
 | View | What it does |
 |---|---|
 | **Documents** | Upload (drag & drop or file picker), list, and delete documents; shows ingestion status and chunk counts |
-| **Chat** | Ask questions with a conversation selector (last conversation persists in `localStorage`); answers render `[Source N]` markers with an expandable **SOURCES** panel showing each cited chunk and its score |
-| **Recent** | Lists past conversations (title, message count, relative time); click to reopen the conversation in Chat |
+| **Chat** | Ask questions with a conversation selector (last conversation persists in `localStorage`); answers render `[Source N]` markers with an expandable **Referenced Sources** panel showing each cited chunk and its score, plus a **confidence** badge so a weakly-grounded answer is visibly distinguishable from a well-sourced one |
+| **History** | Every past conversation, saved to disk so it survives restarts, grouped by Today/Yesterday/Earlier, with a title filter and per-conversation delete; click to reopen it in Chat |
 | **Collections** | Placeholder — grouping documents is planned |
 | **Bookmarks** | Placeholder — saving answers is planned |
 | **Settings** | Static read-only overview of how the app is configured |
@@ -436,7 +436,7 @@ A responsive React SPA (Tailwind CSS) with a slide-in chat panel (mobile) that i
 ## Testing & Quality
 
 ```bash
-# All tests — 445 total (434 in tests/, 11 in eval/ — matches CI)
+# All tests — 490 total (479 in tests/, 11 in eval/ — matches CI)
 python -m pytest -q
 
 # Lint & formatting (exactly what CI enforces)
