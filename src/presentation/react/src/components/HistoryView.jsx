@@ -14,22 +14,22 @@ import {
 import { deleteJSON, fetchJSON } from '../api';
 import EmptyState from './EmptyState';
 
+// ponytail: Intl.RelativeTimeFormat does this natively (incl. locale-aware
+// wording) — replaced a hand-rolled min/hour/day cascade.
+const RELATIVE = new Intl.RelativeTimeFormat([], { numeric: 'auto' });
+
 /** Format an ISO timestamp as a short, human-friendly relative time. */
 function formatRelativeTime(iso) {
   if (!iso) return '';
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return '';
 
-  const diffMs = Date.now() - date.getTime();
-  const diffMin = Math.floor(diffMs / 60000);
-  if (diffMin < 1) return 'Just now';
-  if (diffMin < 60) return `${diffMin} min ago`;
-
-  const diffHours = Math.floor(diffMin / 60);
-  if (diffHours < 24) return `${diffHours} hr${diffHours === 1 ? '' : 's'} ago`;
-
-  const diffDays = Math.floor(diffHours / 24);
-  if (diffDays < 7) return `${diffDays} day${diffDays === 1 ? '' : 's'} ago`;
+  const seconds = Math.round((date.getTime() - Date.now()) / 1000);
+  const abs = Math.abs(seconds);
+  if (abs < 60) return 'Just now';
+  if (abs < 3600) return RELATIVE.format(Math.round(seconds / 60), 'minute');
+  if (abs < 86400) return RELATIVE.format(Math.round(seconds / 3600), 'hour');
+  if (abs < 604800) return RELATIVE.format(Math.round(seconds / 86400), 'day');
 
   return date.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
 }

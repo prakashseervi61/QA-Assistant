@@ -82,8 +82,3 @@ export default function PageScroll({ children, className = '' }) {
     </div>
   );
 }
-
-/** Forget every remembered offset. Exported for tests. */
-export function resetScrollMemory() {
-  scrollPositions.clear();
-}
