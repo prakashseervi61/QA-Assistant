@@ -204,3 +204,91 @@ class TestUploadWiring:
             "upload_document passes kwargs the use case does not accept: "
             f"{sorted(supplied - accepted)}"
         )
+
+
+class TestDeleteAllDocuments:
+    """The Danger Zone's bulk delete, which must not half-claim success."""
+
+    def _doc(self, doc_id: str) -> dict:
+        return {
+            "document_id": doc_id,
+            "filename": f"{doc_id}.pdf",
+            "file_type": ".pdf",
+            "file_size": 10,
+            "chunk_count": 1,
+            "created_at": "2026-01-01T00:00:00",
+        }
+
+    @pytest.mark.asyncio
+    @patch("src.presentation.api.routes.documents.get_settings")
+    async def test_deletes_every_listed_document(self, mock_get_settings):
+        settings = MagicMock()
+        settings.CHROMA_COLLECTION_NAME = "documents"
+        mock_get_settings.return_value = settings
+
+        store = MagicMock()
+        store.list_documents = AsyncMock(return_value=[self._doc("a"), self._doc("b")])
+        store.delete_by_metadata = AsyncMock()
+        documents_router._vector_store.set(store)
+        documents_router._embedding_provider.set(MagicMock())
+
+        result = await documents_router.delete_all_documents()
+
+        assert result["deleted"] == 2
+        assert result["failed"] == 0
+        assert store.delete_by_metadata.await_count == 2
+
+    @pytest.mark.asyncio
+    @patch("src.presentation.api.routes.documents.get_settings")
+    async def test_continues_past_a_failing_document(self, mock_get_settings):
+        settings = MagicMock()
+        settings.CHROMA_COLLECTION_NAME = "documents"
+        mock_get_settings.return_value = settings
+
+        store = MagicMock()
+        store.list_documents = AsyncMock(
+            return_value=[self._doc("a"), self._doc("bad")]
+        )
+        store.delete_by_metadata = AsyncMock(side_effect=[None, RuntimeError("boom")])
+        documents_router._vector_store.set(store)
+        documents_router._embedding_provider.set(MagicMock())
+
+        result = await documents_router.delete_all_documents()
+
+        # The good document still went; the failure is reported, not hidden.
+        assert result["deleted"] == 1
+        assert result["failed"] == 1
+
+    @pytest.mark.asyncio
+    @patch("src.presentation.api.routes.documents.get_settings")
+    async def test_500_when_every_delete_fails(self, mock_get_settings):
+        settings = MagicMock()
+        settings.CHROMA_COLLECTION_NAME = "documents"
+        mock_get_settings.return_value = settings
+
+        store = MagicMock()
+        store.list_documents = AsyncMock(return_value=[self._doc("a")])
+        store.delete_by_metadata = AsyncMock(side_effect=RuntimeError("boom"))
+        documents_router._vector_store.set(store)
+        documents_router._embedding_provider.set(MagicMock())
+
+        with pytest.raises(HTTPException) as exc_info:
+            await documents_router.delete_all_documents()
+        assert exc_info.value.status_code == 500
+
+    @pytest.mark.asyncio
+    @patch("src.presentation.api.routes.documents.get_settings")
+    async def test_empty_library_is_a_clean_no_op(self, mock_get_settings):
+        settings = MagicMock()
+        settings.CHROMA_COLLECTION_NAME = "documents"
+        mock_get_settings.return_value = settings
+
+        store = MagicMock()
+        store.list_documents = AsyncMock(return_value=[])
+        documents_router._vector_store.set(store)
+        documents_router._embedding_provider.set(MagicMock())
+
+        result = await documents_router.delete_all_documents()
+
+        assert result["deleted"] == 0
+        store.delete_by_metadata.assert_not_called()

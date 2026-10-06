@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from src.domain.entities.conversation import Conversation
@@ -267,3 +267,78 @@ class TestDeleteConversation:
         response = client.delete(f"/api/conversations/{uuid4()}")
 
         assert response.status_code == 503
+
+
+class TestDeleteAllConversations:
+    """Bulk history wipe for the Danger Zone."""
+
+    @pytest.mark.asyncio
+    async def test_deletes_every_conversation(self):
+        repo = MagicMock()
+        repo.list_conversations = AsyncMock(
+            return_value=[MagicMock(id="a"), MagicMock(id="b"), MagicMock(id="c")]
+        )
+        repo.delete_conversation = AsyncMock(return_value=True)
+
+        result = await chat.delete_all_conversations(repo)
+
+        assert result["deleted"] == 3
+        assert result["failed"] == 0
+
+    @pytest.mark.asyncio
+    async def test_requests_the_full_history_not_one_page(self):
+        # limit=None is the whole history; the default would silently leave
+        # older conversations behind.
+        repo = MagicMock()
+        repo.list_conversations = AsyncMock(return_value=[])
+        repo.delete_conversation = AsyncMock(return_value=True)
+
+        await chat.delete_all_conversations(repo)
+
+        repo.list_conversations.assert_awaited_once_with(limit=None)
+
+    @pytest.mark.asyncio
+    async def test_an_already_absent_conversation_counts_as_deleted(self):
+        # False means the row was already gone, which is the outcome we wanted
+        # — reporting that as a failure would 500 on a no-op.
+        repo = MagicMock()
+        repo.list_conversations = AsyncMock(return_value=[MagicMock(id="a")])
+        repo.delete_conversation = AsyncMock(return_value=False)
+
+        result = await chat.delete_all_conversations(repo)
+
+        assert result["deleted"] == 1
+        assert result["failed"] == 0
+
+    @pytest.mark.asyncio
+    async def test_continues_past_one_raising_conversation(self):
+        repo = MagicMock()
+        repo.list_conversations = AsyncMock(
+            return_value=[MagicMock(id="a"), MagicMock(id="bad")]
+        )
+        repo.delete_conversation = AsyncMock(side_effect=[True, RuntimeError("boom")])
+
+        result = await chat.delete_all_conversations(repo)
+
+        assert result["deleted"] == 1
+        assert result["failed"] == 1
+
+    @pytest.mark.asyncio
+    async def test_500_when_listing_fails(self):
+        repo = MagicMock()
+        repo.list_conversations = AsyncMock(side_effect=RuntimeError("boom"))
+
+        with pytest.raises(HTTPException) as exc_info:
+            await chat.delete_all_conversations(repo)
+        assert exc_info.value.status_code == 500
+
+    @pytest.mark.asyncio
+    async def test_empty_history_is_a_clean_no_op(self):
+        repo = MagicMock()
+        repo.list_conversations = AsyncMock(return_value=[])
+        repo.delete_conversation = AsyncMock(return_value=True)
+
+        result = await chat.delete_all_conversations(repo)
+
+        assert result["deleted"] == 0
+        repo.delete_conversation.assert_not_called()

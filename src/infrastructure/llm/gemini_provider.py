@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 
 from src.domain.interfaces.llm_provider import LLMProvider, LLMQuotaExceededError
 
@@ -34,22 +34,59 @@ def _is_quota_error(exc: Exception) -> bool:
 
 
 class GeminiProvider(LLMProvider):
-    """LLM provider using the Google Gemini API (``google-genai``)."""
+    """LLM provider using the Google Gemini API (``google-genai``).
 
-    def __init__(self, api_key: str, model: str) -> None:
+    Args:
+        api_key: Fallback credential, used when *key_resolver* is omitted.
+        model: Gemini model id.
+        key_resolver: Optional zero-arg callable returning the active key.
+            Supplied instead of a fixed string so a key entered in the Settings
+            page takes effect on the next request without restarting the app.
+    """
+
+    def __init__(
+        self,
+        api_key: str,
+        model: str,
+        key_resolver: Callable[[], str] | None = None,
+    ) -> None:
         self._model = model
         self._last_response = None
+        self._fallback_key = api_key
+        self._key_resolver = key_resolver
+        self._client = None
+        self._client_key: str | None = None
         try:
             from google import genai
             from google.genai import types
         except ImportError:
             raise ImportError("pip install google-genai")
 
+        self._genai = genai
         self._types = types
-        # The new SDK scopes credentials to a client instance rather than
-        # configuring the module globally.
-        self._client = genai.Client(api_key=api_key)
         logger.info("Gemini provider initialised (model=%s)", model)
+
+    @property
+    def _active_client(self):
+        """Return a client for the currently-active key, rebuilding if it changed.
+
+        The new SDK scopes credentials to a client instance, so a key change
+        needs a new client. Caching on the key value means the common case —
+        same key, many requests — builds exactly one client.
+        """
+        key = self._key_resolver() if self._key_resolver else self._fallback_key
+        if not key:
+            # Surfaced as a clean message rather than an SDK error about a
+            # missing credential, which tells the user nothing actionable.
+            raise RuntimeError(
+                "No Gemini API key configured. Add one in Settings, or set "
+                "GEMINI_API_KEY in your .env file."
+            )
+        if self._client is None or key != self._client_key:
+            self._client = self._genai.Client(api_key=key)
+            self._client_key = key
+            logger.info("Gemini client rebuilt for a newly configured key")
+        return self._client
 
     def _config(self, system_prompt: str | None, **overrides):
         """Build a GenerateContentConfig, or None when nothing is set."""
@@ -79,7 +116,7 @@ class GeminiProvider(LLMProvider):
         """
 
         def _gen():
-            return self._client.models.generate_content(
+            return self._active_client.models.generate_content(
                 model=self._model,
                 contents=prompt,
                 config=self._config(system_prompt, **config_overrides),
@@ -145,7 +182,7 @@ class GeminiProvider(LLMProvider):
         def _produce() -> None:
             """Blocking producer — runs on a worker thread."""
             try:
-                stream = self._client.models.generate_content_stream(
+                stream = self._active_client.models.generate_content_stream(
                     model=self._model,
                     contents=prompt,
                     config=self._config(system_prompt),

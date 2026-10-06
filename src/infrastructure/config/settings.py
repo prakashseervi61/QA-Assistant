@@ -35,6 +35,12 @@ class Settings(BaseSettings):
     # A local file, so history survives restarts with no database server.
     HISTORY_DB_PATH: str = "./data/history.db"
 
+    # Runtime secrets written from the Settings page (currently just the LLM
+    # API key). Kept out of .env on purpose: .env is read once at startup, while
+    # this file is what lets a user change the key without a restart. It holds
+    # a credential in plaintext, same as .env does — the API is loopback-only.
+    SECRETS_FILE_PATH: str = "./data/secrets.json"
+
     # Document Processing
     CHUNK_SIZE: int = 1000
     CHUNK_OVERLAP: int = 200

@@ -12,14 +12,17 @@ from src.infrastructure.embeddings.huggingface_embeddings import (
     HuggingFaceEmbeddingProvider,
 )
 from src.infrastructure.guardrails.guardrail_manager import create_guardrail_manager
+from src.infrastructure.llm.api_key_resolver import ApiKeyResolver
 from src.infrastructure.llm.gemini_provider import GeminiProvider
 from src.infrastructure.llm.token_tracker import TokenTracker, TrackingLLMProvider
 from src.infrastructure.repositories.conversation_repository_factory import (
     create_conversation_repository,
 )
+from src.infrastructure.repositories.json_secret_store import JsonSecretStore
 from src.infrastructure.rerankers.factory import create_reranker
 from src.infrastructure.vector_store.chroma_store import ChromaStore
 from src.presentation.api.routes import chat, documents, health, usage
+from src.presentation.api.routes import settings as settings_routes
 
 logger = logging.getLogger(__name__)
 
@@ -34,13 +37,20 @@ def _wire_dependencies(settings: Settings) -> TokenTracker:
         The shared :class:`TokenTracker` used to record LLM usage.
     """
     tracker = TokenTracker()
+    # The resolver decides which credential is active: a key the user entered
+    # in Settings wins, otherwise the .env value. Passing a resolver rather
+    # than a fixed string is what lets a new key take effect without a restart.
+    secret_store = JsonSecretStore(settings.SECRETS_FILE_PATH)
+    api_key_resolver = ApiKeyResolver(secret_store, settings)
     # ponytail: these two providers used to be built by factory functions that
     # switched over four LLMs and three embedding providers. Only Gemini and
     # local HuggingFace remain, so the factory was a pass-through with one
     # implementation — construct them directly and re-add a factory when a
     # second provider is genuinely in use.
     llm_provider = GeminiProvider(
-        api_key=settings.GEMINI_API_KEY, model=settings.GEMINI_MODEL
+        api_key=settings.GEMINI_API_KEY,
+        model=settings.GEMINI_MODEL,
+        key_resolver=api_key_resolver.resolve,
     )
     if settings.ENABLE_USAGE_TRACKING:
         llm_provider = TrackingLLMProvider(llm_provider, tracker)
@@ -66,6 +76,12 @@ def _wire_dependencies(settings: Settings) -> TokenTracker:
     documents.configure(
         vector_store=vector_store,
         embedding_provider=embedding_provider,
+    )
+    settings_routes.configure(
+        resolver=api_key_resolver,
+        store=secret_store,
+        vector_store=vector_store,
+        conversation_repository=conversation_repository,
     )
 
     logger.info(
@@ -111,6 +127,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # Register routes. The API binds loopback by default, so there is no
     # per-request auth layer; health stays separate for liveness probes.
     app.include_router(health.router, prefix="/api", tags=["health"])
+    app.include_router(
+        settings_routes.router,
+        prefix="/api",
+        tags=["settings"],
+    )
     app.include_router(
         documents.router,
         prefix="/api",

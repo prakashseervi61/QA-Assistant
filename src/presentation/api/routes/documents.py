@@ -180,6 +180,56 @@ async def list_documents() -> DocumentListResponse:
 
 
 # ---------------------------------------------------------------------------
+# DELETE /documents — delete every document (Danger Zone)
+# ---------------------------------------------------------------------------
+
+
+@router.delete("/documents")
+async def delete_all_documents() -> dict:
+    """Delete every ingested document and all of its chunks.
+
+    Backs the Danger Zone's "delete all documents" action. Documents are
+    removed one at a time by id rather than by dropping the collection, so a
+    failure part-way leaves the remaining documents intact instead of silently
+    clearing everything. The response reports what was removed and what failed.
+    """
+    vector_store, _ = _get_dependencies()
+    settings = get_settings()
+
+    try:
+        docs = await vector_store.list_documents(settings.CHROMA_COLLECTION_NAME)
+    except Exception as exc:
+        logger.error("Bulk delete: could not list documents: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail="Could not list documents.")
+
+    deleted: list[str] = []
+    failed: list[str] = []
+    for doc in docs:
+        document_id = doc["document_id"]
+        try:
+            await vector_store.delete_by_metadata(
+                {"document_id": document_id},
+                settings.CHROMA_COLLECTION_NAME,
+            )
+            deleted.append(document_id)
+        except Exception:
+            # Keep going: one bad document should not strand the rest.
+            logger.error(
+                "Bulk delete: failed to delete document %s", document_id, exc_info=True
+            )
+            failed.append(document_id)
+
+    if failed and not deleted:
+        raise HTTPException(status_code=500, detail="Failed to delete any documents.")
+
+    return {
+        "deleted": len(deleted),
+        "failed": len(failed),
+        "message": f"Deleted {len(deleted)} document(s).",
+    }
+
+
+# ---------------------------------------------------------------------------
 # DELETE /documents/{document_id} — delete a document
 # ---------------------------------------------------------------------------
 

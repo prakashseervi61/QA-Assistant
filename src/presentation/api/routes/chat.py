@@ -283,6 +283,60 @@ async def get_conversation(
 
 
 # ---------------------------------------------------------------------------
+# DELETE /conversations — clear all conversation history (Danger Zone)
+# ---------------------------------------------------------------------------
+
+
+@router.delete("/conversations")
+async def delete_all_conversations(
+    conversation_repository: ConversationRepository = Depends(
+        get_conversation_repository
+    ),
+) -> dict:
+    """Permanently delete every conversation and all of its messages.
+
+    Backs the Danger Zone's "clear conversation history" action. Passes
+    ``limit=None`` so this is the full history rather than one page of it, and
+    reports a partial failure rather than claiming a clean sweep.
+    """
+    try:
+        conversations = await conversation_repository.list_conversations(limit=None)
+    except Exception as exc:
+        logger.error(
+            "Bulk delete: could not list conversations: %s", exc, exc_info=True
+        )
+        raise HTTPException(status_code=500, detail="Could not list conversations.")
+
+    deleted = 0
+    failed = 0
+    for conversation in conversations:
+        try:
+            # A False return means the row was already gone (deleted between the
+            # list and here). The post-condition — this conversation no longer
+            # exists — still holds, so it counts as deleted, not as a failure.
+            await conversation_repository.delete_conversation(conversation.id)
+            deleted += 1
+        except Exception:
+            logger.error(
+                "Bulk delete: failed to delete conversation %s",
+                conversation.id,
+                exc_info=True,
+            )
+            failed += 1
+
+    if failed and not deleted:
+        raise HTTPException(
+            status_code=500, detail="Failed to delete any conversations."
+        )
+
+    return {
+        "deleted": deleted,
+        "failed": failed,
+        "message": f"Deleted {deleted} conversation(s).",
+    }
+
+
+# ---------------------------------------------------------------------------
 # DELETE /conversations/{conversation_id} — remove a conversation from history
 # ---------------------------------------------------------------------------
 
