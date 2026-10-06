@@ -1,227 +1,204 @@
-# Marginalia
+<h1 align="center">Marginalia</h1>
 
-A production-grade **Retrieval-Augmented Generation (RAG)** question-answering app. Upload PDF, DOCX, or TXT documents, ask questions in natural language, and get grounded answers with source citations and a confidence score.
+<p align="center">
+  <em>Answers from your documents — grounded, cited, and linkable.</em>
+</p>
 
-[![CI](https://github.com/prakashseervi61/QA-Assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/prakashseervi61/QA-Assistant/actions/workflows/ci.yml)
-[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue)](https://www.python.org/)
-[![Docker](https://img.shields.io/badge/Docker-ready-2496ed)](#docker)
+<p align="center">
+  <a href="#quickstart">Quickstart</a> ·
+  <a href="#architecture">Architecture</a> ·
+  <a href="#api">API</a> ·
+  <a href="#configuration">Configuration</a> ·
+  <a href="#contributing">Contributing</a>
+</p>
 
 ---
+
+## What it is
+
+A local-first retrieval-augmented generation (RAG) app. Drop in PDF, DOCX, or TXT
+files, ask questions in plain language, and get an answer assembled from *your*
+documents — with the cited chunks shown underneath and a confidence score so a
+weakly-grounded answer is visibly distinguishable from a well-sourced one.
+
+Everything runs on your machine. The only network call is to the LLM provider;
+embeddings are computed locally, and both your documents and your conversation
+history live on disk.
 
 ## Highlights
 
-- **Multi-format ingestion** — PDF (PyMuPDF with PyPDF2 fallback), DOCX, and TXT
-- **Full RAG pipeline** — embed → retrieve → rerank → generate, with citations and confidence
-- **One LLM provider** — Gemini. ponytail: the factory was a switch over four; only Gemini is wired up, so the switch is gone. Re-add it when a second provider is genuinely in use.
-- **One embedding provider** — local HuggingFace sentence-transformers (no API key, no data leaves the machine)
-- **Retrieval** — hybrid search (opt-in), BGE cross-encoder reranking (on), semantic chunking (on), guardrails (on, flag-only)
-- **Streaming answers** — Server-Sent Events endpoint for token-by-token output
-- **Conversations** — multi-turn history in a local SQLite file, restorable from the UI
-- **Safety & ops (opt-in)** — JWT authentication, per-IP rate limiting, PII / prompt-injection / hallucination guardrails, and token-usage tracking
-- **Clean Architecture** — `domain → application → infrastructure → presentation` with dependency injection
+- **Every conversation is a URL** — `/chat/<id>` makes a chat linkable, shareable,
+  and survivable across a refresh; back and forward step between chats.
+- **Local embeddings** — `all-MiniLM-L6-v2` via sentence-transformers. No
+  embedding API key, no document text leaving the machine, no per-token cost.
+- **Streaming answers** — Server-Sent Events with a live retrieval trace, so you
+  see *guardrails → retrieving → reranking → generating* as it happens.
+- **Semantic chunking + BGE reranking on by default** — chunks split on meaning
+  rather than fixed windows, and the top hits are re-scored by a cross-encoder
+  before they reach the model.
+- **Deduplicating ingestion** — a byte-identical re-upload is detected by
+  SHA-256 and skipped instead of re-embedded.
+- **Guardrails included** — PII and prompt-injection checks on input,
+  groundedness and PII-leak checks on output.
+- **Clean Architecture** — `domain → application → infrastructure → presentation`,
+  wired by a single app factory.
 
-## Architecture
+## Quickstart
 
-```
-┌────────────────────────────────────────────────────────────────┐
-│                       React + Vite + Tailwind                  │
-│            Chat · Documents · Collections · History · Settings  │
-└───────────────────────────────┬────────────────────────────────┘
-                                │  /api/*   (Vite proxy / nginx)
-┌───────────────────────────────▼────────────────────────────────┐
-│                         FastAPI + Uvicorn                      │
-│  auth (JWT) · rate limiting · CORS                             │
-│  routes: health · auth · documents · chat · usage              │
-└───────────────────────────────┬────────────────────────────────┘
-                                │ use cases (query · ingest · conversation)
-┌───────────────────────────────▼────────────────────────────────┐
-│                         RAGEngine                               │
-│  guardrails → embed → hybrid/vector search → rerank →          │
-│  prompt (versioned) → LLM                                      │
-└───────┬───────────────┬────────────────┬───────────────────────┘
-        │               │                │
-┌───────▼──────┐ ┌──────▼───────┐ ┌──────▼───────────────────────┐
-│  Gemini LLM  │ │  Embeddings  │ │ ChromaDB vector store        │
-│ (google-genai│ │ huggingface  │ │ + SQLite conversation history│
-│  SDK)        │ │ (local, free)│ │                              │
-└──────────────┘ └──────────────┘ └──────────────────────────────┘
-```
-
-## Features in Detail
-
-### Ingestion pipeline
-
-`file bytes → parse → split → (enrich) → embed → store`
-
-- **Parsers**: PyMuPDF (primary) with PyPDF2 fallback, python-docx, and plain text.
-- **Chunking strategies** (pick one via config):
-  - **Fixed-size** (`TextSplitter`) — sentence-boundary-aware, default `CHUNK_SIZE=1000`, `CHUNK_OVERLAP=200`.
-  - **Semantic chunking** (`ENABLE_SEMANTIC_CHUNKING`) — splits on embedding-similarity dips.
-- **Incremental ingestion** (`ENABLE_INCREMENTAL_INGESTION`) — re-uploading a byte-identical file (same SHA-256 content hash) is detected as a duplicate and skipped without re-parsing/embedding.
-
-### Retrieval & generation
-
-- **Hybrid search** (`ENABLE_HYBRID_SEARCH`) — combines dense vector similarity with BM25 keyword search.
-- **Reranking** (`ENABLE_RERANKING`) — `BAAI/bge-reranker-v2-m3` cross-encoder re-scores retrieved chunks.
-- **Versioned prompts** (`PROMPT_VERSION`) — system prompts live in a registry; unknown versions fall back to `v1` with a logged warning.
-- **Structured output** — an engine-level option (`use_structured_output=True` on `RAGEngine.query`) returns a JSON answer with per-chunk citations. Not exposed via an env var yet because the chat API contract does not carry the citations field end-to-end.
-- **Graceful no-context handling** — the engine distinguishes "no documents uploaded" from "nothing relevant found" and returns a friendly message instead of failing.
-
-### Safety & observability (all opt-in)
-
-- **Guardrails** (`ENABLE_GUARDRAILS`) — regex-based PII detection (email, phone, SSN, credit card, IP), prompt-injection detection, and a groundedness (hallucination) heuristic. Flag-only by default; block with `GUARDRAIL_BLOCK_VIOLATIONS`.
-- **Usage tracking** (`ENABLE_USAGE_TRACKING`, default on) — records per-call LLM token usage and estimated cost; exposed via `GET /api/usage`.
-
----
-
-## Quick Start
-
-### Prerequisites
-
-- Python 3.10+
-- Node.js 18+ and npm (frontend)
-- An LLM provider API key (Gemini is the default; Google AI Studio free tier works)
-
-### 1. Clone & install
+**Prerequisites:** Python 3.10+, Node.js 18+, and a Gemini API key
+([Google AI Studio](https://aistudio.google.com) has a free tier).
 
 ```bash
 git clone https://github.com/prakashseervi61/QA-Assistant.git
 cd QA-Assistant
+
+# API dependencies
 python -m venv .venv
-# Windows: .venv\Scripts\activate   ·   macOS/Linux: source .venv/bin/activate
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
+
+# Frontend dependencies
+cd src/presentation/react && npm install && cd -
+
+# Configure
+cp .env.example .env               # Windows: copy .env.example .env
 ```
 
-### 2. Frontend dependencies
+Set the one required key in `.env`:
 
 ```bash
-cd src/presentation/react
-npm install
+GEMINI_API_KEY=your_key_here
 ```
 
-### 3. Configure
+Then run both halves:
 
 ```bash
-cp .env.example .env
+scripts/start_all.sh               # macOS / Linux
+scripts\start_all.bat              # Windows
 ```
 
-Edit `.env` and set your LLM key. The defaults are **Gemini** for the LLM and **HuggingFace (local)** for embeddings — zero API cost for embeddings:
+Or drive them separately:
 
 ```bash
-LLM_PROVIDER=gemini
-GEMINI_API_KEY=your_gemini_api_key_here
-EMBEDDING_PROVIDER=huggingface
-```
-
-### 4. Run
-
-One command (Git Bash):
-
-```bash
-bash scripts/start_all.sh            # macOS / Linux
-scripts\start_all.bat                 # Windows (double-click)
-```
-
-Or two terminals:
-
-```bash
-# Terminal 1 — API
 uvicorn src.presentation.api.app:create_app --factory --reload --port 8000
-
-# Terminal 2 — Frontend (from repo root)
-cd src\presentation\react   # Windows
-npm run dev
+cd src/presentation/react && npm run dev
 ```
-
-### 5. Open
 
 | Service | URL |
-|---|---|
-| Frontend (React) | http://localhost:3000 |
-| API | http://localhost:8000 |
-| Swagger UI | http://localhost:8000/docs |
-| ReDoc | http://localhost:8000/redoc |
+| --- | --- |
+| App | <http://localhost:3000> |
+| API | <http://localhost:8000> |
+| Swagger UI | <http://localhost:8000/docs> |
 
-The Vite dev server proxies `/api/*` to `http://localhost:8000` (`src/presentation/react/vite.config.js`), so the frontend and API work together with no extra setup.
+The Vite dev server proxies `/api/*` to port 8000, so the two halves work
+together with no CORS setup.
 
-## Docker
+### Docker
 
 ```bash
 docker compose up --build
 ```
 
-| Service | Host port | Notes |
-|---|---|---|
-| API (uvicorn) | 8000 | Boots the `create_app` factory; healthcheck on `/api/health` |
-| Frontend (nginx) | 3000 | Serves the built React app; `proxy_buffering off` keeps SSE flowing |
+Serves the built app on port 3000 and the API on port 8000. ChromaDB persists
+in the `chroma_data` volume; the frontend waits for the API healthcheck before
+serving. Set `GEMINI_API_KEY` in `.env` first — Compose passes it into the
+container.
 
-- ChromaDB persists in the `chroma_data` volume (mounted at `/data/chroma`).
-- `.env` values are passed to the API container via `environment` (`LLM_PROVIDER`, `GEMINI_API_KEY`, `EMBEDDING_PROVIDER`, chunking settings, etc.). Set `GEMINI_API_KEY` before `compose up`.
-- The frontend container waits for the API healthcheck to pass before starting.
+## Architecture
 
-## Configuration Reference
+```
+┌──────────────────────────────────────────────────────────────┐
+│  React + Vite + Tailwind                                     │
+│  /chat/:id · /documents · /history · /settings               │
+└───────────────────────────┬──────────────────────────────────┘
+                            │  /api/*  (Vite proxy → nginx)
+┌───────────────────────────▼──────────────────────────────────┐
+│  FastAPI                                                      │
+│  CORS · upload limits · routes: health documents chat usage   │
+└───────────────────────────┬──────────────────────────────────┘
+                            │  QueryDocument · IngestDocument
+┌───────────────────────────▼──────────────────────────────────┐
+│  RAGEngine                                                    │
+│  guardrails → embed → retrieve → rerank →                    │
+│  prompt (versioned) → generate → guardrails                  │
+└──────┬──────────────────┬──────────────────┬──────────────────┘
+       │                  │                  │
+┌──────▼───────┐   ┌──────▼────────┐  ┌──────▼──────────────────┐
+│ Gemini       │   │ HuggingFace   │  │ ChromaDB (vectors)      │
+│ google-genai │   │ local, free   │  │ + SQLite (history)      │
+└──────────────┘   └───────────────┘  └─────────────────────────┘
+```
 
-All settings load from `.env` or environment variables via `pydantic-settings` (`src/infrastructure/config/settings.py`). Every variable is optional — the code default is shown.
+### How a question becomes an answer
+
+1. **Guardrails** — the question is scanned for PII and prompt injection.
+2. **Retrieve** — semantic search over ChromaDB (optionally hybrid with BM25).
+3. **Rerank** — a BGE cross-encoder re-scores the top hits by relevance to the
+   question, which is what makes the citations precise.
+4. **Generate** — a versioned prompt (`PROMPT_VERSION`) is sent to Gemini.
+5. **Guardrails again** — groundedness and PII-leak checks on the answer.
+6. **Persist** — both turns are written to SQLite under the conversation id.
+
+## Configuration
+
+Every setting is optional; the code default applies when unset. Copy
+`.env.example` to `.env` to override. Full list with defaults lives in
+`src/infrastructure/config/settings.py`.
 
 ### Core
 
-| Variable | Default | Description |
-|---|---|---|
-| `APP_NAME` | `Marginalia` | FastAPI app title |
-| `LLM_PROVIDER` | `gemini` | `gemini` (only) |
-| `GEMINI_API_KEY` | `""` | Required when using Gemini |
-| `GEMINI_MODEL` | `gemini-2.5-flash` | |
-| `EMBEDDING_PROVIDER` | `huggingface` | `huggingface` (only, local, free) |
-| `HUGGINGFACE_MODEL` | `all-MiniLM-L6-v2` | Local model, downloaded on first use |
-| `CHROMA_PERSIST_DIR` | `./data/chroma` | ChromaDB storage directory |
-| `CHROMA_COLLECTION_NAME` | `documents` | ChromaDB collection name |
-| `CHUNK_SIZE` | `1000` | Characters per chunk |
-| `CHUNK_OVERLAP` | `200` | Overlap between consecutive chunks |
-| `MAX_FILE_SIZE_MB` | `50` | Hard upload limit. Larger uploads are rejected with `413` before the body is buffered |
-| `CORS_ORIGINS` | `["http://localhost:3000"]` | Allowed CORS origins (JSON list) |
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `GEMINI_API_KEY` | `""` | **Required.** No key, no answers. |
+| `GEMINI_MODEL` | `gemini-2.5-flash` | Generation model |
+| `HUGGINGFACE_MODEL` | `all-MiniLM-L6-v2` | Embedding model, cached after first use |
+| `CHROMA_PERSIST_DIR` | `./data/chroma` | Vector store location |
+| `HISTORY_DB_PATH` | `./data/history.db` | Conversation history (SQLite) |
+| `CHUNK_SIZE` / `CHUNK_OVERLAP` | `1000` / `200` | Fixed-size chunking window |
+| `MAX_FILE_SIZE_MB` | `50` | Hard upload ceiling; larger files get `413` |
+| `CORS_ORIGINS` | `["http://localhost:3000"]` | Allowed browser origins |
 
-### Advanced RAG (feature flags)
+### Retrieval
 
-| Variable | Default | Description |
-|---|---|---|
-| `ENABLE_RERANKING` | `false` | Re-score retrieved chunks with a BGE cross-encoder |
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `ENABLE_RERANKING` | `true` | BGE cross-encoder re-scoring |
 | `RERANKER_MODEL` | `BAAI/bge-reranker-v2-m3` | |
-| `ENABLE_HYBRID_SEARCH` | `false` | Dense vector + BM25 keyword search |
-| `ENABLE_SEMANTIC_CHUNKING` | `false` | Split on embedding-similarity dips |
-| `SEMANTIC_SIMILARITY_THRESHOLD` | `0.5` | |
-| `SEMANTIC_MIN_CHUNK_SIZE` | `100` | |
-| `SEMANTIC_MAX_CHUNK_SIZE` | `2000` | |
-| `ENABLE_INCREMENTAL_INGESTION` | `false` | Skip byte-identical re-uploads (SHA-256 dedup) |
-| `PROMPT_VERSION` | `v1` | RAG system-prompt template version |
+| `ENABLE_SEMANTIC_CHUNKING` | `true` | Split on meaning, not fixed windows |
+| `ENABLE_HYBRID_SEARCH` | `false` | Blend dense vectors with BM25 keywords |
+| `ENABLE_INCREMENTAL_INGESTION` | `false` | Skip byte-identical re-uploads |
+| `PROMPT_VERSION` | `v1` | System-prompt template; unknown falls back to `v1` |
 
-> Parent-child retrieval overrides semantic chunking in the upload route; both are off by default. Enable at most one chunking mode at a time.
+> Enable at most one chunking mode at a time — semantic and fixed-size chunking
+> solve the same problem, and running both means one silently wins.
 
-### Safety & ops
+### Guardrails
 
-| Variable | Default | Description |
-|---|---|---|
-| `ENABLE_GUARDRAILS` | `false` | PII + prompt-injection input checks, groundedness + PII-leak output checks |
-| `GUARDRAIL_BLOCK_VIOLATIONS` | `false` | Flag-only by default; set `true` to block flagged inputs before the LLM |
-| `GUARDRAIL_GROUNDEDNESS_THRESHOLD` | `0.2` | Below this score the output is flagged |
-| `ENABLE_USAGE_TRACKING` | `true` | Record LLM token usage & cost; exposes `GET /api/usage` |
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `ENABLE_GUARDRAILS` | `true` | Run the input/output checks at all |
+| `GUARDRAIL_BLOCK_VIOLATIONS` | `false` | Flag-only by default; set `true` to reject |
+| `GUARDRAIL_GROUNDEDNESS_THRESHOLD` | `0.2` | Below this, the answer is flagged |
+| `ENABLE_USAGE_TRACKING` | `true` | Token usage + estimated cost |
 
----
+## API
 
-## API Reference
+All routes are under `/api`. The API binds **loopback only** — that boundary is
+the access control, which is why there is no auth layer. Don't expose it to a
+LAN without putting your own auth in front.
 
-All routes are served under the `/api` prefix. The API binds **loopback** by default (the launcher scripts and Docker Compose both launch uvicorn on `127.0.0.1`), so it is reachable only from this machine — that loopback boundary is the access control, which is why there is no auth layer. If you want to expose it, put your own auth in front of it.
-
-| Method | Endpoint | Description |
-|---|---|---|
-| `GET` | `/api/health` | Liveness/readiness probe |
-| `POST` | `/api/documents/upload` | Upload & ingest a document (multipart field `file`) |
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/health` | Liveness + vector-store status |
+| `POST` | `/api/documents/upload` | Ingest a document (multipart `file`) |
 | `GET` | `/api/documents` | List ingested documents |
 | `DELETE` | `/api/documents/{id}` | Delete a document and its chunks |
-| `POST` | `/api/query` | Ask a question (non-streaming) |
-| `POST` | `/api/query/stream` | Ask a question (streaming SSE) |
-| `GET` | `/api/conversations` | List recent conversations (max 10, newest first) |
-| `GET` | `/api/conversations/{id}` | Get a conversation's messages |
-| `GET` | `/api/usage` | LLM token usage summary & recent records |
+| `POST` | `/api/query` | Ask a question |
+| `POST` | `/api/query/stream` | Ask a question, streamed over SSE |
+| `GET` | `/api/conversations` | List conversations, newest first |
+| `GET` | `/api/conversations/{id}` | Messages in a conversation |
+| `DELETE` | `/api/conversations/{id}` | Delete a conversation |
+| `GET` | `/api/usage` | Token usage and estimated cost |
 
 ### `GET /api/health`
 
@@ -229,262 +206,191 @@ All routes are served under the `/api` prefix. The API binds **loopback** by def
 { "status": "healthy", "version": "0.1.0", "vector_store": "initialized" }
 ```
 
-
-Request:
-
-```json
-{ "api_key": "your_api_key_here" }
-```
-
-Response (the key is compared in constant time; any mismatch returns `401`):
-
-```json
-{ "access_token": "<jwt>", "token_type": "bearer", "expires_in": 3600 }
-```
-
-Use the token as `Authorization: Bearer <jwt>`.
-
 ### `POST /api/documents/upload`
 
-Multipart form with a single `file` field. Accepts `.pdf`, `.docx`, `.txt`. Returns `400` for an unsupported type, empty file, or missing filename; `500` if ingestion fails.
+Accepts `.pdf`, `.docx`, `.txt`. Returns `400` for an unsupported type, an
+empty file, or a missing filename; `413` over `MAX_FILE_SIZE_MB`; `500` if
+ingestion fails.
 
 ```json
 {
-  "document_id": "3f0c...",
+  "document_id": "3f0c…",
   "filename": "report.pdf",
   "chunk_count": 12,
   "message": "Successfully ingested 'report.pdf'. 12 chunks stored."
 }
 ```
 
-With `ENABLE_INCREMENTAL_INGESTION=true`, a byte-identical re-upload returns `"status": "duplicate"` and skips processing.
-
-### `GET /api/documents`
-
-```json
-{
-  "documents": [
-    {
-      "id": "3f0c...",
-      "filename": "report.pdf",
-      "content_type": ".pdf",
-      "file_size": 1048576,
-      "chunk_count": 12,
-      "created_at": "2026-07-31T10:00:00"
-    }
-  ],
-  "total": 1
-}
-```
-
-Returns an empty list (HTTP 200) when no documents have been uploaded.
-
-### `DELETE /api/documents/{id}`
-
-```json
-{ "message": "Document 3f0c... deleted successfully." }
-```
+With `ENABLE_INCREMENTAL_INGESTION=true`, a byte-identical re-upload returns
+`"status": "duplicate"` and skips the work.
 
 ### `POST /api/query`
 
-Request body:
-
 ```json
-{ "question": "What are the key findings?", "top_k": 5, "conversation_id": null, "metadata_filter": null }
+{ "question": "What are the key findings?", "top_k": 5, "conversation_id": null }
 ```
 
-- `question` — required, 1–5000 characters
-- `top_k` — optional, 1–20 (default 5)
-- `conversation_id` — optional UUID; omit to start a new conversation
-- `metadata_filter` — optional scalar dict, e.g. `{"document_id": "abc"}`
-
-Response:
+`question` is 1–5000 characters; `top_k` is 1–20 (default 5); `conversation_id`
+continues an existing thread.
 
 ```json
 {
-  "answer": "The report finds that...",
+  "answer": "The report finds that…",
   "sources": [
-    { "content": "excerpt (first 500 chars)", "metadata": { "filename": "report.pdf", "chunk_index": 3 }, "score": 0.87, "chunk_index": 3 }
+    { "content": "excerpt", "metadata": { "filename": "report.pdf", "chunk_index": 3 }, "score": 0.87 }
   ],
   "confidence": 0.81,
-  "conversation_id": "3f0c...",
-  "message_id": "9a2b..."
+  "conversation_id": "3f0c…",
+  "message_id": "9a2b…"
 }
 ```
 
-Status codes: `400` invalid question / filter / conversation ID · `404` conversation not found · `429` LLM quota or rate-limit exceeded · `500` RAG pipeline failure.
+`400` invalid input · `404` unknown conversation · `429` LLM quota exceeded ·
+`500` pipeline failure.
 
-When no documents exist yet, `answer` is a friendly "no documents uploaded" message; when documents exist but nothing matched, it explains no relevant context was found.
+With no documents you get a friendly "upload something" answer rather than an
+error; with documents but no relevant match, it says so instead of guessing.
 
 ### `POST /api/query/stream`
 
-Same request body as `/api/query`. Responds with `text/event-stream` (`Cache-Control: no-cache`, `Connection: keep-alive`, `X-Accel-Buffering: no`). Each event is JSON with a `type` field:
+Same body, `text/event-stream` response. Events carry a `type`:
 
-- `chunk` — incremental answer text: `{"type": "chunk", "content": "..."}`
-- `done` — final summary with answer, sources, confidence, and conversation/message IDs
-- `error` — error message: `{"type": "error", "message": "..."}`
-- `blocked` — (with guardrails) an input check blocked the query
-- Terminates with `data: [DONE]`
+| Type | Meaning |
+| --- | --- |
+| `stage` | Live retrieval trace (`rewriting`, `retrieving`, …) |
+| `chunk` | Incremental answer text |
+| `done` | Final answer, sources, confidence, and ids |
+| `error` | Human-readable failure |
+| `blocked` | Guardrails rejected the question |
 
-Contract: even on LLM quota/rate-limit errors the response stays HTTP 200 and emits an `error` event followed by `[DONE]`, so streaming clients always see well-formed termination.
-
-> The current React UI calls the non-streaming `POST /api/query`; the SSE endpoint is part of the API contract for token-by-token clients.
-
-### `GET /api/conversations`
-
-```json
-[
-  { "id": "3f0c...", "title": "What are the key findings?", "created_at": "...", "updated_at": "...", "message_count": 4 }
-]
-```
-
-Only conversations with at least one message are returned, newest first (limit 10).
-
-### `GET /api/conversations/{id}`
-
-```json
-[
-  { "id": "9a2b...", "role": "user", "content": "What are the key findings?", "sources": [], "created_at": "..." }
-]
-```
-
-Status codes: `400` invalid UUID · `404` conversation not found.
-
-### `GET /api/usage`
-
-```json
-{
-  "requests": 3,
-  "prompt_tokens": 300,
-  "completion_tokens": 150,
-  "total_tokens": 450,
-  "est_cost_usd": 0.0012,
-  "recent": [
-    { "model": "gemini-2.5-flash", "prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150, "timestamp": 1789123456.78, "request_id": "..." }
-  ]
-}
-```
-
-Optional query param `limit` (1–100, default 10). Zeroed totals and an empty `recent` list when `ENABLE_USAGE_TRACKING=false`. Records are per-process and reset on restart.
-
----
+Always terminates with `data: [DONE]`. Quota and rate-limit errors still return
+HTTP 200 followed by an `error` event, so streaming clients never see a
+truncated stream.
 
 ## Frontend
 
-A responsive React SPA (Tailwind CSS). Every view has its own URL (`/`, `/documents`, `/collections`, `/history`, `/bookmarks`, `/settings`), so pages are linkable, bookmarkable and reachable with the back/forward buttons. Navigation is a left rail on desktop and a bottom bar on mobile:
+A React SPA with a neo-brutalist design system — hard 3px borders, flat offset
+shadows, no gradients. Navigation is a left rail on desktop and a bottom bar on
+mobile, and every view has a real URL.
 
-| View | What it does |
-|---|---|
-| **Documents** | Upload (drag & drop or file picker), list, and delete documents; shows ingestion status and chunk counts |
-| **Chat** | Ask questions with a conversation selector (last conversation persists in `localStorage`); answers render `[Source N]` markers with an expandable **Referenced Sources** panel showing each cited chunk and its score, plus a **confidence** badge so a weakly-grounded answer is visibly distinguishable from a well-sourced one |
-| **History** | Every past conversation, saved to disk so it survives restarts, grouped by Today/Yesterday/Earlier, with a title filter and per-conversation delete; click to reopen it in Chat |
-| **Collections** | Placeholder — grouping documents is planned |
-| **Bookmarks** | Placeholder — saving answers is planned |
-| **Settings** | Static read-only overview of how the app is configured |
+| Route | What it does |
+| --- | --- |
+| `/chat` | A fresh conversation |
+| `/chat/:id` | That conversation — linkable and refresh-safe |
+| `/documents` | Upload (drop or pick), list, delete, with chunk counts |
+| `/history` | Past conversations grouped by day, filterable, deletable |
+| `/settings` | Read-only overview of how the app is configured |
 
-## Testing & Quality
+Answers render inline `[Source N]` markers; tapping one expands the cited chunk
+and its relevance score in a **Referenced Sources** panel.
 
-```bash
-# All tests — 339 total (328 in tests/, 11 in eval/ — matches CI)
-python -m pytest -q
-
-# Lint & formatting (exactly what CI enforces)
-python -m ruff check src/ eval/ tests/
-python -m ruff format --check src/ eval/ tests/
-
-# Type check (best-effort — see note)
-python -m mypy src/
-```
-
-- **mypy** is configured `strict` and runs in CI with `continue-on-error: true` — it is **not** a gate. Treat failures as best-effort/optional.
-- **CI** (`.github/workflows/ci.yml`) runs on every push/PR to `main`:
-  1. **Lint + Type Check** — `ruff check`, `ruff format --check`, `mypy` (non-blocking)
-  2. **Tests** — `pytest` on Python 3.10 / 3.11 / 3.12
-  3. **Docker Build** — API and frontend images
-
-## Evaluation
-
-RAG quality can be measured offline with [RAGAS](https://docs.ragas.io/) against a golden dataset (`eval/golden_dataset.jsonl`): faithfulness, answer_relevancy, context_precision, context_recall.
+## Testing
 
 ```bash
-# Live evaluation against a running pipeline (first 3 questions)
-python eval/ragas_eval.py --sample 3
+python -m pytest -q              # 325 tests (314 unit/integration + 11 eval)
 
-# Offline evaluation of pre-generated results
-python eval/ragas_eval.py --offline eval/sample_results.jsonl
+python -m ruff check src/ tests/ eval/
+python -m ruff format --check src/ tests/ eval/
+python -m mypy src/             # strict, but non-blocking in CI
 ```
 
-The harness exits non-zero when a metric falls below its threshold. Unit tests: `python -m pytest eval/ -q`. See `eval/README.md` for details. (The RAGAS job was removed from CI — it requires LLM provider secrets; run it locally when needed.)
+CI (`.github/workflows/ci.yml`) runs lint + type check, the suite on Python
+3.10 / 3.11 / 3.12, and both Docker image builds on every push and PR.
 
-## Project Structure
+Frontend tests and build:
+
+```bash
+cd src/presentation/react
+npm test          # 34 tests
+npm run build
+```
+
+### Measuring answer quality
+
+RAG quality is measurable, not a matter of opinion. `eval/` scores the pipeline
+with [RAGAS](https://docs.ragas.io/) against a golden set — faithfulness,
+answer relevancy, context precision, and recall:
+
+```bash
+python eval/ragas_eval.py --sample 3                          # live, needs a key
+python eval/ragas_eval.py --offline eval/sample_results.jsonl # offline
+```
+
+The harness exits non-zero when a metric drops below threshold. It is not in CI
+because it needs provider secrets; run it locally before changing the pipeline.
+
+## Project layout
 
 ```
 src/
-├── domain/                  # Entities, interfaces (ports), value objects
-│   ├── entities/            # Document, Message, Conversation
-│   ├── interfaces/          # LLM, embeddings, repos, vector store, reranker, rewriter
-│   └── value_objects/       # Chunk
-├── application/             # Use cases & business logic
-│   ├── use_cases/           # IngestDocument, QueryDocument, Conversation
-│   ├── services/            # RAGEngine, QueryRewriterService
-│   └── dto/                 # Request/response DTOs
-├── infrastructure/          # Adapters & external implementations
-│   ├── config/              # Settings (pydantic-settings)
-│   ├── auth/                # JWT-shaped tokens (stdlib HMAC-SHA256)
-│   ├── llm/                 # Gemini provider + prompt registry
-│   ├── embeddings/          # HuggingFace provider
-│   ├── document_processing/ # PDF/DOCX/TXT parsers, splitters, enrichers
-│   ├── vector_store/        # ChromaDB (persistent, cosine, hybrid)
-│   ├── rerankers/           # BGE cross-encoder reranker
-│   ├── guardrails/          # PII / injection / groundedness checks
-│   ├── ratelimit/           # In-memory sliding-window limiter
-│   └── repositories/        # SQLite conversation history
-└── presentation/            # Interfaces
-    ├── api/                 # FastAPI app factory + routes (health/auth/documents/chat/usage)
-    └── react/               # React + Vite + Tailwind frontend
-deploy/
-└── nginx.conf               # Frontend image config (SSE-friendly proxy)
-scripts/
-├── start_all.sh             # Starts uvicorn + Vite (macOS/Linux)
-├── start_all.bat            # Same, for Windows
-├── stop_all.sh
-└── stop_all.bat
-tests/                       # Unit + integration tests (434)
-eval/                        # RAGAS offline evaluation harness (11 tests)
-data/                        # Local ChromaDB persistence (CHROMA_PERSIST_DIR)
+├── domain/              # Entities, ports (interfaces), value objects
+├── application/         # Use cases, RAGEngine, DTOs
+├── infrastructure/
+│   ├── config/          # pydantic-settings
+│   ├── llm/             # Gemini provider + prompt registry
+│   ├── embeddings/      # HuggingFace (local)
+│   ├── document_processing/  # PDF / DOCX / TXT parsers, splitters
+│   ├── vector_store/    # ChromaDB
+│   ├── rerankers/       # BGE cross-encoder
+│   ├── guardrails/      # PII, injection, groundedness
+│   └── repositories/    # SQLite conversation history
+└── presentation/
+    ├── api/             # FastAPI factory + routes
+    └── react/           # React + Vite + Tailwind
+eval/                    # RAGAS harness + golden dataset
+deploy/nginx.conf        # SSE-friendly frontend proxy
+scripts/                 # start_all / stop_all
 ```
 
 ## Troubleshooting
 
-### Gemini returns HTTP 429 / "quota exceeded"
+**`429 quota exceeded` from Gemini.** The AI Studio project behind the key has
+no billing account, so the free tier reports `limit: 0`. Linking billing at
+<https://aistudio.google.com> is free and includes a daily request allowance.
+The app degrades cleanly either way: `/api/query` returns `429` with a readable
+message, and `/api/query/stream` returns `200` followed by an `error` event.
 
-The Google AI Studio project behind `GEMINI_API_KEY` has no billing account linked, so the free tier reports `limit: 0`. Enable billing at https://aistudio.google.com (free to link; Gemini 2.5 Flash includes ~250 free requests/day). The app degrades gracefully:
+**The first query is slow.** `all-MiniLM-L6-v2` (~90 MB) downloads from the
+HuggingFace Hub on first use, then runs offline from cache. The BGE reranker
+downloads the same way.
 
-- `POST /api/query` → HTTP 429 with a friendly message.
-- `POST /api/query/stream` → HTTP 200, then `{"type": "error", "message": ...}` followed by `[DONE]`.
+**History looks empty after a restart.** It shouldn't — conversations live in
+`HISTORY_DB_PATH` and persist. If the file can't be opened the API fails to
+start rather than silently discarding your history, which is the intended
+behaviour: fail loudly instead of quietly losing data.
 
-### Conversation history resets when the API restarts
+**Nothing loads in the browser.** Check the API is up (`curl
+localhost:8000/api/health`) and that `.env` has a `GEMINI_API_KEY`. A missing
+key surfaces as a query-time error, not a startup failure.
 
-Conversations are stored in a local SQLite file (`data/history.db`), so history survives a restart. Documents and their embeddings in ChromaDB are persistent too. If the history file cannot be opened the API fails to start rather than silently discarding your history.
+## Tech stack
 
-### First HuggingFace embedding call is slow
+| Layer | Choice |
+| --- | --- |
+| Frontend | React 18, Vite, Tailwind CSS, react-router-dom, framer-motion |
+| API | FastAPI, Uvicorn, Pydantic v2 |
+| Retrieval | ChromaDB, BGE cross-encoder reranking |
+| Generation | Gemini via `google-genai` |
+| Embeddings | `sentence-transformers`, run locally |
+| Parsing | PyMuPDF (primary) → PyPDF2 (fallback), python-docx |
+| History | SQLite (stdlib `sqlite3`) |
+| Config | pydantic-settings |
+| Deploy | Docker Compose + nginx |
 
-The local model (`all-MiniLM-L6-v2`, ~80–100 MB) is downloaded from the HuggingFace Hub on first use and cached. The first run needs internet; subsequent runs are offline.
+## Contributing
 
-## Tech Stack
+```bash
+pip install -e ".[dev]"
+python -m ruff check src/ tests/ eval/ && python -m ruff format src/ tests/ eval/
+python -m pytest -q
+```
 
-| Layer | Technology |
-|---|---|
-| Frontend | React 18, Vite, Tailwind CSS |
-| Backend API | FastAPI + Uvicorn |
-| Vector Store | ChromaDB (persistent, cosine + hybrid search) |
-| LLM Providers | Gemini, OpenAI, Anthropic, DeepSeek |
-| Embedding Providers | Gemini, OpenAI, HuggingFace (sentence-transformers) |
-| Document Parsing | PyMuPDF (primary), PyPDF2 (fallback), python-docx |
-| Reranking | BGE cross-encoder (`bge-reranker-v2-m3`) |
-| Auth | JWT-shaped tokens (stdlib HMAC-SHA256, no third-party lib) |
-| Configuration | pydantic-settings |
-| Deployment | Docker Compose + nginx |
-| Architecture | Clean Architecture + dependency injection |
-| Python | 3.10+ (3.11 in Docker) |
-| Node.js | 18+ |
+Keep the layers honest: `domain` imports nothing from the layers above it, and
+new behaviour belongs in a use case rather than a route. Mark deliberate
+shortcuts with a `ponytail:` comment explaining what was given up, so the next
+person knows whether it is load-bearing.
+
+## License
+
+No license file is present yet. Add one before publishing this publicly —
+without it, the default copyright applies and others have no right to use it.
