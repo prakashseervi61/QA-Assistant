@@ -66,6 +66,9 @@ htmlcov/
 *.pyc
 *.png
 
+# README screenshots are real project images, not build artifacts.
+!docs/images/*.png
+
 # Node
 node_modules/
 
