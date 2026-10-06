@@ -19,8 +19,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           anyone who asked the OS not to animate things. Declared once here
           rather than guarding ~22 animation sites individually. */}
       <MotionConfig reducedMotion="user">
-        {/* BrowserRouter gives every view a real URL, so pages are linkable,
-            bookmarkable and reachable with the back/forward buttons. */}
+        {/* BrowserRouter gives every view a real URL, so pages are linkable
+            and reachable with the back/forward buttons. */}
         <BrowserRouter>
           <App />
         </BrowserRouter>

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { Database, FileText, MessageSquare, Sun } from 'lucide-react';
 import CommandPalette from './components/CommandPalette';
@@ -84,14 +84,28 @@ export default function App() {
   const [isDark, setIsDark] = useState(() => getTheme() === 'dark');
   const location = useLocation();
   const navigate = useNavigate();
-  const pendingConversation = useRef(null);
 
   // The URL is the single source of truth for which view is showing, so the
   // dock highlight, the ⌘K palette and the browser's back/forward all agree.
   const activeView = navKeyForPath(location.pathname);
 
+  // A bare `/chat` is a fresh conversation (the New chat action); `/chat/<id>`
+  // is a saved one, so the Chat link owns that highlight instead.
+  const freshChat = location.pathname === '/chat';
+
   function handleNavigate(key) {
     navigate(navItemForKey(key).path);
+  }
+
+  /**
+   * Start a fresh conversation from the dock.
+   *
+   * `/chat` (no id) *is* the fresh chat, so navigating there is the whole
+   * action. ChatWidget reads the id off the route, so no event hand-off is
+   * needed and the URL stays the single source of truth.
+   */
+  function handleNewChat() {
+    navigate('/chat');
   }
 
   function handleToggleTheme() {
@@ -105,27 +119,13 @@ export default function App() {
   /**
    * Open a saved conversation from the History view.
    *
-   * ChatWidget listens for this event, but it is only mounted on `/`, so when
-   * we arrive from another page the dispatch has to wait until after the
-   * route renders. Child effects run before the parent's, so an effect here
-   * fires once ChatWidget's listener is attached.
+   * The id becomes the route (`/chat/<id>`), so the chat is linkable, the
+   * back button steps between conversations, and a refresh lands on the same
+   * conversation. ChatWidget watches the param and loads the messages.
    */
   function handleOpenConversation(id) {
-    if (location.pathname === '/') {
-      window.dispatchEvent(new CustomEvent('open-conversation', { detail: id }));
-      return;
-    }
-    pendingConversation.current = id;
-    navigate('/');
+    navigate(`/chat/${id}`);
   }
-
-  useEffect(() => {
-    if (location.pathname === '/' && pendingConversation.current) {
-      const id = pendingConversation.current;
-      pendingConversation.current = null;
-      window.dispatchEvent(new CustomEvent('open-conversation', { detail: id }));
-    }
-  }, [location.pathname]);
 
   // pb-20 clears the mobile bottom nav bar; the dock is a left rail on lg.
   const pagePad = 'p-4 pb-24 sm:p-6 sm:pb-24 lg:px-28 lg:py-8 lg:pb-8';
@@ -152,10 +152,15 @@ export default function App() {
         tabIndex={-1}
         className="relative flex min-h-0 flex-1 flex-col focus:outline-none"
       >
-        <Dock active={activeView} />
+        <Dock active={activeView} freshChat={freshChat} onNewChat={handleNewChat} />
 
         <Routes>
-          <Route path="/" element={<ChatWidget />} />
+          {/* `/` and `/chat` are the same fresh chat; `/chat/:conversationId`
+              opens that conversation. The id is the conversation's uuid, so
+              every chat gets its own address-bar id. */}
+          <Route path="/" element={<Navigate to="/chat" replace />} />
+          <Route path="/chat" element={<ChatWidget />} />
+          <Route path="/chat/:conversationId" element={<ChatWidget />} />
 
           <Route
             path="/documents"

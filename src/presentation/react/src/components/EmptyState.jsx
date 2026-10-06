@@ -3,7 +3,7 @@ import { Archive } from 'lucide-react';
 
 /**
  * Clean, reusable empty state used by views that have no content yet
- * (Collections, Bookmarks, ...). Purely presentational; sits on the
+ * (History, Documents, Settings, ...). Purely presentational; sits on the
  * hard-bordered surface so it fits the system in both themes.
  *
  * `icon` is any component that accepts the lucide icon props (size, className).

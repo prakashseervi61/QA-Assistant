@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Check, ChevronDown, FileText, Loader2, MessageSquare, Paperclip, Send, ShieldAlert, Sparkles, Square } from 'lucide-react';
 import {
   fetchJSON,
@@ -58,36 +59,32 @@ export default function ChatWidget() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  // ponytail: this used to be a prop with a default of null, but the only
-  // mount site is <ChatWidget /> — conversations arrive solely via the
-  // 'open-conversation' window event dispatched by App.
+  // The conversation currently displayed. Mirrors the `:id` route segment —
+  // null on `/chat` (fresh) and the conversation uuid on `/chat/<id>`.
   const [conversationId, setConversationId] = useState(null);
   const [expandedSources, setExpandedSources] = useState({});
   const [hasDocuments, setHasDocuments] = useState(null); // null = still checking
-  const [conversations, setConversations] = useState([]); // from GET /conversations
-  const [restoring, setRestoring] = useState(true); // gates empty-state flash
+  const [restoring, setRestoring] = useState(false); // gates empty-state flash
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState(null);
   const [listening, setListening] = useState(false);
   const [voiceError, setVoiceError] = useState(null);
   const [stages, setStages] = useState([]); // live RAG pipeline trace from `stage` stream events
   const [showJumpToLatest, setShowJumpToLatest] = useState(false); // scrolled-up affordance
+  const navigate = useNavigate();
+  const { conversationId: routeConversationId } = useParams();
   const messagesContainerRef = useRef(null);
   const stickToBottomRef = useRef(true); // auto-follow only while the user stays at the bottom
   const textareaRef = useRef(null);
   const chatFileInputRef = useRef(null); // hidden input for in-chat uploads
   const recognitionRef = useRef(null); // SpeechRecognition instance
   const abortRef = useRef(null); // AbortController for the in-flight stream
-  const switchConversationRef = useRef(null); // latest switchConversation, for the History-view event listener
   const isSendingRef = useRef(false); // Execution lock preventing rapid double-send
   const pendingTextRef = useRef(''); // buffered stream text not yet flushed to state
   const flushRafRef = useRef(0); // requestAnimationFrame id for the pending flush
   const pendingIdRef = useRef(null); // message id the buffered text belongs to
-
-  const LAST_CONVERSATION_KEY = 'qa-assistant.lastConversationId';
-  const lastConversationId = () => safeGetItem(LAST_CONVERSATION_KEY);
-  const saveLastConversationId = id => safeSetItem(LAST_CONVERSATION_KEY, id);
-  const clearLastConversationId = () => safeRemoveItem(LAST_CONVERSATION_KEY);
+  const shownIdRef = useRef(null); // conversation id whose messages are in state
+  const loadSeqRef = useRef(0); // invalidates superseded conversation loads
 
   // Check whether any documents are available to query.
   useEffect(() => {
@@ -110,42 +107,56 @@ export default function ChatWidget() {
     };
   }, []);
 
-  // Restore the most recent conversation (or the last one the user opened) on mount.
+  // The URL is the single source of truth for which conversation is shown:
+  // `/chat` is a fresh chat and `/chat/<id>` opens that conversation. Because
+  // react-router keeps this component mounted when only the param changes, we
+  // watch the param and load/reset on every change.
   useEffect(() => {
-    let cancelled = false;
-    fetchJSON('/conversations')
-      .then(list => {
-        if (cancelled) return undefined;
-        setConversations(list);
-        const savedId = lastConversationId();
-        const target =
-          savedId && list.some(conversation => conversation.id === savedId)
-            ? savedId
-            : (list[0]?.id ?? null);
-        if (!target) return undefined;
-        return fetchJSON(`/conversations/${target}`).then(msgs => {
-          if (cancelled) return;
-          setMessages(msgs.map(toLocalMessage));
-          setConversationId(target);
-          saveLastConversationId(target);
-        });
+    // Bumping the sequence invalidates any in-flight load, so a slow response
+    // can never overwrite the conversation the user has since navigated to.
+    const seq = ++loadSeqRef.current;
+    const isStale = () => seq !== loadSeqRef.current;
+    const id = routeConversationId;
+
+    if (!id) {
+      shownIdRef.current = null;
+      setMessages([]);
+      setConversationId(null);
+      setExpandedSources({});
+      stickToBottomRef.current = true;
+      setShowJumpToLatest(false);
+      setRestoring(false);
+      return;
+    }
+
+    // The first message adopts the id from the stream, and that exchange is
+    // already rendered locally — refetching it would be a pointless round trip.
+    if (id === shownIdRef.current) {
+      setRestoring(false);
+      return;
+    }
+
+    setRestoring(true);
+    stickToBottomRef.current = true;
+    setShowJumpToLatest(false);
+    fetchJSON(`/conversations/${id}`)
+      .then(msgs => {
+        if (isStale()) return;
+        shownIdRef.current = id;
+        setMessages(msgs.map(toLocalMessage));
+        setConversationId(id);
+        setExpandedSources({});
       })
       .catch(() => {
-        // Never lock the chat out; start fresh if restore fails.
-        if (!cancelled) clearLastConversationId();
+        // Unknown id: fall back to a fresh chat so the URL never lies.
+        if (isStale()) return;
+        shownIdRef.current = null;
+        navigate('/chat', { replace: true });
       })
       .finally(() => {
-        if (!cancelled) setRestoring(false);
+        if (!isStale()) setRestoring(false);
       });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // Remember the active conversation across page reloads.
-  useEffect(() => {
-    if (conversationId) saveLastConversationId(conversationId);
-  }, [conversationId]);
+  }, [routeConversationId, navigate]);
 
   // Auto-scroll with the stream, but only while the user is near the bottom;
   // scrolling up stops the chasing so partial answers can be read.
@@ -160,16 +171,6 @@ export default function ChatWidget() {
       abortRef.current?.abort();
       resetPendingText();
     };
-  }, []);
-
-  // Open a conversation selected from the History view (cross-component event).
-  useEffect(() => {
-    function handleOpenConversation(e) {
-      const id = e.detail;
-      if (id) switchConversationRef.current?.(id);
-    }
-    window.addEventListener('open-conversation', handleOpenConversation);
-    return () => window.removeEventListener('open-conversation', handleOpenConversation);
   }, []);
 
   // Stop any in-flight speech recognition if the widget unmounts.
@@ -220,48 +221,15 @@ export default function ChatWidget() {
     setShowJumpToLatest(false);
   }
 
-  /** Silently refresh the conversation list (used after query/switch). */
-  function refreshConversations() {
-    fetchJSON('/conversations')
-      .then(list => {
-        setConversations(list);
-        window.dispatchEvent(new CustomEvent('conversations-changed'));
-      })
-      .catch(() => {});
+  /**
+   * Tell the History view its list is stale.
+   *
+   * ponytail: the chat no longer renders the conversation list itself (the
+   * picker is gone), so it just pings HistoryView to re-fetch.
+   */
+  function notifyConversationsChanged() {
+    window.dispatchEvent(new CustomEvent('conversations-changed'));
   }
-
-  /** Load a different conversation into the panel, or reset to a fresh chat when id is empty. */
-  async function switchConversation(id) {
-    if (restoring || id === conversationId) return;
-    // Stop any in-flight stream first so tokens can't bleed into the
-    // conversation we're switching to.
-    abortRef.current?.abort();
-    if (!id) {
-      setMessages([]);
-      setConversationId(null);
-      setExpandedSources({});
-      stickToBottomRef.current = true;
-      setShowJumpToLatest(false);
-      clearLastConversationId();
-      return;
-    }
-    setRestoring(true);
-    stickToBottomRef.current = true;
-    setShowJumpToLatest(false);
-    try {
-      const msgs = await fetchJSON(`/conversations/${id}`);
-      setMessages(msgs.map(toLocalMessage));
-      setConversationId(id);
-      setExpandedSources({});
-    } catch {
-      /* keep current chat */
-    } finally {
-      setRestoring(false);
-      refreshConversations();
-    }
-  }
-
-  switchConversationRef.current = switchConversation;
 
   /** Immutably patch the message with the given `id` in the message list. */
   function updateMessageById(id, updater) {
@@ -466,8 +434,16 @@ export default function ChatWidget() {
               flushPendingText();
               doneEvent = event;
               if (event.conversation_id) {
+                // The first message mints the conversation. Adopt the id into
+                // state *and* the URL so the address bar owns it from here on.
+                // `replace` keeps Back pointing at wherever the user came
+                // from instead of at this just-created empty chat.
+                shownIdRef.current = event.conversation_id;
                 setConversationId(event.conversation_id);
-                refreshConversations();
+                if (routeConversationId !== event.conversation_id) {
+                  navigate(`/chat/${event.conversation_id}`, { replace: true });
+                }
+                notifyConversationsChanged();
               }
               // Keep the confidence the backend computed so the answer can
               // show how strongly it is grounded instead of looking equally
@@ -533,27 +509,7 @@ export default function ChatWidget() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-paper">
-      {/* Header */}
-      {conversations.length > 0 && (
-        <header className="flex shrink-0 items-center justify-end gap-3 border-b-[3px] border-nb-line bg-paper-surface px-4 py-3 sm:px-6">
-          <select
-            id="conversation-select"
-            name="conversation"
-            aria-label="Previous chats"
-            value={conversationId ?? ''}
-            onChange={e => switchConversation(e.target.value)}
-            disabled={restoring || loading}
-            className="nb-input nb-focus min-w-0 cursor-pointer px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider disabled:cursor-not-allowed sm:max-w-xs"
-          >
-            <option value="">New chat</option>
-            {conversations.map(conversation => (
-              <option key={conversation.id} value={conversation.id}>
-                {conversation.title || 'New chat'}
-              </option>
-            ))}
-          </select>
-        </header>
-      )}
+
 
       {/* Messages */}
       <div
@@ -802,7 +758,7 @@ export default function ChatWidget() {
             disabled={uploading}
             aria-label="Upload a document"
             title="Upload a PDF, DOCX or TXT document"
-            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded border-2 border-nb-line bg-paper-surface text-ink transition-colors hover:bg-accent-yellow hover:text-ink-on-accent disabled:cursor-not-allowed ${
+            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded border-[3px] border-nb-line bg-paper-surface text-ink transition-colors hover:bg-accent-yellow hover:text-ink-on-accent disabled:cursor-not-allowed ${
               uploading ? 'cursor-wait' : ''
             }`}
           >
@@ -833,13 +789,12 @@ export default function ChatWidget() {
             disabled={loading || hasDocuments === false}
             aria-label="Your question"
             name="question"
-            className="max-h-40 min-h-0 flex-1 resize-none bg-transparent py-1 text-sm text-ink placeholder:text-ink-faint focus:outline-none disabled:cursor-not-allowed"
+            className="max-h-40 min-h-11 flex-1 resize-none bg-transparent py-2.5 text-sm leading-6 text-ink placeholder:text-ink-faint focus:outline-none disabled:cursor-not-allowed"
           />
           <WaveformOrb
             listening={listening}
             onClick={toggleVoice}
             label="Voice input"
-            className="h-9 w-9"
           />
           {loading ? (
             <button
