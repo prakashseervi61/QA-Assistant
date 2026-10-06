@@ -222,7 +222,8 @@ class SQLiteConversationRepository(ConversationRepository):
             result: list[Conversation] = []
             for row in rows:
                 message_rows = conn.execute(
-                    "SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at",
+                    "SELECT * FROM messages "
+                    "WHERE conversation_id = ? ORDER BY created_at",
                     (row["id"],),
                 ).fetchall()
                 result.append(

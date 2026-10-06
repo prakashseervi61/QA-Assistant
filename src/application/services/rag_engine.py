@@ -15,7 +15,6 @@ from src.domain.interfaces.reranker import Reranker
 from src.domain.interfaces.vector_store import VectorStore
 from src.infrastructure.config.settings import get_settings
 from src.infrastructure.llm.prompt_registry import (
-    PROMPT_VERSIONS,
     get_prompt,
 )
 from src.infrastructure.llm.structured_output import (
@@ -24,7 +23,7 @@ from src.infrastructure.llm.structured_output import (
 )
 
 if TYPE_CHECKING:
-    from src.domain.value_objects.chunk import Chunk
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -197,7 +196,6 @@ class RAGEngine:
                     metadata_filter=metadata_filter,
                 )
             logger.info("Retrieved %d context chunks", len(chunks))
-
 
             # rerank
             if self._reranker is not None and chunks:
@@ -373,7 +371,6 @@ class RAGEngine:
                 )
             logger.debug("Retrieved %d chunks for streaming query", len(chunks))
 
-
             # rerank
             if self._reranker is not None and chunks:
                 yield self._stage_event(
@@ -451,7 +448,6 @@ class RAGEngine:
         except Exception as exc:
             logger.error("RAG stream query failed: %s", exc, exc_info=True)
             raise RAGQueryError(f"Failed to stream query: {exc}") from exc
-
 
     # ------------------------------------------------------------------
     # Private helpers

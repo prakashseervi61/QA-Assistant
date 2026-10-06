@@ -5,9 +5,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from src.application.services.rag_engine import RAGEngine, RAGQueryError
-from src.infrastructure.llm.prompt_registry import PROMPT_VERSIONS
 from src.domain.interfaces.llm_provider import LLMQuotaExceededError
 from src.domain.value_objects.chunk import Chunk
+from src.infrastructure.llm.prompt_registry import PROMPT_VERSIONS
 
 
 def _content_only(events):

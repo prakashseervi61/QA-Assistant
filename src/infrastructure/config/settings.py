@@ -55,8 +55,6 @@ class Settings(BaseSettings):
     # Hybrid Search
     ENABLE_HYBRID_SEARCH: bool = False
 
-
-
     # Semantic Chunking
     # ON by default: chunks split on semantic boundaries at ingestion
     # rather than fixed-size windows, so retrieved context stays coherent.

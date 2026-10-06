@@ -158,7 +158,6 @@ class TestIncrementalIngest:
         deps["parser"].parse.assert_not_called()
         deps["embedding_provider"].embed_batch.assert_not_called()
 
-
     @pytest.mark.asyncio
     async def test_normal_ingest_stores_hash_when_enabled(
         self, use_case, deps, ingest_ctx

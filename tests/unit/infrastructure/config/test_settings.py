@@ -72,7 +72,6 @@ class TestSettingsCustomValues:
         assert s.GEMINI_API_KEY == "my-secret-key"
 
 
-
 class TestGetSettingsSingleton:
     """Verify get_settings returns a cached singleton."""
 
@@ -100,8 +99,6 @@ class TestGetSettingsSingleton:
     def test_get_settings_multiple_calls_same_identity(self):
         instances = [get_settings() for _ in range(10)]
         assert all(inst is instances[0] for inst in instances)
-
-
 
 
 class TestPromptVersioningSettings:

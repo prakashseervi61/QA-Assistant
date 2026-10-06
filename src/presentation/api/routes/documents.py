@@ -3,7 +3,6 @@
 import logging
 import os
 
-from src.presentation.api.dependencies import Registry
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from src.application.dto.responses import (
@@ -14,6 +13,7 @@ from src.application.dto.responses import (
 from src.domain.interfaces.embedding_provider import EmbeddingProvider
 from src.domain.interfaces.vector_store import VectorStore
 from src.infrastructure.config.settings import get_settings
+from src.presentation.api.dependencies import Registry
 
 logger = logging.getLogger(__name__)
 
@@ -145,9 +145,7 @@ async def upload_document(file: UploadFile = File(...)) -> IngestResponse:
         raise
     except Exception as exc:
         logger.error("Upload failed for '%s': %s", file.filename, exc, exc_info=True)
-        raise HTTPException(
-            status_code=500, detail="Ingestion failed."
-        )
+        raise HTTPException(status_code=500, detail="Ingestion failed.")
 
 
 # ---------------------------------------------------------------------------
@@ -165,9 +163,7 @@ async def list_documents() -> DocumentListResponse:
         docs = await vector_store.list_documents(settings.CHROMA_COLLECTION_NAME)
     except Exception as exc:
         logger.error("Failed to list documents: %s", exc, exc_info=True)
-        raise HTTPException(
-            status_code=500, detail="Failed to list documents."
-        )
+        raise HTTPException(status_code=500, detail="Failed to list documents.")
 
     documents = [
         DocumentInfo(
@@ -204,8 +200,6 @@ async def delete_document(document_id: str) -> dict:
         logger.error(
             "Failed to delete document %s: %s", document_id, exc, exc_info=True
         )
-        raise HTTPException(
-            status_code=500, detail="Failed to delete document."
-        )
+        raise HTTPException(status_code=500, detail="Failed to delete document.")
 
     return {"message": f"Document {document_id} deleted successfully."}

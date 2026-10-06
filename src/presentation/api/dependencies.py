@@ -38,8 +38,7 @@ class Registry(Generic[T]):
             raise HTTPException(
                 status_code=503,
                 detail=(
-                    f"{self._name} service not initialised. "
-                    "Check server configuration."
+                    f"{self._name} service not initialised. Check server configuration."
                 ),
             )
         return self._instance

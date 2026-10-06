@@ -152,8 +152,6 @@ class TestSQLiteConversationRepository:
         with pytest.raises(KeyError):
             await repo.get_conversation(conversation.id)
 
-        from uuid import uuid4
-
         # Messages are cascade-deleted, so the conversation no longer resolves.
         with pytest.raises(KeyError):
             await repo.get_messages(conversation.id)
@@ -185,4 +183,5 @@ class TestSQLiteConversationRepository:
         conversation = Conversation(title="No documents listed")
         await repo.save_conversation(conversation)
 
-        assert (await repo.get_conversation(conversation.id)).title == "No documents listed"
+        stored = await repo.get_conversation(conversation.id)
+        assert stored.title == "No documents listed"

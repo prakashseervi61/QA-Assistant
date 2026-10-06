@@ -46,7 +46,9 @@ class TestUploadDocumentSizeLimit:
     ):
         """A chunked request can omit Content-Length, so count bytes too."""
         mock_get_settings.return_value = self._settings(max_mb=1)
-        undeclared = UploadFile(filename="big.pdf", file=io.BytesIO(b"x" * (2 * 1024 * 1024)))
+        undeclared = UploadFile(
+            filename="big.pdf", file=io.BytesIO(b"x" * (2 * 1024 * 1024))
+        )
         undeclared.size = None  # client did not declare a length
 
         with pytest.raises(HTTPException) as exc_info:
@@ -188,14 +190,12 @@ class TestUploadWiring:
         from src.application.use_cases.ingest_document import IngestDocumentUseCase
 
         route_src = inspect.getsource(documents_router.upload_document)
-        accepted = set(
-            inspect.signature(IngestDocumentUseCase.__init__).parameters
-        ) - {"self"}
+        accepted = set(inspect.signature(IngestDocumentUseCase.__init__).parameters) - {
+            "self"
+        }
 
         # Keywords inside the IngestDocumentUseCase(...) call specifically.
-        call = re.search(
-            r"IngestDocumentUseCase\((.*?)\n        \)", route_src, re.S
-        )
+        call = re.search(r"IngestDocumentUseCase\((.*?)\n        \)", route_src, re.S)
         assert call, "could not find the IngestDocumentUseCase(...) call"
 
         supplied = set(re.findall(r"(\w+)=", call.group(1)))

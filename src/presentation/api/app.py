@@ -23,6 +23,7 @@ from src.presentation.api.routes import chat, documents, health, usage
 
 logger = logging.getLogger(__name__)
 
+
 def _wire_dependencies(settings: Settings) -> TokenTracker:
     """Build shared infrastructure and inject it into the routers.
 

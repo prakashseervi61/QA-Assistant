@@ -170,9 +170,7 @@ async def _stream_events(
         logger.error("Streaming query failed", exc_info=True)
         error_event = {
             "type": "error",
-            "message": (
-                "The query could not be completed. See the server logs."
-            ),
+            "message": ("The query could not be completed. See the server logs."),
         }
         yield f"data: {json.dumps(error_event)}\n\n"
     finally:

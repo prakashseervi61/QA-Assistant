@@ -137,9 +137,7 @@ def _build_query_use_case() -> object:
     )
     # An eval run keeps its own throwaway history file so it never touches
     # the user's real conversations.
-    conversation_repository = SQLiteConversationRepository(
-        "./data/eval-history.db"
-    )
+    conversation_repository = SQLiteConversationRepository("./data/eval-history.db")
     return QueryDocumentUseCase(rag_engine, conversation_repository)
 
 

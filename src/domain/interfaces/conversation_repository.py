@@ -64,4 +64,3 @@ class ConversationRepository(ABC):
             True if deleted, False if not found.
         """
         pass
-
