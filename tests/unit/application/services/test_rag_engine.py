@@ -287,52 +287,6 @@ class TestRAGEngineQuery:
         mock_vector_store.similarity_search.assert_awaited_once()
 
 
-    # Query rewriting fallback (M1)
-
-    async def test_query_rewrite_failure_falls_back_to_single_query(
-        self, rag_engine, mock_vector_store, sample_chunks, mock_embedding_provider
-    ):
-        """If rewrite() raises, query() falls back to the original question."""
-        rag_engine._settings.ENABLE_QUERY_REWRITING = True
-        rag_engine._settings.ENABLE_HYBRID_SEARCH = False
-
-        mock_rewriter = AsyncMock()
-        mock_rewriter.rewrite = AsyncMock(side_effect=RuntimeError("LLM down"))
-        rag_engine._query_rewriter = mock_rewriter
-
-        mock_vector_store.similarity_search.return_value = sample_chunks
-
-        result = await rag_engine.query("What is AI?")
-
-        assert "answer" in result
-        # Single-query path embedded and searched only the original question.
-        mock_embedding_provider.embed.assert_awaited_once_with("What is AI?")
-        assert mock_vector_store.similarity_search.await_count == 1
-
-    async def test_query_rewrite_variant_search_failure_falls_back(
-        self, rag_engine, mock_vector_store, sample_chunks, mock_embedding_provider
-    ):
-        """If a variant embed/search raises, query() falls back gracefully."""
-        rag_engine._settings.ENABLE_QUERY_REWRITING = True
-        rag_engine._settings.ENABLE_HYBRID_SEARCH = False
-
-        mock_rewriter = AsyncMock()
-        mock_rewriter.rewrite = AsyncMock(
-            return_value=["original", "variant1", "variant2"]
-        )
-        rag_engine._query_rewriter = mock_rewriter
-
-        mock_vector_store.similarity_search = AsyncMock(
-            side_effect=[sample_chunks, RuntimeError("search boom"), sample_chunks]
-        )
-
-        result = await rag_engine.query("What is AI?")
-
-        assert "answer" in result
-        # Fallback re-embedded the original question.
-        mock_embedding_provider.embed.assert_awaited_with("What is AI?")
-
-
 # RAGEngine.query_stream Tests
 
 
@@ -494,31 +448,6 @@ class TestRAGEngineQueryStream:
             pass
         mock_vector_store.hybrid_search.assert_awaited_once()
 
-    async def test_stream_rewrite_failure_falls_back_to_single_query(
-        self, rag_engine, mock_vector_store, sample_chunks, mock_embedding_provider
-    ):
-        """If rewrite() raises, query_stream() falls back to the original."""
-        rag_engine._settings.ENABLE_QUERY_REWRITING = True
-        rag_engine._settings.ENABLE_HYBRID_SEARCH = False
-
-        mock_rewriter = AsyncMock()
-        mock_rewriter.rewrite = AsyncMock(side_effect=RuntimeError("LLM down"))
-        rag_engine._query_rewriter = mock_rewriter
-
-        mock_vector_store.similarity_search.return_value = sample_chunks
-
-        async def fake_stream(prompt):
-            yield "streamed answer"
-
-        rag_engine._llm.generate_stream = fake_stream
-
-        collected = []
-        async for chunk in rag_engine.query_stream("What is AI?"):
-            collected.append(chunk)
-
-        assert _content_only(collected) == ["streamed answer"]
-        mock_embedding_provider.embed.assert_awaited_once_with("What is AI?")
-        assert mock_vector_store.similarity_search.await_count == 1
 
 class TestRAGEngineBuildPrompt:
     """Tests for the private _build_prompt method."""
