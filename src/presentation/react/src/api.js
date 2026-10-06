@@ -75,6 +75,11 @@ export function postJSON(endpoint, json) {
   return request(endpoint, { method: 'POST', json });
 }
 
+/** PUT a JSON body. */
+export function putJSON(endpoint, json) {
+  return request(endpoint, { method: 'PUT', json });
+}
+
 /** DELETE returning parsed JSON. */
 export function deleteJSON(endpoint) {
   return request(endpoint, { method: 'DELETE' });

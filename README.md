@@ -35,9 +35,6 @@ It runs entirely on your machine. The only network call is to the LLM.
 <td><img src="docs/images/documents.png" alt="Document management"></td>
 <td><img src="docs/images/chat-dark.png" alt="Dark theme"></td>
 </tr>
-<tr>
-<td colspan="2" align="center"><img src="docs/images/mobile.png" alt="Mobile layout" width="34%"></td>
-</tr>
 </table>
 
 ## What you get
@@ -94,11 +91,13 @@ Prefer Docker? `docker compose up --build`.
 
 ## Configuration
 
-One variable matters: `GEMINI_API_KEY`. Everything else has a working default.
+One variable matters: `GEMINI_API_KEY`. Everything else has a working default —
+and you can paste a key in **Settings → API key** instead of editing `.env`,
+which takes effect on your next question without a restart.
 
 | Variable | Default | |
 | --- | --- | --- |
-| `GEMINI_API_KEY` | — | **Required** |
+| `GEMINI_API_KEY` | — | **Required**, unless set in Settings |
 | `GEMINI_MODEL` | `gemini-2.5-flash` | |
 | `ENABLE_RERANKING` | `true` | Cross-encoder re-scoring |
 | `ENABLE_SEMANTIC_CHUNKING` | `true` | Split on meaning, not fixed windows |
@@ -127,6 +126,9 @@ access control, so there's no auth layer. Interactive docs at
 | `GET` | `/api/conversations/{id}` | Read a conversation |
 | `DELETE` | `/api/conversations/{id}` | Delete a conversation |
 | `GET` | `/api/usage` | Token usage and cost |
+| `GET` | `/api/settings` | Non-secret runtime configuration |
+| `GET`/`PUT`/`DELETE` | `/api/settings/api-key` | Read, set, or clear your Gemini key |
+| `GET` | `/api/export` | Every document and conversation as JSON |
 
 ## Development
 
