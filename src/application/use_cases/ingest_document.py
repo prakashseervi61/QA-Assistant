@@ -53,42 +53,26 @@ class IngestDocumentUseCase:
 
     async def _find_duplicate(
         self, content_hash: str, collection_name: str
-    ) -> tuple[Chunk, str, int] | None:
+    ) -> tuple[Chunk, int] | None:
         """Find existing chunks whose metadata carries *content_hash*.
 
-        Checks the active collection. A missing collection yields no
-        matches (``get_by_metadata`` returns an empty list for it).
+        A missing collection yields no matches (``get_by_metadata``
+        returns an empty list for it). Chunks ingested before
+        ``document_id`` became part of the metadata (legacy documents)
+        come back with a None document_id; skip them so a duplicate
+        result can never surface a bogus "None" document id.
 
         Returns:
-            A tuple of ``(first matching chunk, collection where found,
-            total number of matching chunks)``, or ``None`` when no
-            chunk with the hash exists yet.
+            ``(first matching chunk, total number of matching chunks)``,
+            or ``None`` when no chunk with the hash exists yet.
         """
-        first_chunk: Chunk | None = None
-        found_collection = collection_name
-        total_chunks = 0
-
-        for candidate in (collection_name,):
-            matches = await self._vector_store.get_by_metadata(
-                {"content_hash": content_hash}, candidate
-            )
-            # Chunks ingested before ``document_id`` became part of the
-            # metadata (legacy documents) come back with a None
-            # document_id. Skip them so a duplicate result can never
-            # surface a bogus "None" document id.
-            valid_matches = [
-                match for match in matches if match.document_id is not None
-            ]
-            if not valid_matches:
-                continue
-            total_chunks += len(valid_matches)
-            if first_chunk is None:
-                first_chunk = valid_matches[0]
-                found_collection = candidate
-
-        if first_chunk is None:
+        matches = await self._vector_store.get_by_metadata(
+            {"content_hash": content_hash}, collection_name
+        )
+        valid_matches = [match for match in matches if match.document_id is not None]
+        if not valid_matches:
             return None
-        return first_chunk, found_collection, total_chunks
+        return valid_matches[0], len(valid_matches)
 
     async def execute(self, file_content: bytes, filename: str) -> dict:
         """Execute the document ingestion pipeline.
@@ -152,7 +136,7 @@ class IngestDocumentUseCase:
                 content_hash = compute_content_hash(file_content)
                 duplicate = await self._find_duplicate(content_hash, collection_name)
                 if duplicate is not None:
-                    chunk, _found_collection, chunk_count = duplicate
+                    chunk, chunk_count = duplicate
                     logger.info(
                         "Duplicate detected for '%s' (content_hash=%s)",
                         filename,

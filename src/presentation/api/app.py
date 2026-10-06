@@ -6,11 +6,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.application.services.rag_engine import RAGEngine
-from src.application.use_cases.conversation import (
-    DeleteConversationUseCase,
-    GetConversationUseCase,
-    ListConversationsUseCase,
-)
 from src.application.use_cases.query_document import QueryDocumentUseCase
 from src.infrastructure.config.settings import Settings, get_settings
 from src.infrastructure.embeddings.huggingface_embeddings import (
@@ -22,6 +17,7 @@ from src.infrastructure.llm.token_tracker import TokenTracker, TrackingLLMProvid
 from src.infrastructure.repositories.conversation_repository_factory import (
     create_conversation_repository,
 )
+from src.infrastructure.rerankers.factory import create_reranker
 from src.infrastructure.vector_store.chroma_store import ChromaStore
 from src.presentation.api.routes import chat, documents, health, usage
 
@@ -52,10 +48,7 @@ def _wire_dependencies(settings: Settings) -> TokenTracker:
     )
     vector_store = ChromaStore(persist_directory=settings.CHROMA_PERSIST_DIR)
 
-    from src.infrastructure.rerankers.factory import create_reranker
-
     reranker = create_reranker()
-
 
     rag_engine = RAGEngine(
         llm_provider=llm_provider,
@@ -67,14 +60,8 @@ def _wire_dependencies(settings: Settings) -> TokenTracker:
     conversation_repository = create_conversation_repository()
     query_use_case = QueryDocumentUseCase(rag_engine, conversation_repository)
 
-    conversation_list_use_case = ListConversationsUseCase(conversation_repository)
-    conversation_get_use_case = GetConversationUseCase(conversation_repository)
-    conversation_delete_use_case = DeleteConversationUseCase(conversation_repository)
-
     chat.set_query_use_case(query_use_case)
-    chat.set_conversation_list_use_case(conversation_list_use_case)
-    chat.set_conversation_get_use_case(conversation_get_use_case)
-    chat.set_conversation_delete_use_case(conversation_delete_use_case)
+    chat.set_conversation_repository(conversation_repository)
     documents.configure(
         vector_store=vector_store,
         embedding_provider=embedding_provider,

@@ -17,8 +17,6 @@ class Settings(BaseSettings):
 
     # Application
     APP_NAME: str = "Marginalia"
-    DEBUG: bool = False
-    LOG_LEVEL: str = "INFO"
 
     # LLM Provider
     LLM_PROVIDER: Literal["gemini"] = "gemini"
@@ -41,13 +39,10 @@ class Settings(BaseSettings):
     CHUNK_SIZE: int = 1000
     CHUNK_OVERLAP: int = 200
     MAX_FILE_SIZE_MB: int = 50
-    ALLOWED_EXTENSIONS: list[str] = [".pdf", ".docx", ".txt"]
 
     # API
     # Loopback by default: the API holds every ingested document, so binding
     # it to all interfaces would expose the corpus to the whole LAN.
-    API_HOST: str = "127.0.0.1"
-    API_PORT: int = 8000
     CORS_ORIGINS: list[str] = ["http://localhost:3000"]
 
     # Reranker

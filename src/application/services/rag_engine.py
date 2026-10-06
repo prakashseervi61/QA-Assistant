@@ -48,7 +48,6 @@ class RAGEngine:
         embedding_provider: Embedding provider for query embedding.
         vector_store:      Vector store for similarity search.
         reranker:          Optional reranker applied after retrieval.
-        tracer:            Optional OpenTelemetry-style tracer.
         guardrail_manager: Optional guardrail manager. When provided, the
                            user question is checked (PII + prompt injection)
                            before retrieval and the generated answer is

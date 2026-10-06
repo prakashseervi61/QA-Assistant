@@ -6,22 +6,10 @@ _SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".txt"}
 
 
 def create_parser(file_extension: str) -> DocumentParser:
-    """Create the appropriate parser for a given file extension.
-
-    For .pdf, prefers MarkerParser (best quality), falls back to
-    PDFParser if marker-pdf is not importable.
-    """
+    """Create the appropriate parser for a given file extension."""
     ext = file_extension.lower()
 
     if ext == ".pdf":
-        from src.infrastructure.document_processing.marker_parser import (
-            MarkerParser,
-            _marker_available,
-        )
-
-        if _marker_available:
-            return MarkerParser()
-
         from src.infrastructure.document_processing.pdf_parser import (
             PDFParser,
         )

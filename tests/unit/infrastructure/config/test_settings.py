@@ -31,20 +31,8 @@ class TestSettingsDefaults:
     def test_max_file_size_mb_default(self):
         assert Settings().MAX_FILE_SIZE_MB == 50
 
-    def test_api_host_default(self):
-        assert Settings().API_HOST == "127.0.0.1"
-
-    def test_api_port_default(self):
-        assert Settings().API_PORT == 8000
-
     def test_app_name_default(self):
         assert Settings().APP_NAME == "Marginalia"
-
-    def test_debug_default_false(self):
-        assert Settings().DEBUG is False
-
-    def test_log_level_default(self):
-        assert Settings().LOG_LEVEL == "INFO"
 
     def test_chroma_persist_dir_default(self):
         assert Settings().CHROMA_PERSIST_DIR == "./data/chroma"
@@ -55,8 +43,10 @@ class TestSettingsDefaults:
     def test_gemini_model_default(self):
         assert Settings().GEMINI_MODEL == "gemini-2.5-flash"
 
-    def test_allowed_extensions_default(self):
-        assert Settings().ALLOWED_EXTENSIONS == [".pdf", ".docx", ".txt"]
+    def test_allowed_extensions_removed(self):
+        # ponytail: ALLOWED_EXTENSIONS was a dead setting — documents.py
+        # hardcodes its own list, so the setting was never read.
+        assert "ALLOWED_EXTENSIONS" not in Settings.model_fields
 
     def test_cors_origins_default(self):
         assert Settings().CORS_ORIGINS == ["http://localhost:3000"]
@@ -76,9 +66,6 @@ class TestSettingsCustomValues:
 
     def test_custom_chunk_overlap(self):
         assert Settings(CHUNK_OVERLAP=50).CHUNK_OVERLAP == 50
-
-    def test_custom_api_port(self):
-        assert Settings(API_PORT=9000).API_PORT == 9000
 
     def test_custom_api_key(self):
         s = Settings(GEMINI_API_KEY="my-secret-key")
@@ -139,19 +126,19 @@ class TestSettingsValidation:
         data = {
             "CHUNK_SIZE": 2000,
             "CHUNK_OVERLAP": 400,
-            "DEBUG": True,
+            "GEMINI_API_KEY": "test-key",
         }
         s = Settings(**data)
         assert s.CHUNK_SIZE == 2000
         assert s.CHUNK_OVERLAP == 400
-        assert s.DEBUG is True
+        assert s.GEMINI_API_KEY == "test-key"
 
     def test_settings_field_count(self):
         """Ensure we know about all fields (catch accidental removals)."""
-        assert len(Settings().model_fields) >= 20
+        assert len(Settings.model_fields) >= 20
 
     def test_settings_is_not_frozen(self):
         """Settings is NOT a frozen model -- verify it can be mutated."""
         s = Settings()
-        s.DEBUG = True
-        assert s.DEBUG is True
+        s.CHUNK_SIZE = 500
+        assert s.CHUNK_SIZE == 500

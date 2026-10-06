@@ -17,7 +17,7 @@ A production-grade **Retrieval-Augmented Generation (RAG)** question-answering a
 - **Retrieval** — hybrid search (opt-in), BGE cross-encoder reranking (on), semantic chunking (on), guardrails (on, flag-only)
 - **Streaming answers** — Server-Sent Events endpoint for token-by-token output
 - **Conversations** — multi-turn history in a local SQLite file, restorable from the UI
-- **Safety & ops (opt-in)** — JWT authentication, per-IP rate limiting, PII / prompt-injection / hallucination guardrails, token-usage tracking, and OpenTelemetry tracing
+- **Safety & ops (opt-in)** — JWT authentication, per-IP rate limiting, PII / prompt-injection / hallucination guardrails, and token-usage tracking
 - **Clean Architecture** — `domain → application → infrastructure → presentation` with dependency injection
 
 ## Architecture
@@ -53,7 +53,7 @@ A production-grade **Retrieval-Augmented Generation (RAG)** question-answering a
 
 `file bytes → parse → split → (enrich) → embed → store`
 
-- **Parsers**: PyMuPDF (primary) with PyPDF2 fallback, python-docx, plain text, and a Marker-PDF backend for complex layouts.
+- **Parsers**: PyMuPDF (primary) with PyPDF2 fallback, python-docx, and plain text.
 - **Chunking strategies** (pick one via config):
   - **Fixed-size** (`TextSplitter`) — sentence-boundary-aware, default `CHUNK_SIZE=1000`, `CHUNK_OVERLAP=200`.
   - **Semantic chunking** (`ENABLE_SEMANTIC_CHUNKING`) — splits on embedding-similarity dips.
@@ -156,7 +156,7 @@ docker compose up --build
 | Frontend (nginx) | 3000 | Serves the built React app; `proxy_buffering off` keeps SSE flowing |
 
 - ChromaDB persists in the `chroma_data` volume (mounted at `/data/chroma`).
-- `.env` values are passed to the API container via `environment` (`LLM_PROVIDER`, `GEMINI_API_KEY`, `EMBEDDING_PROVIDER`, chunking settings, tracing settings). Set `GEMINI_API_KEY` before `compose up`.
+- `.env` values are passed to the API container via `environment` (`LLM_PROVIDER`, `GEMINI_API_KEY`, `EMBEDDING_PROVIDER`, chunking settings, etc.). Set `GEMINI_API_KEY` before `compose up`.
 - The frontend container waits for the API healthcheck to pass before starting.
 
 ## Configuration Reference
@@ -168,8 +168,6 @@ All settings load from `.env` or environment variables via `pydantic-settings` (
 | Variable | Default | Description |
 |---|---|---|
 | `APP_NAME` | `Marginalia` | FastAPI app title |
-| `DEBUG` | `false` | Reserved — enable debug mode |
-| `LOG_LEVEL` | `INFO` | Reserved — logging level |
 | `LLM_PROVIDER` | `gemini` | `gemini` (only) |
 | `GEMINI_API_KEY` | `""` | Required when using Gemini |
 | `GEMINI_MODEL` | `gemini-2.5-flash` | |
@@ -180,9 +178,6 @@ All settings load from `.env` or environment variables via `pydantic-settings` (
 | `CHUNK_SIZE` | `1000` | Characters per chunk |
 | `CHUNK_OVERLAP` | `200` | Overlap between consecutive chunks |
 | `MAX_FILE_SIZE_MB` | `50` | Hard upload limit. Larger uploads are rejected with `413` before the body is buffered |
-| `ALLOWED_EXTENSIONS` | `[".pdf", ".docx", ".txt"]` | Accepted upload extensions |
-| `API_HOST` | `127.0.0.1` | Loopback by default — the API serves every ingested document, so it is not exposed to the LAN unless you deliberately change this |
-| `API_PORT` | `8000` | Reserved — uvicorn launched with explicit port |
 | `CORS_ORIGINS` | `["http://localhost:3000"]` | Allowed CORS origins (JSON list) |
 
 ### Advanced RAG (feature flags)
@@ -210,18 +205,11 @@ All settings load from `.env` or environment variables via `pydantic-settings` (
 | `GUARDRAIL_GROUNDEDNESS_THRESHOLD` | `0.2` | Below this score the output is flagged |
 | `ENABLE_USAGE_TRACKING` | `true` | Record LLM token usage & cost; exposes `GET /api/usage` |
 
-### Optional dependency extras
-
-```bash
-```
-
-Tracing degrades gracefully: if enabled but the packages are missing, the app logs a warning and uses a no-op tracer.
-
 ---
 
 ## API Reference
 
-All routes are served under the `/api` prefix. The API binds **127.0.0.1** by default, so it is reachable only from this machine — that loopback boundary is the access control, which is why there is no auth layer. Set `API_HOST=0.0.0.0` only if you put your own auth in front of it.
+All routes are served under the `/api` prefix. The API binds **loopback** by default (the launcher scripts and Docker Compose both launch uvicorn on `127.0.0.1`), so it is reachable only from this machine — that loopback boundary is the access control, which is why there is no auth layer. If you want to expose it, put your own auth in front of it.
 
 | Method | Endpoint | Description |
 |---|---|---|
@@ -445,12 +433,11 @@ src/
 │   ├── auth/                # JWT-shaped tokens (stdlib HMAC-SHA256)
 │   ├── llm/                 # Gemini provider + prompt registry
 │   ├── embeddings/          # HuggingFace provider
-│   ├── document_processing/ # PDF/DOCX/TXT/Marker parsers, splitters, enrichers
+│   ├── document_processing/ # PDF/DOCX/TXT parsers, splitters, enrichers
 │   ├── vector_store/        # ChromaDB (persistent, cosine, hybrid)
 │   ├── rerankers/           # BGE cross-encoder reranker
 │   ├── guardrails/          # PII / injection / groundedness checks
 │   ├── ratelimit/           # In-memory sliding-window limiter
-│   ├── observability/       # OpenTelemetry tracer
 │   └── repositories/        # SQLite conversation history
 └── presentation/            # Interfaces
     ├── api/                 # FastAPI app factory + routes (health/auth/documents/chat/usage)
@@ -493,11 +480,10 @@ The local model (`all-MiniLM-L6-v2`, ~80–100 MB) is downloaded from the Huggin
 | Vector Store | ChromaDB (persistent, cosine + hybrid search) |
 | LLM Providers | Gemini, OpenAI, Anthropic, DeepSeek |
 | Embedding Providers | Gemini, OpenAI, HuggingFace (sentence-transformers) |
-| Document Parsing | PyMuPDF (primary), PyPDF2 (fallback), python-docx, Marker-PDF |
+| Document Parsing | PyMuPDF (primary), PyPDF2 (fallback), python-docx |
 | Reranking | BGE cross-encoder (`bge-reranker-v2-m3`) |
 | Auth | JWT-shaped tokens (stdlib HMAC-SHA256, no third-party lib) |
 | Configuration | pydantic-settings |
-| Observability | OpenTelemetry → Phoenix (optional) |
 | Deployment | Docker Compose + nginx |
 | Architecture | Clean Architecture + dependency injection |
 | Python | 3.10+ (3.11 in Docker) |

@@ -8,7 +8,6 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from src.application.use_cases.query_document import ConversationNotFoundError
 from src.domain.entities.conversation import Conversation
 from src.domain.entities.message import Message
 from src.domain.interfaces.llm_provider import LLMQuotaExceededError
@@ -32,9 +31,7 @@ def restore_use_cases():
     yield
     for registry in (
         chat._query_use_case,
-        chat._conversation_list_use_case,
-        chat._conversation_get_use_case,
-        chat._conversation_delete_use_case,
+        chat._conversation_repository,
     ):
         registry.set(None)
 
@@ -107,9 +104,9 @@ class TestListConversations:
             title="My conversation",
             messages=[Message(role="user", content="Hi")],
         )
-        use_case = MagicMock()
-        use_case.execute = AsyncMock(return_value=[conversation])
-        chat.set_conversation_list_use_case(use_case)
+        repo = MagicMock()
+        repo.list_conversations = AsyncMock(return_value=[conversation])
+        chat.set_conversation_repository(repo)
 
         client = TestClient(_make_app())
         response = client.get("/api/conversations")
@@ -124,8 +121,37 @@ class TestListConversations:
         assert item["created_at"]
         assert item["updated_at"]
 
+    def test_get_conversations_filters_empty_conversations(self):
+        empty = Conversation(id=uuid4(), title="Empty placeholder")
+        non_empty = Conversation(
+            id=uuid4(),
+            title="Has messages",
+            messages=[Message(role="user", content="Hi")],
+        )
+        repo = MagicMock()
+        repo.list_conversations = AsyncMock(return_value=[empty, non_empty])
+        chat.set_conversation_repository(repo)
+
+        client = TestClient(_make_app())
+        response = client.get("/api/conversations")
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert len(payload) == 1
+        assert payload[0]["id"] == str(non_empty.id)
+
+    def test_get_conversations_passes_limit_to_repo(self):
+        repo = MagicMock()
+        repo.list_conversations = AsyncMock(return_value=[])
+        chat.set_conversation_repository(repo)
+
+        client = TestClient(_make_app())
+        client.get("/api/conversations?limit=5")
+
+        repo.list_conversations.assert_awaited_once_with(5)
+
     def test_get_conversations_returns_503_when_not_wired(self):
-        chat._conversation_list_use_case.set(None)
+        chat._conversation_repository.set(None)
 
         client = TestClient(_make_app())
         response = client.get("/api/conversations")
@@ -149,9 +175,9 @@ class TestGetConversation:
                 }
             ],
         )
-        use_case = MagicMock()
-        use_case.execute = AsyncMock(return_value=[message])
-        chat.set_conversation_get_use_case(use_case)
+        repo = MagicMock()
+        repo.get_messages = AsyncMock(return_value=[message])
+        chat.set_conversation_repository(repo)
 
         client = TestClient(_make_app())
         response = client.get(f"/api/conversations/{uuid4()}")
@@ -168,11 +194,9 @@ class TestGetConversation:
         assert item["created_at"]
 
     def test_get_conversation_returns_404_for_unknown(self):
-        use_case = MagicMock()
-        use_case.execute = AsyncMock(
-            side_effect=ConversationNotFoundError("Conversation not found: x")
-        )
-        chat.set_conversation_get_use_case(use_case)
+        repo = MagicMock()
+        repo.get_messages = AsyncMock(side_effect=KeyError("missing"))
+        chat.set_conversation_repository(repo)
 
         client = TestClient(_make_app())
         response = client.get(f"/api/conversations/{uuid4()}")
@@ -180,21 +204,66 @@ class TestGetConversation:
         assert response.status_code == 404
 
     def test_get_conversation_returns_400_for_malformed_uuid(self):
-        use_case = MagicMock()
-        use_case.execute = AsyncMock(
-            side_effect=ValueError("Invalid conversation ID format: 'bad'")
-        )
-        chat.set_conversation_get_use_case(use_case)
+        repo = MagicMock()
+        repo.get_messages = AsyncMock()
+        chat.set_conversation_repository(repo)
 
         client = TestClient(_make_app())
         response = client.get("/api/conversations/not-a-uuid")
 
         assert response.status_code == 400
+        repo.get_messages.assert_not_awaited()
 
     def test_get_conversation_returns_503_when_not_wired(self):
-        chat._conversation_get_use_case.set(None)
+        chat._conversation_repository.set(None)
 
         client = TestClient(_make_app())
         response = client.get(f"/api/conversations/{uuid4()}")
+
+        assert response.status_code == 503
+
+
+class TestDeleteConversation:
+    """DELETE /api/conversations/{id} removes a conversation."""
+
+    def test_delete_conversation_returns_200(self):
+        repo = MagicMock()
+        repo.delete_conversation = AsyncMock(return_value=True)
+        chat.set_conversation_repository(repo)
+
+        conv_id = str(uuid4())
+        client = TestClient(_make_app())
+        response = client.delete(f"/api/conversations/{conv_id}")
+
+        assert response.status_code == 200
+        assert response.json() == {"deleted": True, "id": conv_id}
+
+    def test_delete_conversation_returns_404_for_unknown(self):
+        repo = MagicMock()
+        repo.delete_conversation = AsyncMock(return_value=False)
+        chat.set_conversation_repository(repo)
+
+        conv_id = str(uuid4())
+        client = TestClient(_make_app())
+        response = client.delete(f"/api/conversations/{conv_id}")
+
+        assert response.status_code == 404
+
+    def test_delete_conversation_returns_400_for_malformed_uuid(self):
+        repo = MagicMock()
+        repo.delete_conversation = AsyncMock()
+        chat.set_conversation_repository(repo)
+
+        client = TestClient(_make_app())
+        response = client.delete("/api/conversations/not-a-uuid")
+
+        assert response.status_code == 400
+        repo.delete_conversation.assert_not_awaited()
+
+    def test_delete_conversation_returns_503_when_not_wired(self):
+        chat._conversation_repository.set(None)
+
+        client = TestClient(_make_app())
+        response = client.delete(f"/api/conversations/{uuid4()}")
 
         assert response.status_code == 503

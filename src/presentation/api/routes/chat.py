@@ -3,10 +3,9 @@
 import json
 import logging
 from collections.abc import AsyncIterator
-from datetime import datetime
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-
 from fastapi.responses import StreamingResponse
 
 from src.application.dto.requests import QueryRequest
@@ -16,16 +15,12 @@ from src.application.dto.responses import (
     QueryResponse,
     SourceChunk,
 )
-from src.application.use_cases.conversation import (
-    DeleteConversationUseCase,
-    GetConversationUseCase,
-    ListConversationsUseCase,
-)
 from src.application.use_cases.query_document import (
     ConversationNotFoundError,
     QueryDocumentError,
     QueryDocumentUseCase,
 )
+from src.domain.interfaces.conversation_repository import ConversationRepository
 from src.domain.interfaces.llm_provider import LLMQuotaExceededError
 from src.presentation.api.dependencies import Registry
 
@@ -51,43 +46,34 @@ def get_query_use_case() -> QueryDocumentUseCase:
     return _query_use_case.get()
 
 
-_conversation_list_use_case: Registry[ListConversationsUseCase] = Registry("Conversation list")
+# ponytail: the list/get/delete conversation "use cases" were one-method
+# wrappers around the repository (UUID parse + KeyError mapping + limit
+# pass-through). Fold that thin validation into the routes and depend on
+# the ConversationRepository directly.
+_conversation_repository: Registry[ConversationRepository] = Registry(
+    "Conversation repo"
+)
 
 
-def set_conversation_list_use_case(use_case: ListConversationsUseCase) -> None:
-    """Register the ListConversationsUseCase dependency at startup."""
-    _conversation_list_use_case.set(use_case)
+def set_conversation_repository(repository: ConversationRepository) -> None:
+    """Register the ConversationRepository dependency at startup."""
+    _conversation_repository.set(repository)
 
 
-def get_conversation_list_use_case() -> ListConversationsUseCase:
-    """FastAPI dependency that returns the injected use case."""
-    return _conversation_list_use_case.get()
+def get_conversation_repository() -> ConversationRepository:
+    """FastAPI dependency that returns the injected repository."""
+    return _conversation_repository.get()
 
 
-_conversation_get_use_case: Registry[GetConversationUseCase] = Registry("Conversation get")
-
-
-def set_conversation_get_use_case(use_case: GetConversationUseCase) -> None:
-    """Register the GetConversationUseCase dependency at startup."""
-    _conversation_get_use_case.set(use_case)
-
-
-def get_conversation_get_use_case() -> GetConversationUseCase:
-    """FastAPI dependency that returns the injected use case."""
-    return _conversation_get_use_case.get()
-
-
-_conversation_delete_use_case: Registry[DeleteConversationUseCase] = Registry("Conversation delete")
-
-
-def set_conversation_delete_use_case(use_case: DeleteConversationUseCase) -> None:
-    """Register the DeleteConversationUseCase dependency at startup."""
-    _conversation_delete_use_case.set(use_case)
-
-
-def get_conversation_delete_use_case() -> DeleteConversationUseCase:
-    """FastAPI dependency that returns the injected use case."""
-    return _conversation_delete_use_case.get()
+def _parse_conversation_id(conversation_id: str) -> UUID:
+    """Parse a conversation UUID or raise an HTTP 400."""
+    try:
+        return UUID(conversation_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid conversation ID format: '{conversation_id}'",
+        )
 
 
 def _to_source_chunks(sources: list[dict]) -> list[SourceChunk]:
@@ -235,14 +221,17 @@ async def list_conversations(
         le=1000,
         description="Maximum conversations to return.",
     ),
-    use_case: ListConversationsUseCase = Depends(get_conversation_list_use_case),
+    conversation_repository: ConversationRepository = Depends(
+        get_conversation_repository
+    ),
 ) -> list[ConversationResponse]:
     """Return conversations, newest first.
 
-    Conversations without any messages are filtered out by the use case.
-    The History view asks for a generous limit so the whole log is visible.
+    Conversations without any messages are filtered out. The History view
+    asks for a generous limit so the whole log is visible.
     """
-    conversations = await use_case.execute(limit=limit)
+    conversations = await conversation_repository.list_conversations(limit)
+    conversations = [c for c in conversations if c.messages]
     return [
         ConversationResponse(
             id=str(c.id),
@@ -266,7 +255,9 @@ async def list_conversations(
 )
 async def get_conversation(
     conversation_id: str,
-    use_case: GetConversationUseCase = Depends(get_conversation_get_use_case),
+    conversation_repository: ConversationRepository = Depends(
+        get_conversation_repository
+    ),
 ) -> list[MessageResponse]:
     """Return all messages in a conversation, ordered chronologically.
 
@@ -274,12 +265,13 @@ async def get_conversation(
         400: If conversation_id is not a valid UUID.
         404: If the conversation does not exist.
     """
+    conv_uuid = _parse_conversation_id(conversation_id)
     try:
-        messages = await use_case.execute(conversation_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-    except ConversationNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
+        messages = await conversation_repository.get_messages(conv_uuid)
+    except KeyError:
+        raise HTTPException(
+            status_code=404, detail=f"Conversation not found: {conversation_id}"
+        )
     return [
         MessageResponse(
             id=str(m.id),
@@ -300,7 +292,9 @@ async def get_conversation(
 @router.delete("/conversations/{conversation_id}")
 async def delete_conversation(
     conversation_id: str,
-    use_case: DeleteConversationUseCase = Depends(get_conversation_delete_use_case),
+    conversation_repository: ConversationRepository = Depends(
+        get_conversation_repository
+    ),
 ) -> dict:
     """Permanently delete a conversation and all of its messages.
 
@@ -311,10 +305,8 @@ async def delete_conversation(
         400: If conversation_id is not a valid UUID.
         404: If no conversation with that id exists.
     """
-    try:
-        deleted = await use_case.execute(conversation_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+    conv_uuid = _parse_conversation_id(conversation_id)
+    deleted = await conversation_repository.delete_conversation(conv_uuid)
     if not deleted:
         raise HTTPException(
             status_code=404, detail=f"Conversation not found: {conversation_id}"
