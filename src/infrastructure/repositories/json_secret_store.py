@@ -1,4 +1,9 @@
-"""JSON-file implementation of :class:`SecretStore`.
+"""On-disk store for runtime-managed secrets (currently the Gemini API key).
+
+Separate from ``Settings`` on purpose: settings come from the environment at
+startup and are read-only, whereas these are written at runtime by the user.
+Keeping them apart means a user-supplied key can never be confused with
+configuration, and the environment stays the fallback default.
 
 A plain local file rather than a database row: there is exactly one secret, it
 is written rarely, and a human-readable file is easier to audit or hand-edit
@@ -13,12 +18,10 @@ import os
 import tempfile
 from pathlib import Path
 
-from src.domain.interfaces.secret_store import SecretStore
-
 logger = logging.getLogger(__name__)
 
 
-class JsonSecretStore(SecretStore):
+class JsonSecretStore:
     """Stores the user-supplied API key in a single-key JSON file.
 
     Args:

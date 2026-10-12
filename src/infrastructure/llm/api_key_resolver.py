@@ -8,8 +8,8 @@ with no credential at all.
 
 import logging
 
-from src.domain.interfaces.secret_store import SecretStore
 from src.infrastructure.config.settings import Settings
+from src.infrastructure.repositories.json_secret_store import JsonSecretStore
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ class ApiKeyResolver:
         settings: Supplies the environment fallback.
     """
 
-    def __init__(self, store: SecretStore, settings: Settings) -> None:
+    def __init__(self, store: JsonSecretStore, settings: Settings) -> None:
         self._store = store
         self._settings = settings
 
