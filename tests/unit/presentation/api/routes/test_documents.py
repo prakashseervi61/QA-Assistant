@@ -3,11 +3,36 @@
 import io
 import re
 from unittest.mock import AsyncMock, MagicMock, patch
+from uuid import UUID
 
 import pytest
-from fastapi import HTTPException, UploadFile
+from fastapi import BackgroundTasks, HTTPException, UploadFile
 
 from src.presentation.api.routes import documents as documents_router
+
+
+async def _run_background(tasks: BackgroundTasks) -> None:
+    """Execute everything the route queued on this BackgroundTasks.
+
+    Ingestion now happens after the response is sent, so a direct handler call
+    only *schedules* it. Anything asserting on the use case has to run this
+    first, or it is asserting on a task that never fired.
+    """
+    for task in list(tasks.tasks):
+        result = task.func(*task.args, **task.kwargs)
+        if hasattr(result, "__await__"):
+            await result
+
+
+def _background() -> BackgroundTasks:
+    """A real BackgroundTasks for direct handler calls.
+
+    The route queues ingestion on this rather than awaiting it, so the tests get
+    the 202 the client would see and can inspect `tasks.tasks` for the work that
+    was scheduled. It is never executed here — running it would require the
+    background machinery the app lifespan sets up.
+    """
+    return BackgroundTasks()
 
 
 class TestUploadDocumentSizeLimit:
@@ -34,7 +59,7 @@ class TestUploadDocumentSizeLimit:
         oversized.size = 5 * 1024 * 1024
 
         with pytest.raises(HTTPException) as exc_info:
-            await documents_router.upload_document(oversized)
+            await documents_router.upload_document(_background(), oversized)
 
         assert exc_info.value.status_code == 413
         assert "too large" in exc_info.value.detail.lower()
@@ -52,7 +77,7 @@ class TestUploadDocumentSizeLimit:
         undeclared.size = None  # client did not declare a length
 
         with pytest.raises(HTTPException) as exc_info:
-            await documents_router.upload_document(undeclared)
+            await documents_router.upload_document(_background(), undeclared)
 
         assert exc_info.value.status_code == 413
 
@@ -82,9 +107,14 @@ class TestUploadDocumentSizeLimit:
 
         small = UploadFile(filename="test.pdf", file=io.BytesIO(b"%PDF-1.4 small"))
 
-        response = await documents_router.upload_document(small)
+        response = await documents_router.upload_document(_background(), small)
 
-        assert response.document_id == "abc"
+        # The route now mints the id itself, so the client can poll
+        # /documents/status/{id} immediately; the use case's own id is internal.
+        assert response.document_id != "abc"
+        UUID(response.document_id)  # raises if it is not a valid uuid
+        assert response.status == "pending"
+        assert response.chunk_count == 0
 
 
 class TestUploadDocumentSplitterSelection:
@@ -120,7 +150,9 @@ class TestUploadDocumentSplitterSelection:
             }
         )
 
-        await documents_router.upload_document(self._make_file())
+        background = _background()
+        await documents_router.upload_document(background, self._make_file())
+        await _run_background(background)
 
         _, kwargs = mock_use_case_cls.call_args
         assert isinstance(kwargs["text_splitter"], TextSplitter)
@@ -189,7 +221,10 @@ class TestUploadWiring:
 
         from src.application.use_cases.ingest_document import IngestDocumentUseCase
 
-        route_src = inspect.getsource(documents_router.upload_document)
+        # The construction moved into _run_ingestion when uploads became
+        # asynchronous; inspecting upload_document would now find no call at all
+        # and pass for the wrong reason.
+        route_src = inspect.getsource(documents_router._run_ingestion)
         accepted = set(inspect.signature(IngestDocumentUseCase.__init__).parameters) - {
             "self"
         }

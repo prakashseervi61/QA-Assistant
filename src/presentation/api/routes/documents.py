@@ -2,13 +2,21 @@
 
 import logging
 import os
+from uuid import uuid4
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile
 
 from src.application.dto.responses import (
     DocumentInfo,
     DocumentListResponse,
     IngestResponse,
+    IngestStatusResponse,
+)
+from src.application.services.ingestion_registry import (
+    IngestionStatus,
+)
+from src.application.services.ingestion_registry import (
+    registry as ingestion_registry,
 )
 from src.domain.interfaces.embedding_provider import EmbeddingProvider
 from src.domain.interfaces.vector_store import VectorStore
@@ -20,6 +28,30 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 ALLOWED_EXTENSIONS = {".pdf", ".docx", ".txt"}
+
+# Magic bytes per extension. Checking the *content* rather than trusting the
+# name is what turns "Ingestion failed." into something the user can act on: a
+# renamed executable or a half-downloaded PDF otherwise reaches the parser,
+# which raises deep inside PyPDF2, and the route can only report a generic 500.
+_MAGIC_BYTES = {
+    ".pdf": (b"%PDF",),
+    # A DOCX is a ZIP container, so it opens with the local-file-header magic.
+    ".docx": (b"PK\x03\x04",),
+}
+
+
+def _looks_like(content: bytes, ext: str) -> bool:
+    """Return False when the bytes cannot possibly be the declared type.
+
+    Only checks extensions that have a well-known signature. TXT is excluded on
+    purpose: plain text has no magic number, and a UTF-8 BOM or a leading blank
+    line would make a naive check reject perfectly good files.
+    """
+    expected = _MAGIC_BYTES.get(ext)
+    if expected is None:
+        return True
+    return content.startswith(expected)
+
 
 # Injected at startup by app.py so upload/list/delete share one ChromaStore.
 # Two Registries rather than two bare globals: the 503-when-unwired guard is
@@ -44,11 +76,70 @@ def _get_dependencies() -> tuple[VectorStore, EmbeddingProvider]:
 # ---------------------------------------------------------------------------
 
 
-@router.post("/documents/upload", response_model=IngestResponse)
-async def upload_document(file: UploadFile = File(...)) -> IngestResponse:
-    """Upload a document (PDF, DOCX, TXT) for ingestion into the vector store.
+async def _run_ingestion(document_id: str, content: bytes, filename: str) -> None:
+    """Parse, embed and store one document.
 
-    The file is parsed, chunked, embedded, and stored in ChromaDB.
+    Runs after the response has been sent, so every failure here has to be
+    reported through the ingestion registry — there is no longer a request to
+    raise an HTTPException on.
+    """
+    ingestion_registry.mark_processing(document_id)
+    try:
+        settings = get_settings()
+
+        # Lazy import — the use case depends on infra that may not be wired yet.
+        from src.application.use_cases.ingest_document import IngestDocumentUseCase
+        from src.infrastructure.document_processing.semantic_chunker import (
+            SemanticChunker,
+        )
+        from src.infrastructure.document_processing.text_splitter import TextSplitter
+
+        vector_store, embedding_provider = _get_dependencies()
+
+        if settings.ENABLE_SEMANTIC_CHUNKING:
+            text_splitter = SemanticChunker(
+                embedding_provider=embedding_provider,
+                similarity_threshold=settings.SEMANTIC_SIMILARITY_THRESHOLD,
+                min_chunk_size=settings.SEMANTIC_MIN_CHUNK_SIZE,
+                max_chunk_size=settings.SEMANTIC_MAX_CHUNK_SIZE,
+            )
+        else:
+            text_splitter = TextSplitter()
+
+        use_case = IngestDocumentUseCase(
+            text_splitter=text_splitter,
+            embedding_provider=embedding_provider,
+            vector_store=vector_store,
+        )
+        result = await use_case.execute(file_content=content, filename=filename)
+        ingestion_registry.mark_complete(document_id, result["chunk_count"])
+    except Exception as exc:
+        logger.error(
+            "Background ingestion failed for '%s': %s", filename, exc, exc_info=True
+        )
+        ingestion_registry.mark_failed(document_id, f"{type(exc).__name__}: {exc}")
+
+
+@router.post(
+    "/documents/upload",
+    response_model=IngestResponse,
+    status_code=202,
+)
+async def upload_document(
+    background: BackgroundTasks,
+    file: UploadFile = File(...),
+) -> IngestResponse:
+    """Accept a document for ingestion and start processing it in the background.
+
+    Returns `202 Accepted` as soon as the bytes are validated. Ingestion is slow
+    by nature — a few hundred pages takes minutes of parsing and embedding — and
+    holding the connection open for that long meant the request timed out or the
+    browser spun with no feedback, so the work now happens after the response and
+    the client polls `GET /documents/status/{document_id}`.
+
+    Validation up front is unchanged and still returns 4xx synchronously: an
+    empty file, an unsupported extension, a size over the cap, or content that
+    does not match its extension all fail before anything is accepted.
     """
     if not file.filename:
         raise HTTPException(status_code=400, detail="No filename provided.")
@@ -103,49 +194,55 @@ async def upload_document(file: UploadFile = File(...)) -> IngestResponse:
     content = bytes(buffer)
     await file.close()
 
-    try:
-        if not content:
-            raise HTTPException(status_code=400, detail="Empty file.")
+    if not content:
+        raise HTTPException(status_code=400, detail="Empty file.")
 
-        # Lazy import — use case depends on infra that may not be wired yet
-        from src.application.use_cases.ingest_document import IngestDocumentUseCase
-        from src.infrastructure.document_processing.semantic_chunker import (
-            SemanticChunker,
-        )
-        from src.infrastructure.document_processing.text_splitter import TextSplitter
-
-        vector_store, embedding_provider = _get_dependencies()
-
-        if settings.ENABLE_SEMANTIC_CHUNKING:
-            text_splitter = SemanticChunker(
-                embedding_provider=embedding_provider,
-                similarity_threshold=settings.SEMANTIC_SIMILARITY_THRESHOLD,
-                min_chunk_size=settings.SEMANTIC_MIN_CHUNK_SIZE,
-                max_chunk_size=settings.SEMANTIC_MAX_CHUNK_SIZE,
-            )
-        else:
-            text_splitter = TextSplitter()
-
-        use_case = IngestDocumentUseCase(
-            text_splitter=text_splitter,
-            embedding_provider=embedding_provider,
-            vector_store=vector_store,
+    if not _looks_like(content, ext):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"'{file.filename}' does not look like a {ext[1:].upper()} file. "
+                "The extension and the contents do not match — the file may be "
+                "corrupt, renamed, or a download that did not finish."
+            ),
         )
 
-        result = await use_case.execute(file_content=content, filename=file.filename)
+    document_id = str(uuid4())
+    ingestion_registry.start(document_id, file.filename)
+    background.add_task(_run_ingestion, document_id, content, file.filename)
 
-        return IngestResponse(
-            document_id=result["document_id"],
-            filename=result["filename"],
-            chunk_count=result["chunk_count"],
-            message=result["message"],
+    return IngestResponse(
+        document_id=document_id,
+        filename=file.filename,
+        chunk_count=0,
+        message=(
+            f"Accepted '{file.filename}'. Processing has started — it may take "
+            "a few minutes for a large document."
+        ),
+        status=IngestionStatus.PENDING.value,
+    )
+
+
+# ---------------------------------------------------------------------------
+# GET /documents/status/{document_id} — background ingestion progress
+# ---------------------------------------------------------------------------
+
+
+@router.get("/documents/status/{document_id}", response_model=IngestStatusResponse)
+async def get_ingestion_status(document_id: str) -> IngestStatusResponse:
+    """Report how far the background ingestion of one document has got.
+
+    Polled by the upload UI. Returns 404 once the job has aged out of the
+    registry, which is not a failure: by then the document has long since
+    appeared in `GET /documents`.
+    """
+    job = ingestion_registry.get(document_id)
+    if job is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No ingestion is being tracked for this document.",
         )
-
-    except HTTPException:
-        raise
-    except Exception as exc:
-        logger.error("Upload failed for '%s': %s", file.filename, exc, exc_info=True)
-        raise HTTPException(status_code=500, detail="Ingestion failed.")
+    return IngestStatusResponse(**job)
 
 
 # ---------------------------------------------------------------------------

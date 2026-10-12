@@ -2,8 +2,10 @@
 
 import logging
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from src.application.services.rag_engine import RAGEngine
 from src.application.use_cases.query_document import QueryDocumentUseCase
@@ -114,6 +116,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         docs_url="/docs",
         redoc_url="/redoc",
     )
+
+    # Stop FastAPI echoing the rejected value back to the caller.
+    #
+    # The default handler copies Pydantic's `input` field — the *entire*
+    # offending value — into the response body. A 1 MB question therefore came
+    # back as a 1 MB 422 that repeated the whole payload, and anything the user
+    # typed (including whatever they pasted) ends up duplicated in client logs,
+    # proxies and browser devtools. The location, type, message and constraint
+    # are all the caller needs; the value is not.
+    @app.exception_handler(RequestValidationError)
+    async def _validation_handler(
+        _request: Request, exc: RequestValidationError
+    ) -> JSONResponse:
+        errors = []
+        for error in exc.errors():
+            detail = {k: v for k, v in error.items() if k != "input"}
+            # `ctx` can hold the offending exception object, which is not JSON
+            # serialisable and is of no use to a client.
+            detail.pop("ctx", None)
+            errors.append(detail)
+        return JSONResponse(status_code=422, content={"detail": errors})
 
     # CORS middleware
     app.add_middleware(

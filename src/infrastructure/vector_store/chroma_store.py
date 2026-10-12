@@ -11,6 +11,15 @@ from src.domain.value_objects.chunk import Chunk
 
 logger = logging.getLogger(__name__)
 
+# Upper bound on rows per upsert. ChromaDB's own limit is read from the
+# collection at runtime (it changes with the index config); this is only the
+# cap we clamp to, so a future larger limit is picked up without a code change.
+_DEFAULT_BATCH_SIZE = 5_000
+
+# Used only when the collection will not report its limit. Well under the 5461
+# that the default HNSW config allows.
+_FALLBACK_BATCH_SIZE = 1_000
+
 
 class ChromaStore(VectorStore):
     """Vector store implementation using ChromaDB.
@@ -98,36 +107,58 @@ class ChromaStore(VectorStore):
             logger.warning("add_documents called with empty chunk list")
             return
 
-        def _upsert() -> None:
-            collection = self._get_or_create_collection(collection_name)
+        for chunk in chunks:
+            if chunk.embedding is None:
+                raise ValueError(
+                    f"Chunk {chunk.id} has no embedding — "
+                    "embeddings must be generated before storing."
+                )
 
-            ids: list[str] = []
-            documents: list[str] = []
-            embeddings: list[list[float]] = []
-            metadatas: list[dict[str, Any]] = []
-
-            for chunk in chunks:
-                if chunk.embedding is None:
-                    raise ValueError(
-                        f"Chunk {chunk.id} has no embedding — "
-                        "embeddings must be generated before storing."
-                    )
-                ids.append(str(chunk.id))
-                documents.append(chunk.content)
-                embeddings.append(chunk.embedding)
-                metadatas.append(self._build_chroma_metadata(chunk))
-
-            collection.upsert(
-                ids=ids,
-                documents=documents,
-                embeddings=embeddings,
-                metadatas=metadatas,
-            )
-            logger.info(
-                "Upserted %d chunks into collection '%s'",
-                len(ids),
+        # ChromaDB caps how many rows one upsert may carry (5461 on the default
+        # HNSW config), and raises ValueError above that rather than splitting
+        # the work itself. A single document large enough to exceed it — a few
+        # hundred pages of text — therefore failed outright with an opaque 500
+        # *after* the minutes spent parsing and embedding it. Batch instead.
+        #
+        # The cap is derived from the collection rather than hard-coded because
+        # it moves with the index configuration; `max_batch_size` is the same
+        # number ChromaDB validates against, so reading it back keeps the two
+        # in step.
+        collection = self._get_or_create_collection(collection_name)
+        try:
+            max_batch = int(collection.max_batch_size)
+        except (
+            Exception
+        ):  # pragma: no cover - defensive: fall back to a known-safe size
+            logger.warning(
+                "Could not read max_batch_size from collection '%s'; using %d",
                 collection_name,
+                _FALLBACK_BATCH_SIZE,
             )
+            max_batch = _FALLBACK_BATCH_SIZE
+
+        # One row of slack under the cap: a batch exactly at the limit has
+        # passed validation in some ChromaDB versions and failed in others once
+        # metadata is expanded.
+        batch_size = max(1, min(max_batch - 1, _DEFAULT_BATCH_SIZE))
+
+        def _upsert() -> None:
+            total = 0
+            for start in range(0, len(chunks), batch_size):
+                batch = chunks[start : start + batch_size]
+                collection.upsert(
+                    ids=[str(chunk.id) for chunk in batch],
+                    documents=[chunk.content for chunk in batch],
+                    embeddings=[chunk.embedding for chunk in batch],
+                    metadatas=[self._build_chroma_metadata(chunk) for chunk in batch],
+                )
+                total += len(batch)
+                logger.info(
+                    "Upserted %d/%d chunks into collection '%s'",
+                    total,
+                    len(chunks),
+                    collection_name,
+                )
 
         try:
             await asyncio.to_thread(_upsert)

@@ -4,12 +4,31 @@ from pydantic import BaseModel, Field
 
 
 class IngestResponse(BaseModel):
-    """Response model for document ingestion."""
+    """Response model for document ingestion.
+
+    ``chunk_count`` is 0 while a document is still processing; the final count
+    arrives on ``GET /documents/status/{document_id}``.
+    """
 
     document_id: str
     filename: str
     chunk_count: int
     message: str
+    # "pending" | "processing" | "complete" | "failed". Present so a client can
+    # tell "not started yet" from "finished with zero chunks" without a second
+    # round trip on the happy path.
+    status: str = "complete"
+
+
+class IngestStatusResponse(BaseModel):
+    """Progress of one background ingestion."""
+
+    document_id: str
+    filename: str
+    status: str
+    chunk_count: int
+    error: str | None = None
+    updated_at: str
 
 
 class SourceChunk(BaseModel):
