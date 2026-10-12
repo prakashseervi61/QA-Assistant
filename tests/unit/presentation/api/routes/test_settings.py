@@ -1,5 +1,7 @@
 """Tests for the settings routes — API key handling, config, and export."""
 
+import json
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -81,7 +83,7 @@ def _resolver(*, user_key=None, env_key=""):
 class TestApiKeyStatus:
     @pytest.mark.asyncio
     async def test_reports_a_configured_user_key_without_leaking_it(self):
-        secret = "AIzaSyD-SUPERSECRET-0123456789abcdefghij"
+        secret = "fake-key-DO-NOT-USE-0123456789abcdefghij"
         store, resolver = _resolver(user_key=secret)
         _wire(store=store, resolver=resolver)
 
@@ -89,7 +91,7 @@ class TestApiKeyStatus:
 
         assert status.configured is True
         assert status.source == SOURCE_USER
-        assert "SUPERSECRET" not in status.masked
+        assert "DO-NOT-USE" not in status.masked
         assert status.masked.endswith("ghij")
 
     @pytest.mark.asyncio
@@ -128,7 +130,7 @@ class TestPutApiKey:
     async def test_stores_the_key_and_returns_only_a_mask(self):
         store, resolver = _resolver(user_key=None)
         _wire(store=store, resolver=resolver)
-        secret = "AIzaSyD-SUPERSECRET-0123456789abcdefghij"
+        secret = "fake-key-DO-NOT-USE-0123456789abcdefghij"
 
         status = await settings_router.put_api_key(
             settings_router.ApiKeyUpdate(api_key=secret)
@@ -136,7 +138,7 @@ class TestPutApiKey:
 
         assert store.set_calls == [secret]
         assert status.source == SOURCE_USER
-        assert "SUPERSECRET" not in status.masked
+        assert "DO-NOT-USE" not in status.masked
 
     @pytest.mark.asyncio
     async def test_trims_surrounding_whitespace(self):
@@ -195,7 +197,7 @@ class TestDeleteApiKey:
 class TestGetAppConfig:
     @pytest.mark.asyncio
     async def test_returns_storage_stats_and_never_the_api_key(self):
-        store, resolver = _resolver(user_key="AIza-SECRET", env_key="")
+        store, resolver = _resolver(user_key="fake-key-DO-NOT-USE", env_key="")
         vector_store = MagicMock()
         vector_store.list_documents = AsyncMock(
             return_value=[
@@ -220,7 +222,7 @@ class TestGetAppConfig:
         assert payload.document_count == 1
         assert payload.chunk_count == 4
         # The config endpoint is an allow-list, so no credential can appear.
-        assert "AIza-SECRET" not in serialised
+        assert "fake-key-DO-NOT-USE" not in serialised
         assert "api_key" not in serialised
 
     @pytest.mark.asyncio
@@ -251,3 +253,117 @@ class TestDirectorySize:
         (tmp_path / "chroma" / "a.bin").write_bytes(b"x" * 10)
         (tmp_path / "chroma" / "b.bin").write_bytes(b"x" * 5)
         assert settings_router._directory_size(tmp_path / "chroma") == 15
+
+
+class TestExportFormats:
+    """The endpoint kept its JSON default; the rest are new downloads."""
+
+    def _vector_store(self):
+        vector_store = MagicMock()
+        vector_store.list_documents = AsyncMock(
+            return_value=[
+                {
+                    "document_id": "d1",
+                    "filename": "notes.pdf",
+                    "file_type": ".pdf",
+                    "file_size": 2048,
+                    "chunk_count": 12,
+                    "created_at": "2026-10-01",
+                }
+            ]
+        )
+        return vector_store
+
+    def _repo(self):
+        conversation = MagicMock()
+        conversation.id = "c1"
+        conversation.title = "What is RSA?"
+        conversation.created_at = datetime(2026, 10, 5, 10, 0, tzinfo=UTC)
+        conversation.updated_at = None
+        message = MagicMock()
+        message.id = "m1"
+        message.role = "assistant"
+        message.content = "RSA is an asymmetric cipher."
+        message.created_at = datetime(2026, 10, 5, 10, 0, tzinfo=UTC)
+        message.sources = [{"metadata": {"filename": "notes.pdf"}}]
+        repo = MagicMock()
+        repo.list_conversations = AsyncMock(return_value=[conversation])
+        repo.get_messages = AsyncMock(return_value=[message])
+        return repo
+
+    async def _export(self, fmt=None):
+        _wire(
+            store=MagicMock(),
+            resolver=MagicMock(),
+            vector_store=self._vector_store(),
+            repo=self._repo(),
+        )
+        from src.infrastructure.config.settings import get_settings
+
+        kwargs = {"settings": get_settings()}
+        if fmt is not None:
+            kwargs["format"] = fmt
+        return await settings_router.export_data(**kwargs)
+
+    @pytest.mark.asyncio
+    async def test_defaults_to_json_with_no_attachment_header(self):
+        """Backwards compatibility: an existing caller passing no format must
+        still get the same body and the same headers."""
+        response = await self._export()
+        assert response.media_type == "application/json"
+        assert "content-disposition" not in response.headers
+        body = json.loads(response.body)
+        assert body["app_version"] == "0.1.0"
+        assert body["documents"][0]["filename"] == "notes.pdf"
+
+    @pytest.mark.asyncio
+    async def test_explicit_json_matches_the_default(self):
+        response = await self._export("json")
+        assert response.media_type == "application/json"
+        assert json.loads(response.body)["conversations"][0]["title"] == "What is RSA?"
+
+    @pytest.mark.asyncio
+    async def test_markdown_download(self):
+        response = await self._export("markdown")
+        assert response.media_type.startswith("text/markdown")
+        assert "attachment" in response.headers["content-disposition"]
+        assert '.md"' in response.headers["content-disposition"]
+        text = response.body.decode()
+        assert "RSA is an asymmetric cipher." in text
+        assert "notes.pdf" in text
+
+    @pytest.mark.asyncio
+    async def test_text_download(self):
+        response = await self._export("text")
+        assert response.media_type.startswith("text/plain")
+        assert '.txt"' in response.headers["content-disposition"]
+        assert "[ASSISTANT]" in response.body.decode()
+
+    @pytest.mark.asyncio
+    async def test_pdf_download_starts_with_the_pdf_header(self):
+        response = await self._export("pdf")
+        assert response.media_type == "application/pdf"
+        assert '.pdf"' in response.headers["content-disposition"]
+        assert response.body.startswith(b"%PDF-1.4")
+
+    @pytest.mark.asyncio
+    async def test_rejects_an_unknown_format_with_400(self):
+        with pytest.raises(HTTPException) as exc_info:
+            await self._export("docx")
+        assert exc_info.value.status_code == 400
+        assert "docx" in str(exc_info.value.detail)
+
+    @pytest.mark.asyncio
+    async def test_all_formats_share_one_payload(self):
+        """The bundle is built once; only the rendering differs. If one format
+        ever dropped a conversation, this is what would notice.
+
+        Case-insensitive because the plain-text and PDF renderers set the
+        conversation title as an upper-case section header, which is deliberate
+        styling rather than a different payload.
+        """
+        found = []
+        for fmt in ("json", "markdown", "text", "pdf"):
+            response = await self._export(fmt)
+            found.append(b"what is rsa?" in response.body.lower())
+        assert found == [True, True, True, True]

@@ -13,13 +13,19 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field, field_validator
 
 from src.application.dto.responses import DocumentInfo
 from src.domain.interfaces.conversation_repository import ConversationRepository
-from src.domain.interfaces.secret_store import SecretStore
 from src.domain.interfaces.vector_store import VectorStore
 from src.infrastructure.config.settings import Settings, get_settings
+from src.infrastructure.export import (
+    render_markdown,
+    render_pdf,
+    render_text,
+    suggested_filename,
+)
 from src.infrastructure.llm.api_key_resolver import (
     SOURCE_ENV,
     SOURCE_NONE,
@@ -27,6 +33,7 @@ from src.infrastructure.llm.api_key_resolver import (
     ApiKeyResolver,
     mask_api_key,
 )
+from src.infrastructure.repositories.json_secret_store import JsonSecretStore
 from src.presentation.api.dependencies import Registry
 
 logger = logging.getLogger(__name__)
@@ -34,7 +41,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 _resolver: Registry[ApiKeyResolver] = Registry("API key")
-_store: Registry[SecretStore] = Registry("Secret store")
+_store: Registry[JsonSecretStore] = Registry("Secret store")
 _vector_store: Registry[VectorStore] = Registry("Settings vector store")
 _conversations: Registry[ConversationRepository] = Registry(
     "Settings conversation repo"
@@ -49,7 +56,7 @@ _MAX_KEY_LENGTH = 200
 
 def configure(
     resolver: ApiKeyResolver,
-    store: SecretStore,
+    store: JsonSecretStore,
     vector_store: VectorStore,
     conversation_repository: ConversationRepository,
 ) -> None:
@@ -96,24 +103,23 @@ class ApiKeyUpdate(BaseModel):
 
 
 class AppConfigResponse(BaseModel):
-    """Non-secret runtime configuration for display in Settings."""
+    """Non-secret runtime configuration for display in Settings.
 
-    app_name: str
+    An allow-list holding only what the Settings page renders: adding a field
+    to ``Settings`` must not silently publish it here, which is how secrets
+    leak into config endpoints.
+    """
+
     version: str
     llm_provider: str
     llm_model: str
-    embedding_provider: str
     embedding_model: str
     enable_reranking: bool
     enable_hybrid_search: bool
     enable_semantic_chunking: bool
-    enable_incremental_ingestion: bool
     enable_guardrails: bool
-    guardrail_block_violations: bool
-    enable_usage_tracking: bool
     max_file_size_mb: int
     history_db_path: str
-    chroma_persist_dir: str
     secrets_file_path: str
     history_db_bytes: int
     document_count: int
@@ -211,11 +217,7 @@ def _directory_size(path: Path) -> int:
 async def get_app_config(
     settings: Settings = Depends(get_settings),
 ) -> AppConfigResponse:
-    """Return non-secret configuration plus on-disk storage figures.
-
-    Deliberately an allow-list: adding a field to ``Settings`` must not
-    silently publish it here, which is how secrets leak into config endpoints.
-    """
+    """Return non-secret configuration plus on-disk storage figures."""
     vector_store = _vector_store.get()
     collection = settings.CHROMA_COLLECTION_NAME
 
@@ -227,22 +229,16 @@ async def get_app_config(
         raise HTTPException(status_code=500, detail="Could not read storage stats.")
 
     return AppConfigResponse(
-        app_name=settings.APP_NAME,
         version="0.1.0",
         llm_provider=settings.LLM_PROVIDER,
         llm_model=settings.GEMINI_MODEL,
-        embedding_provider=settings.EMBEDDING_PROVIDER,
         embedding_model=settings.HUGGINGFACE_MODEL,
         enable_reranking=settings.ENABLE_RERANKING,
         enable_hybrid_search=settings.ENABLE_HYBRID_SEARCH,
         enable_semantic_chunking=settings.ENABLE_SEMANTIC_CHUNKING,
-        enable_incremental_ingestion=settings.ENABLE_INCREMENTAL_INGESTION,
         enable_guardrails=settings.ENABLE_GUARDRAILS,
-        guardrail_block_violations=settings.GUARDRAIL_BLOCK_VIOLATIONS,
-        enable_usage_tracking=settings.ENABLE_USAGE_TRACKING,
         max_file_size_mb=settings.MAX_FILE_SIZE_MB,
         history_db_path=settings.HISTORY_DB_PATH,
-        chroma_persist_dir=settings.CHROMA_PERSIST_DIR,
         secrets_file_path=settings.SECRETS_FILE_PATH,
         history_db_bytes=_directory_size(Path(settings.HISTORY_DB_PATH)),
         document_count=len(docs),
@@ -254,13 +250,30 @@ async def get_app_config(
 # GET /export — portable snapshot of documents and conversations
 # ---------------------------------------------------------------------------
 
+# Which renderer handles which `?format=`. JSON is the default because it is the
+# only lossless one — it is what you would feed back into another tool — so it
+# stays the behaviour of the endpoint when no format is given.
+_FORMAT_JSON = "json"
+_FORMAT_MARKDOWN = "markdown"
+_FORMAT_TEXT = "text"
+_FORMAT_PDF = "pdf"
+_FORMATS = (_FORMAT_JSON, _FORMAT_MARKDOWN, _FORMAT_TEXT, _FORMAT_PDF)
 
-@router.get("/export", response_model=ExportResponse)
-async def export_data(settings: Settings = Depends(get_settings)) -> ExportResponse:
-    """Return every document and conversation as one JSON payload.
+# Content types for the download formats. `text/markdown` is the registered
+# type for Markdown; JSON keeps the one already served.
+_MEDIA_TYPES = {
+    _FORMAT_JSON: "application/json",
+    _FORMAT_MARKDOWN: "text/markdown; charset=utf-8",
+    _FORMAT_TEXT: "text/plain; charset=utf-8",
+    _FORMAT_PDF: "application/pdf",
+}
 
-    Exists so the Danger Zone can offer "export first" — per the convention
-    that a destructive action should never be the only way out.
+
+async def _build_export(settings: Settings) -> ExportResponse:
+    """Collect the full export payload, shared by every output format.
+
+    Rendering is cheap and reading is not, so the bundle is built once and then
+    handed to whichever renderer the caller asked for.
     """
     vector_store = _vector_store.get()
     repo = _conversations.get()
@@ -317,4 +330,59 @@ async def export_data(settings: Settings = Depends(get_settings)) -> ExportRespo
             for doc in docs
         ],
         conversations=payload,
+    )
+
+
+@router.get("/export")
+async def export_data(
+    settings: Settings = Depends(get_settings),
+    format: str = _FORMAT_JSON,
+) -> Response:
+    """Export documents and conversations as JSON, Markdown, text, or PDF.
+
+    Exists so the Danger Zone can offer "export first" — per the convention
+    that a destructive action should never be the only way out — and because a
+    transcript people want to keep should not require them to read JSON.
+
+    `json` keeps the original response body and headers exactly as they were, so
+    anything already calling `/export` without a format is unaffected.
+    """
+    if format not in _FORMATS:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Unknown export format {format!r}. Use one of: {', '.join(_FORMATS)}."
+            ),
+        )
+
+    export = await _build_export(settings)
+
+    if format == _FORMAT_JSON:
+        return JSONResponse(
+            content=export.model_dump(mode="json"),
+            media_type=_MEDIA_TYPES[_FORMAT_JSON],
+        )
+
+    # `model_dump` rather than passing the model: the renderers take plain
+    # mappings, and going through JSON mode turns the datetimes into the same
+    # strings the download will contain.
+    bundle = export.model_dump(mode="json")
+
+    if format == _FORMAT_MARKDOWN:
+        body: str | bytes = render_markdown(bundle)
+        extension = "md"
+    elif format == _FORMAT_TEXT:
+        body = render_text(bundle)
+        extension = "txt"
+    else:
+        body = render_pdf(bundle)
+        extension = "pdf"
+
+    filename = suggested_filename(bundle, extension)
+    return Response(
+        # A download rather than inline: the whole point is that the file lands
+        # on disk, and `inline` would render Markdown as a browser page instead.
+        content=body,
+        media_type=_MEDIA_TYPES[format],
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

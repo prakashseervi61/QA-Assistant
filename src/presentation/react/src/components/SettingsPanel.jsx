@@ -52,15 +52,11 @@ function Row({ label, helper, children }) {
 }
 
 /** Read-only value chip. */
-function Value({ children, tone = 'neutral' }) {
-  const toneClass =
-    tone === 'on'
-      ? '!bg-pastel-green'
-      : tone === 'off'
-        ? '!bg-paper-surface'
-        : '!bg-paper-surface';
+function Value({ children }) {
   return (
-    <span className={`nb-chip font-mono text-[11px] uppercase ${toneClass}`}>{children}</span>
+    <span className="nb-chip font-mono text-[11px] uppercase !bg-paper-surface">
+      {children}
+    </span>
   );
 }
 
@@ -241,12 +237,25 @@ export default function SettingsPanel({ isDark }) {
     }
   }
 
-  function exportData() {
-    // A plain navigation to the endpoint triggers a browser download, which
-    // needs no blob handling and leaves the file exactly as the API built it.
-    window.open('/api/export', '_blank', 'noopener');
-    setActionMessage({ tone: 'ok', text: 'Export started — check your downloads.' });
-  }
+  // Formats the API can render. JSON is the default because it is the only
+// lossless one; the rest are the shapes a person actually wants to keep.
+// Kept in step with the `?format=` values the /export route accepts.
+const EXPORT_FORMATS = [
+  { value: 'markdown', label: 'Markdown' },
+  { value: 'pdf', label: 'PDF' },
+  { value: 'text', label: 'Plain text' },
+  { value: 'json', label: 'JSON' },
+];
+
+const [exportFormat, setExportFormat] = useState('markdown');
+
+function exportData() {
+  // A plain navigation to the endpoint triggers a browser download, which
+  // needs no blob handling and leaves the file exactly as the API built it.
+  window.open(`/api/export?format=${exportFormat}`, '_blank', 'noopener');
+  const label = EXPORT_FORMATS.find((f) => f.value === exportFormat)?.label ?? exportFormat;
+  setActionMessage({ tone: 'ok', text: `Export started — check your downloads for a .${exportFormat === 'markdown' ? 'md' : exportFormat === 'text' ? 'txt' : exportFormat} file (${label}).` });
+}
 
   async function runPendingAction() {
     const action = pendingAction;
@@ -413,7 +422,7 @@ export default function SettingsPanel({ isDark }) {
               ) : null}
             </span>
           ) : (
-            <Value tone="off">None</Value>
+            <Value>None</Value>
           )}
         </Row>
 
@@ -490,11 +499,31 @@ export default function SettingsPanel({ isDark }) {
         description="Irreversible actions. Export your data first — there is no undo and no backup."
       >
         <div className="rounded border-[3px] border-nb-line bg-paper-surface p-5 shadow-brutal-sm">
-          <Row label="Export everything" helper="Download all documents and conversations as JSON.">
-            <button type="button" onClick={exportData} className="nb-btn">
-              <Download className="h-4 w-4" aria-hidden="true" />
-              Export
-            </button>
+          <Row
+            label="Export everything"
+            helper="Download all documents and conversations in a format you can keep."
+          >
+            <div className="flex items-center gap-2">
+              {/* A native select rather than a custom listbox: it is the one
+                  control that opens the OS picker, which is what a thumb expects
+                  on a phone. */}
+              <select
+                value={exportFormat}
+                onChange={(e) => setExportFormat(e.target.value)}
+                aria-label="Export format"
+                className="nb-input h-11 cursor-pointer rounded border-[3px] border-nb-line bg-paper-surface px-3 font-mono text-xs uppercase text-ink focus:outline-none"
+              >
+                {EXPORT_FORMATS.map((f) => (
+                  <option key={f.value} value={f.value}>
+                    {f.label}
+                  </option>
+                ))}
+              </select>
+              <button type="button" onClick={exportData} className="nb-btn">
+                <Download className="h-4 w-4" aria-hidden="true" />
+                Export
+              </button>
+            </div>
           </Row>
           <Row
             label="Delete all documents"
