@@ -1,0 +1,49 @@
+# gitleaks — secret scanning for the git history and the working tree.
+#
+# Why this exists: the app reads a real GEMINI_API_KEY from `.env`, and the
+# Settings page writes a user-supplied key to `data/secrets.json`. Neither file
+# is committed, and this config is what keeps that true — a committed key is
+# unrecoverable once pushed, so the check has to run before the push, not after.
+#
+# Run manually:   gitleaks detect --source .
+# Via CI:         .github/workflows/ci.yml (the `secret-scan` job)
+# Locally on commit: see .pre-commit-config.yaml
+#
+# Tests deliberately use obviously-fake credentials (for example
+# `fake-key-DO-NOT-USE-…`) rather than realistic ones, precisely so this file
+# needs no allowlist covering `tests/`. An allowlist over the test directory
+# would be a hole: anything committed into a test would sail through.
+
+title = "QA Assistant — gitleaks configuration"
+
+[extend]
+# Everything gitleaks ships with (AWS, GitHub, Google, OpenAI, Slack, Stripe,
+# private keys, JWTs, …). `useDefault` is the whole value here; the blocks below
+# only narrow it.
+useDefault = true
+
+[allowlist]
+description = "Placeholders and generated output that are committed on purpose."
+paths = [
+  # Holds documented placeholder values only (`your_gemini_api_key_here`), never
+  # a real credential — it is the file users copy from, so it cannot be ignored.
+  '''(^|/)\.env\.example$''',
+  # Prose docs that quote config keys, which trips generic-api-key heuristics.
+  '''(^|/)docs/''',
+  '''(^|/)README\.md$''',
+  # Tooling output that is git-ignored. Anything .git-ignored can never reach
+  # the repository, so a commit-gate scanner has nothing to protect here — and
+  # these directories are exactly where a real credential *does* legitimately
+  # appear on a developer's machine:
+  #   .playwright-mcp/  browser console logs capture live request headers
+  #   brag-output/      generated video/screenshot artifacts
+  #   node_modules/, dist/   build output
+  # `.env` is deliberately NOT listed. It is git-ignored, so the history scan
+  # (`gitleaks git`, what CI and the pre-commit hook run) never sees it, but a
+  # whole-tree `gitleaks dir` will flag your own local key. That is correct
+  # behaviour, not a false positive — it is telling you the file is real.
+  '''(^|/)\.playwright-mcp/''',
+  '''(^|/)brag-output''',
+  '''(^|/)node_modules/''',
+  '''(^|/)dist/''',
+]

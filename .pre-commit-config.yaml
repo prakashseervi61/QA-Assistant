@@ -1,0 +1,43 @@
+# pre-commit — the checks that must pass before a commit lands.
+#
+# Install once:  pip install pre-commit && pre-commit install
+# Run on everything:  pre-commit run --all-files
+#
+# CI re-runs every hook below on every push, so skipping the local install is
+# safe — it only costs you a failed push instead of a blocked commit. Ruff is
+# pinned to the same version CI uses, so a clean commit and a green CI agree.
+
+default_language_version:
+  python: python3
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: ^(data/|brag-output/|docs/images/)
+      - id: end-of-file-fixer
+        exclude: ^(data/|brag-output/|docs/images/)
+      - id: check-merge-conflict
+      - id: check-yaml
+        exclude: ^(data/|brag-output/)
+      - id: check-toml
+      - id: check-added-large-files
+        args: ['--maxkb=2048']
+      - id: detect-private-key
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.5
+    hooks:
+      - id: ruff
+        args: [--fix]
+        files: ^(src|tests|eval|scripts)/.*\.py$
+      - id: ruff-format
+        files: ^(src|tests|eval|scripts)/.*\.py$
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.24.3
+    hooks:
+      - id: gitleaks
+        # Scans staged changes against .gitleaks.toml. A committed credential is
+        # unrecoverable once pushed, so this has to gate the commit itself.
