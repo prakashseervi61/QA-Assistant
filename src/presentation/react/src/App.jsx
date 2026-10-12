@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import CommandPalette from './components/CommandPalette';
 import Dock from './components/Dock';
+import MobileNav from './components/MobileNav';
 import TopNav from './components/TopNav';
 import DocumentList from './components/DocumentList';
 import ChatWidget from './components/ChatWidget';
@@ -13,6 +14,7 @@ import { getTheme, setTheme } from './theme';
 
 export default function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [isDark, setIsDark] = useState(() => getTheme() === 'dark');
   const location = useLocation();
   const navigate = useNavigate();
@@ -59,8 +61,10 @@ export default function App() {
     navigate(`/chat/${id}`);
   }
 
-  // pb-20 clears the mobile bottom nav bar; the dock is a left rail on lg.
-  const pagePad = 'p-4 pb-24 sm:p-6 sm:pb-24 lg:px-28 lg:py-8 lg:pb-8';
+  // No bottom navigation any more — the drawer overlays the content instead of
+  // pushing it, so the scroll views only need to clear the device's own home
+  // indicator, not a fixed bar.
+  const pagePad = 'p-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:p-6 lg:px-28 lg:py-8 lg:pb-8';
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-paper">
@@ -74,6 +78,8 @@ export default function App() {
         isDark={isDark}
         onToggleTheme={handleToggleTheme}
         onOpenPalette={() => setPaletteOpen(true)}
+        drawerOpen={drawerOpen}
+        onOpenDrawer={() => setDrawerOpen(true)}
       />
 
       {/* Main column — Chat is the primary view at "/". tabIndex -1 so the
@@ -132,6 +138,20 @@ export default function App() {
         onClose={() => setPaletteOpen(false)}
         active={activeView}
         onNavigate={handleNavigate}
+        isDark={isDark}
+        onToggleTheme={handleToggleTheme}
+      />
+
+      {/* Mobile navigation drawer. Renders nothing from `lg` up, where the Dock
+          rail is the navigation. Mounted after the palette so it sits above it
+          in DOM order for a screen reader reaching the end of the shell. */}
+      <MobileNav
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        onNewChat={handleNewChat}
+        onOpenPalette={() => setPaletteOpen(true)}
+        active={activeView}
+        freshChat={freshChat}
         isDark={isDark}
         onToggleTheme={handleToggleTheme}
       />

@@ -85,6 +85,9 @@ export default function DocumentList() {
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  // Background ingestion progress: { filename, status, chunkCount } while a
+  // document is being parsed and embedded, null when nothing is in flight.
+  const [progress, setProgress] = useState(null);
   const [error, setError] = useState(null);
   const [file, setFile] = useState(null);
   const [dragging, setDragging] = useState(false);
@@ -156,16 +159,72 @@ export default function DocumentList() {
     formData.append('file', file);
 
     try {
-      await postFormData('/documents/upload', formData);
+      // The API answers 202 immediately and ingests in the background, so the
+      // upload response only means "accepted". Polling is what turns that into
+      // "ready" — without it the document would silently never appear.
+      const accepted = await postFormData('/documents/upload', formData);
       setFile(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
-      await loadDocs();
-      window.dispatchEvent(new CustomEvent('documents-changed'));
+      setProgress({ filename: accepted.filename, status: 'processing', chunkCount: 0 });
+      await pollUntilIngested(accepted.document_id);
     } catch (err) {
+      setProgress(null);
       setError(err.message);
     } finally {
       setUploading(false);
     }
+  }
+
+  /**
+   * Poll the ingestion status endpoint until the document finishes.
+   *
+   * The delay backs off because embedding a document is slow and CPU-bound —
+   * a fixed 1s poll for several minutes is a lot of requests for no new
+   * information. It also stops on success, on failure, or when the tab is
+   * hidden, so a backgrounded tab does not keep hammering the API.
+   */
+  async function pollUntilIngested(documentId, { signal } = {}) {
+    let delay = 1000;
+    const maxDelay = 8000;
+    // Generous ceiling: a very large corpus can legitimately take this long,
+    // and giving up early would strand the user with a permanent spinner.
+    const deadline = Date.now() + 30 * 60 * 1000;
+
+    while (Date.now() < deadline) {
+      if (signal?.aborted) return;
+      // eslint-disable-next-line no-await-in-loop
+      const status = await fetchJSON(`/documents/status/${documentId}`);
+      setProgress({
+        filename: status.filename,
+        status: status.status,
+        chunkCount: status.chunk_count,
+      });
+
+      if (status.status === 'complete') {
+        setProgress(null);
+        await loadDocs();
+        window.dispatchEvent(new CustomEvent('documents-changed'));
+        return;
+      }
+      if (status.status === 'failed') {
+        setProgress(null);
+        setError(
+          `Could not read '${status.filename}'. ${status.error || 'Ingestion failed.'}`
+        );
+        return;
+      }
+
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      delay = Math.min(delay * 2, maxDelay);
+    }
+
+    // Timed out without a verdict. The background task is still running, so say
+    // so rather than claiming failure — the document may still appear.
+    setProgress(null);
+    setError(
+      "Still processing after 30 minutes. The document may still be indexed — check back shortly."
+    );
   }
 
   async function handleDelete(id) {
@@ -188,7 +247,7 @@ export default function DocumentList() {
   return (
     <div className="mx-auto max-w-6xl space-y-6">
       <div className="flex items-start justify-between gap-4">
-        <div>
+        <div className="min-w-0">
           <span className="nb-tag">Corpus</span>
           <h2 className="mt-4 flex items-center gap-3 text-3xl font-black uppercase text-ink sm:text-4xl">
             Documents
@@ -336,6 +395,38 @@ export default function DocumentList() {
           </p>
           <p className="nb-label mt-4">PDF · DOCX · TXT — one at a time</p>
         </label>
+
+        {/* Ingestion runs server-side after the upload returns, so the only
+            honest way to show progress is to report what the backend says. The
+            spinner is animated with `motion-safe` so a reduced-motion user gets
+            a static state rather than an endless loop. */}
+        {progress && (
+          <div
+            className="nb-card flex items-center gap-3 px-4 py-3"
+            role="status"
+            aria-live="polite"
+          >
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
+              className="motion-reduce:animate-none"
+            >
+              <Loader2 className="h-5 w-5 text-ink" aria-hidden="true" />
+            </motion.div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-extrabold uppercase tracking-tight text-ink">
+                Indexing {progress.filename}
+              </p>
+              <p className="nb-label mt-0.5">
+                {progress.status === 'pending'
+                  ? 'Queued — starting shortly'
+                  : progress.chunkCount > 0
+                    ? `${progress.chunkCount} chunks so far — this can take a few minutes`
+                    : 'Parsing and embedding — this can take a few minutes'}
+              </p>
+            </div>
+          </div>
+        )}
 
         {file && (
           <div className="nb-card flex items-center justify-between gap-3 px-4 py-3">

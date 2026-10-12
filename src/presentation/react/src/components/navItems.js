@@ -48,3 +48,42 @@ export function navKeyForPath(pathname) {
 export function navItemForKey(key) {
   return navItems.find(item => item.key === key) || navItems[0];
 }
+
+/**
+ * Rotating accent grounds for the navigation surfaces (the desktop Dock rail and
+ * the mobile drawer), so no two adjacent items share a colour — the bento "no
+ * two neighbours match" rule applied to navigation.
+ *
+ * These are solid accents, not pastels: a label sits on the ground, so the
+ * ground has to carry body text at AA in both themes.
+ *
+ * Each entry pairs the *selected* ground with the ground it previews on hover,
+ * so every icon flashes its own colour rather than one shared highlight.
+ * The pairs are written out in full instead of interpolated ("hover:" + accent)
+ * because Tailwind's scanner only emits classes it can see verbatim.
+ *
+ * Lives here rather than in either component so the two navigation surfaces
+ * cannot drift out of sync and end up with different rotations.
+ */
+export const NAV_ACCENTS = [
+  {
+    on: 'bg-accent-yellow text-ink-on-accent',
+    hover: 'hover:bg-accent-yellow hover:text-ink-on-accent hover:shadow-brutal-sm',
+  },
+  {
+    on: 'bg-accent-cyan text-ink-on-accent',
+    hover: 'hover:bg-accent-cyan hover:text-ink-on-accent hover:shadow-brutal-sm',
+  },
+  {
+    on: 'bg-accent-magenta text-ink-on-accent',
+    hover: 'hover:bg-accent-magenta hover:text-ink-on-accent hover:shadow-brutal-sm',
+  },
+  {
+    on: 'bg-pastel-green text-ink-on-accent',
+    hover: 'hover:bg-pastel-green hover:text-ink-on-accent hover:shadow-brutal-sm',
+  },
+  {
+    on: 'bg-accent-orange text-ink-on-accent',
+    hover: 'hover:bg-accent-orange hover:text-ink-on-accent hover:shadow-brutal-sm',
+  },
+];

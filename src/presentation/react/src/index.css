@@ -386,6 +386,18 @@
     gap: 12px;
   }
 
+  /* Grid items are min-width:auto by default, which refuses to shrink below
+     their content's min-content width. A filename or a saved question is one
+     long unbreakable token (no spaces to wrap at), so a 1fr column would widen
+     to fit the whole string, push the card past the viewport, and the `truncate`
+     inside it would never engage — the page would scroll sideways instead.
+     min-width:0 lets the column shrink to the screen so the ellipsis does its
+     job. Needed by every .nb-bento child, so it lives here rather than on each
+     <li>. */
+  .nb-bento > * {
+    min-width: 0;
+  }
+
   @media (max-width: 1024px) {
     .nb-bento {
       grid-template-columns: repeat(2, 1fr);

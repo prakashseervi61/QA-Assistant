@@ -744,14 +744,72 @@ export default function ChatWidget() {
         )}
       </div>
 
-      {/* Composer — hard-bordered block over the messages area */}
-      <div className="shrink-0 px-4 pb-4 pt-2 sm:px-8">
+      {/* Composer — hard-bordered block over the messages area.
+          The bottom padding only has to clear the device's own home indicator
+          now that there is no bottom navigation bar under it. */}
+      <div className="shrink-0 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2 sm:px-8">
         <div className="mx-auto w-full max-w-4xl">
         <div
-          className={`flex items-end gap-2 rounded border-[3px] border-nb-line bg-paper-surface px-3 py-2 shadow-brutal ${
+          className={`flex flex-wrap items-end gap-2 rounded border-[3px] border-nb-line bg-paper-surface px-3 py-2 shadow-brutal ${
             loading || hasDocuments === false ? 'opacity-60' : ''
           }`}
         >
+          <input
+            ref={chatFileInputRef}
+            name="chat-upload"
+            type="file"
+            accept={ACCEPTED_TYPES}
+            onChange={handleChatUpload}
+            tabIndex={-1}
+            className="sr-only"
+          />
+          {/* Input and Send travel as one group so a wrap can never strand the
+              send button on the far side of the field. The 16rem basis is the
+              wrap trigger: below ~380px there is not room for this group plus
+              both aux buttons, so upload and voice drop to their own row and
+              the input gets the full width instead of being squeezed to 143px
+              by three 44px buttons. */}
+          <div className="flex min-w-0 flex-1 basis-[16rem] items-end gap-2">
+            <textarea
+              ref={textareaRef}
+              rows={1}
+              value={input}
+              onChange={handleInputChange}
+              onKeyDown={handleKeyDown}
+              placeholder={
+                // Short enough to stay on one line at the narrowest phone
+                // width. A textarea only auto-grows once you type, so a
+                // wrapping placeholder gets clipped by min-h-11 on an empty
+                // field — the hint has to fit the box it is hinting about.
+                hasDocuments === false ? 'Upload a document first…' : 'Ask about your documents…'
+              }
+              disabled={loading || hasDocuments === false}
+              aria-label="Your question"
+              name="question"
+              className="max-h-40 min-h-11 min-w-0 flex-1 resize-none bg-transparent py-2.5 text-sm leading-6 text-ink placeholder:text-ink-faint focus:outline-none disabled:cursor-not-allowed"
+            />
+            {loading ? (
+              <button
+                type="button"
+                onClick={stopStreaming}
+                aria-label="Stop generating"
+                title="Stop generating"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded border-[3px] border-nb-line bg-accent-magenta text-ink-on-accent shadow-brutal-sm transition-transform active:translate-x-[3px] active:translate-y-[3px] active:shadow-none"
+              >
+                <Square className="h-4 w-4" aria-hidden="true" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => sendMessage()}
+                disabled={!input.trim() || hasDocuments === false}
+                aria-label="Send message"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded border-[3px] border-nb-line bg-accent-yellow text-ink-on-accent shadow-brutal-sm transition-transform active:translate-x-[3px] active:translate-y-[3px] active:shadow-none disabled:cursor-not-allowed disabled:shadow-none disabled:opacity-40"
+              >
+                <Send className="h-4 w-4" aria-hidden="true" />
+              </button>
+            )}
+          </div>
           <button
             type="button"
             onClick={() => chatFileInputRef.current?.click()}
@@ -768,55 +826,11 @@ export default function ChatWidget() {
               <Paperclip className="h-4 w-4" aria-hidden="true" />
             )}
           </button>
-          <input
-            ref={chatFileInputRef}
-            name="chat-upload"
-            type="file"
-            accept={ACCEPTED_TYPES}
-            onChange={handleChatUpload}
-            tabIndex={-1}
-            className="sr-only"
-          />
-          <textarea
-            ref={textareaRef}
-            rows={1}
-            value={input}
-            onChange={handleInputChange}
-            onKeyDown={handleKeyDown}
-            placeholder={
-              hasDocuments === false ? 'Upload a document first…' : 'Ask a question about your documents…'
-            }
-            disabled={loading || hasDocuments === false}
-            aria-label="Your question"
-            name="question"
-            className="max-h-40 min-h-11 flex-1 resize-none bg-transparent py-2.5 text-sm leading-6 text-ink placeholder:text-ink-faint focus:outline-none disabled:cursor-not-allowed"
-          />
           <WaveformOrb
             listening={listening}
             onClick={toggleVoice}
             label="Voice input"
           />
-          {loading ? (
-            <button
-              type="button"
-              onClick={stopStreaming}
-              aria-label="Stop generating"
-              title="Stop generating"
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded border-[3px] border-nb-line bg-accent-magenta text-ink-on-accent shadow-brutal-sm transition-transform active:translate-x-[3px] active:translate-y-[3px] active:shadow-none"
-            >
-              <Square className="h-4 w-4" aria-hidden="true" />
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => sendMessage()}
-              disabled={!input.trim() || hasDocuments === false}
-              aria-label="Send message"
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded border-[3px] border-nb-line bg-accent-yellow text-ink-on-accent shadow-brutal-sm transition-transform active:translate-x-[3px] active:translate-y-[3px] active:shadow-none disabled:cursor-not-allowed disabled:shadow-none disabled:opacity-40"
-            >
-              <Send className="h-4 w-4" aria-hidden="true" />
-            </button>
-          )}
         </div>
         {hasDocuments === false && (
           <p className="nb-label mt-2 text-center">
