@@ -1,7 +1,10 @@
 """Tests for the settings routes — API key handling, config, and export."""
 
 import json
-from datetime import UTC, datetime
+
+# `timezone.utc`, not the 3.11 `datetime.UTC` alias: this project supports
+# 3.10 and that alias does not exist there.
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -278,13 +281,13 @@ class TestExportFormats:
         conversation = MagicMock()
         conversation.id = "c1"
         conversation.title = "What is RSA?"
-        conversation.created_at = datetime(2026, 10, 5, 10, 0, tzinfo=UTC)
+        conversation.created_at = datetime(2026, 10, 5, 10, 0, tzinfo=timezone.utc)
         conversation.updated_at = None
         message = MagicMock()
         message.id = "m1"
         message.role = "assistant"
         message.content = "RSA is an asymmetric cipher."
-        message.created_at = datetime(2026, 10, 5, 10, 0, tzinfo=UTC)
+        message.created_at = datetime(2026, 10, 5, 10, 0, tzinfo=timezone.utc)
         message.sources = [{"metadata": {"filename": "notes.pdf"}}]
         repo = MagicMock()
         repo.list_conversations = AsyncMock(return_value=[conversation])

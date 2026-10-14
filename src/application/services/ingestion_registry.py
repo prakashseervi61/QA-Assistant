@@ -22,7 +22,10 @@ from __future__ import annotations
 
 import logging
 import threading
-from datetime import UTC, datetime
+
+# `timezone.utc`, not the 3.11 `datetime.UTC` alias: this project supports
+# 3.10 and that alias does not exist there.
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
@@ -61,7 +64,7 @@ class _Job:
         self.status = IngestionStatus.PENDING
         self.chunk_count = 0
         self.error: str | None = None
-        self.updated_at = datetime.now(UTC)
+        self.updated_at = datetime.now(timezone.utc)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -124,7 +127,7 @@ class IngestionRegistry:
                 return
             for key, value in fields.items():
                 setattr(job, key, value)
-            job.updated_at = datetime.now(UTC)
+            job.updated_at = datetime.now(timezone.utc)
 
     def _prune(self) -> None:
         """Drop the oldest finished jobs once the map grows past the cap."""

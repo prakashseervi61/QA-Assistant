@@ -73,6 +73,11 @@ htmlcov/
 node_modules/
 
 .hermes
+# Generated video/screenshot output from `brag`. Build artifacts, not
+# project content — they were being swept in by a blanket `git add -A`.
+brag-output/
+brag-output-*/
+
 # Playwright E2E
 test-results/
 playwright-report/

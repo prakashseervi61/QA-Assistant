@@ -9,7 +9,10 @@ browser. Two rules hold throughout this module:
 """
 
 import logging
-from datetime import UTC, datetime
+
+# `timezone.utc`, not the 3.11 `datetime.UTC` alias: this project supports
+# 3.10 and that alias does not exist there.
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -316,7 +319,7 @@ async def _build_export(settings: Settings) -> ExportResponse:
         )
 
     return ExportResponse(
-        exported_at=datetime.now(UTC).isoformat(),
+        exported_at=datetime.now(timezone.utc).isoformat(),
         app_version="0.1.0",
         documents=[
             DocumentInfo(
