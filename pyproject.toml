@@ -22,6 +22,7 @@ dev = [
     "pytest>=7.0.0",
     "httpx>=0.24.0",  # Starlette TestClient transport (tests only)
     "pytest-asyncio>=0.21.0",
+    "pytest-cov>=5.0.0",
     "mypy>=1.0.0",
     "ruff>=0.1.0",
 ]
@@ -40,3 +41,38 @@ select = ["E", "F", "I", "N", "W", "UP"]
 [tool.mypy]
 python_version = "3.10"
 strict = true
+
+# ---------------------------------------------------------------------------
+# Coverage
+#
+# Config lives here rather than in a .coveragerc so the whole toolchain config
+# stays in one file, and so the measured surface is defined in one place:
+# `source` is the application, never the tests themselves.
+#
+# There is deliberately NO `fail_under` yet. The gate gets a number once someone
+# has looked at the measured baseline and chosen one — setting it first either
+# locks in an arbitrary figure or invites lowering it to make the build green.
+# The baseline this produced is recorded in docs/TESTING.md.
+# ---------------------------------------------------------------------------
+
+[tool.coverage.run]
+source = ["src"]
+branch = true
+# The test tree is not the subject; counting it would inflate the figure.
+omit = [
+    "*/__pycache__/*",
+    "*/tests/*",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@(abc\\.)?abstractmethod",
+    # Defensive wiring guards that exist to fail loudly in production. They are
+    # worth having but they are not a coverage target.
+    "except \\(Exception\\):.*# pragma: no cover",
+]

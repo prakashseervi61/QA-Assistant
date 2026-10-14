@@ -85,8 +85,19 @@ jobs:
       - name: Install dependencies
         run: pip install -e ".[dev]"
 
-      - name: Run tests
-        run: pytest --tb=short -q
+      - name: Run tests with coverage
+        # One run, not two: coverage is not a separate suite, it is the same one
+        # instrumented. Measured and published, but not a gate yet — a threshold
+        # nobody chose is worse than none. See docs/TESTING.md for the baseline.
+        run: pytest --tb=short -q --cov --cov-report=xml --cov-report=term-missing
+
+      - name: Upload Python coverage
+        if: matrix.python-version == '3.11'
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-coverage
+          path: coverage.xml
+          retention-days: 7
 
   frontend:
     name: Frontend (test + build)
@@ -104,9 +115,16 @@ jobs:
         working-directory: src/presentation/react
         run: npm ci
 
-      - name: Unit tests
+      - name: Unit tests with coverage
         working-directory: src/presentation/react
-        run: npm test
+        run: npm run test:coverage
+
+      - name: Upload frontend coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-coverage
+          path: src/presentation/react/coverage/
+          retention-days: 7
 
       - name: Production build
         working-directory: src/presentation/react

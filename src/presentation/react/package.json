@@ -12,7 +12,8 @@
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:desktop": "playwright test --project=desktop",
     "test:e2e:mobile": "playwright test --project=mobile",
-    "test:all": "npm test && npm run test:e2e"
+    "test:all": "npm test && npm run test:e2e",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "framer-motion": "^13.2.0",
@@ -29,6 +30,7 @@
   "devDependencies": {
     "@playwright/test": "^1.64.0",
     "@vitejs/plugin-react": "^4.0.0",
+    "@vitest/coverage-v8": "^0.34.6",
     "postcss": "^8.4.24",
     "tailwindcss": "^3.3.2",
     "vite": "^4.3.9",

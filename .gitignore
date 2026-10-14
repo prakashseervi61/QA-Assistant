@@ -78,3 +78,10 @@ test-results/
 playwright-report/
 blob-report/
 .playwright-mcp/
+
+# Coverage reports
+coverage/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
